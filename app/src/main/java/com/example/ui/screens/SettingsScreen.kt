@@ -69,6 +69,7 @@ import com.example.ui.components.FintechWhiteCard
 import com.example.ui.components.InkTertiaryButton
 import com.example.ui.components.MetaCobaltBuyButton
 import com.example.ui.components.PinSetupDialog
+import com.example.ui.components.ResidenceHeroBanner
 import com.example.ui.components.RoundIconCircleButton
 import com.example.ui.components.SageSecondaryButton
 import com.example.ui.components.SyndicatDialog
@@ -447,6 +448,16 @@ fun SettingsScreen(
           color = tokens.ink,
         )
         Spacer(modifier = Modifier.height(12.dp))
+
+        ResidenceHeroBanner(
+          residenceName = residenceName.ifBlank { strings.settingsResidenceName },
+          subtitle = address.ifBlank { city },
+          badgeText = strings.residenceCustomizePhotoShort,
+          compact = true,
+          onPhotoFeedback = onMessage,
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
 
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
           FintechTextField(

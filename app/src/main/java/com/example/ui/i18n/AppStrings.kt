@@ -844,6 +844,22 @@ class SyndicatStrings(
     get() = if (language == AppLanguage.AR) "مشاريع وأوراش العمارة" else "Projets & Travaux de l'immeuble"
   val dashProjectsOpenBtn: String
     get() = if (language == AppLanguage.AR) "صفحة المشاريع" else "Voir les projets"
+
+  // Personalized Residence Hero Photo & Direct Monthly Cotisations Grid
+  val residenceCustomizePhotoShort: String
+    get() = if (language == AppLanguage.AR) "صورة الإقامة" else "Photo"
+  val residenceCustomizePhotoLabel: String
+    get() = if (language == AppLanguage.AR) "تخصيص صورة الإقامة" else "Personnaliser la photo de la résidence"
+  val residenceResetPhotoLabel: String
+    get() = if (language == AppLanguage.AR) "استعادة الصورة الافتراضية" else "Restaurer l'image par défaut"
+  val residencePhotoSavedMsg: String
+    get() = if (language == AppLanguage.AR) "تم تحديث صورة الإقامة بنجاح" else "Photo de la résidence enregistrée"
+  val residencePhotoResetMsg: String
+    get() = if (language == AppLanguage.AR) "تمت استعادة الصورة الافتراضية للإقامة" else "Image par défaut de la résidence restaurée"
+  val apptMonthsSectionLabel: String
+    get() = if (language == AppLanguage.AR) "الأشهر (اضغط على أي شهر للتسجيل المباشر)" else "Mois (touchez un mois pour saisir directement)"
+  val apptClearMonthZeroBtn: String
+    get() = if (language == AppLanguage.AR) "تصفير هذا الشهر (0)" else "Remettre ce mois à 0"
 }
 
 val ArabicStrings = SyndicatStrings(

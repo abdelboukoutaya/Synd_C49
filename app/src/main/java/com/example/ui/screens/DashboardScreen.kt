@@ -54,9 +54,10 @@ import com.example.ui.components.AirtableSignatureCard
 import com.example.ui.components.AirtableSoftCard
 import com.example.ui.components.FintechPalePositiveCard
 import com.example.ui.components.FintechWhiteCard
+import com.example.ui.components.HeroOverlayCircleButton
 import com.example.ui.components.LimePrimaryButton
 import com.example.ui.components.RemindedPillBadge
-import com.example.ui.components.RoundIconCircleButton
+import com.example.ui.components.ResidenceHeroBanner
 import com.example.ui.components.SageSecondaryButton
 import com.example.ui.components.SyndicatProgressBar
 import com.example.ui.components.WhatsAppReminderDialog
@@ -149,49 +150,33 @@ fun DashboardScreen(
     ),
     verticalArrangement = Arrangement.spacedBy(24.dp),
   ) {
-    // 1. Bande blanche : Titre de l'immeuble en title (400) + boutons icône 48dp
+    // 1. Partie haute personnalisée : Image de la résidence (photo personnalisée ou illustration par défaut)
     item {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        Column(modifier = Modifier.weight(1f)) {
-          Text(
-            text = cfg.residenceName.ifBlank { strings.navDashboard },
-            style = MaterialTheme.typography.displayMedium,
-            fontWeight = FontWeight.Medium,
-            color = tokens.inkDeep,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-          )
-          val cityPart = if (cfg.city.isNotBlank()) " · ${cfg.city}" else ""
-          val subText = "${strings.navDashboard}$cityPart · ${bidiLtr(localizeDigits(cfg.year.toString(), dig))}"
-          Text(
-            text = subText,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Light,
-            color = tokens.body,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-          )
-        }
-        Spacer(modifier = Modifier.width(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          RoundIconCircleButton(
+      val cityPart = if (cfg.city.isNotBlank()) " · ${cfg.city}" else ""
+      val addrPart = if (cfg.address.isNotBlank()) " · ${cfg.address}" else ""
+      val subText = "${strings.navDashboard}$cityPart$addrPart"
+      val yearBadge = "${bidiLtr(localizeDigits(cfg.year.toString(), dig))} · ${strings.authTitle}"
+
+      ResidenceHeroBanner(
+        residenceName = cfg.residenceName.ifBlank { strings.navDashboard },
+        subtitle = subText,
+        badgeText = yearBadge,
+        onPhotoFeedback = onInfoMessage,
+        trailingActions = {
+          HeroOverlayCircleButton(
             icon = Icons.Default.AutoFixHigh,
             contentDescription = strings.dashLaunchWizardBtn,
             onClick = onOpenWizard,
             modifier = Modifier.testTag("dash_open_wizard_btn"),
           )
-          RoundIconCircleButton(
+          HeroOverlayCircleButton(
             icon = Icons.Default.PictureAsPdf,
             contentDescription = strings.navPoster,
             onClick = onNavigateToPosters,
             modifier = Modifier.testTag("dash_open_posters_btn"),
           )
-        }
-      }
+        },
+      )
     }
 
     // 2. Meta Showcase Card (#0A1317 Deep Ink, 32dp {rounded.xxxl}, 28dp padding)

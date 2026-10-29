@@ -48,6 +48,7 @@ import com.example.ui.i18n.localizeDigits
 import com.example.ui.i18n.stringsForLanguage
 import com.example.ui.screens.ApartmentsScreen
 import com.example.ui.screens.AuthScreen
+import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.ExpensesScreen
 import com.example.ui.screens.ProjectsScreen
 import androidx.compose.ui.test.assertIsDisplayed
@@ -531,6 +532,8 @@ class ExampleRobolectricTest {
       }
     }
 
+    composeTestRule.onNodeWithTag("apartments_cards_list").performScrollToIndex(2)
+    composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("card_pay_apt_1").performScrollTo().performClick()
     composeTestRule.waitForIdle()
 
@@ -881,5 +884,131 @@ class ExampleRobolectricTest {
     assertTrue("project_progress_input must not collapse inside verticalScroll: $progressBounds", progressBounds.height >= 48.dp)
     assertTrue("project_allocated_input must not collapse inside verticalScroll: $allocatedBounds", allocatedBounds.height >= 48.dp)
     assertDpRectsDoNotOverlap(progressBounds, allocatedBounds, "project_progress_input", "project_allocated_input")
+  }
+
+  @Test
+  @Config(sdk = [36], qualifiers = "w360dp-h800dp")
+  fun residenceHeroBannerAndNoHorizontalScrollMonthsGridFitPortraitScreenCleanly() {
+    val cfg = SyndicatConfig(
+      residenceName = "Résidence C49",
+      city = "Casablanca",
+      year = 2025L,
+      language = AppLanguage.FR.code,
+    )
+    val apt1 = ApartmentRecord(
+      id = "apt_1",
+      number = 1L,
+      floor = "1",
+      status = "occupied",
+      ownerName = "Karim Benali",
+      ownerNameAr = "كريم بنعلي",
+      juin = 50L,
+      juil = 50L,
+      aout = 50L,
+    )
+    val dashData = SyndicatDashboardData(
+      config = cfg,
+      apartments = listOf(apt1),
+      expenses = emptyList(),
+    )
+    val frStrings = stringsForLanguage("fr")
+
+    val showApartmentsState = androidx.compose.runtime.mutableStateOf(false)
+    var savedApt: ApartmentRecord? = null
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(
+        LocalStrings provides frStrings,
+        LocalLayoutDirection provides LayoutDirection.Ltr,
+      ) {
+        AppTheme(darkTheme = false, isArabic = false, fontScale = "normal") {
+          if (!showApartmentsState.value) {
+            DashboardScreen(
+              data = dashData,
+              isBackupOverdue = false,
+              onTriggerBackupJson = {},
+              onOpenWizard = {},
+              onMarkReminded = { _, _, _ -> },
+              onNavigateToPosters = {},
+              onNavigateToProjects = {},
+              onNavigateToLateApartments = {},
+            )
+          } else {
+            ApartmentsScreen(
+              data = dashData,
+              searchQuery = "",
+              selectedFloor = null,
+              statusFilter = StatusFilter.ALL,
+              onSearchQueryChange = {},
+              onSelectFloor = {},
+              onSelectStatusFilter = {},
+              onSaveApartment = { updated, _ -> savedApt = updated },
+              onMarkReminded = { _, _, _ -> },
+              onRequestReceiptNo = { 1L },
+              onExportError = {},
+            )
+          }
+        }
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // 1. Verify Dashboard top customizable ResidenceHeroBanner renders cleanly with accessible buttons
+    composeTestRule.onNodeWithTag("residence_hero_banner").assertIsDisplayed()
+    val bannerBounds = composeTestRule.onNodeWithTag("residence_hero_banner").getUnclippedBoundsInRoot()
+    val photoBtnBounds = composeTestRule.onNodeWithTag("customize_residence_photo_btn").getUnclippedBoundsInRoot()
+    val wizardBtnBounds = composeTestRule.onNodeWithTag("dash_open_wizard_btn").getUnclippedBoundsInRoot()
+    val postersBtnBounds = composeTestRule.onNodeWithTag("dash_open_posters_btn").getUnclippedBoundsInRoot()
+
+    assertTrue("Residence hero banner should be >= 200dp tall: $bannerBounds", bannerBounds.height >= 200.dp)
+    assertTrue("Photo customization button must fit inside 360dp screen: $photoBtnBounds", photoBtnBounds.left >= 0.dp && photoBtnBounds.right <= 360.dp)
+    assertDpRectsDoNotOverlap(photoBtnBounds, wizardBtnBounds, "customize_residence_photo_btn", "dash_open_wizard_btn")
+    assertDpRectsDoNotOverlap(wizardBtnBounds, postersBtnBounds, "dash_open_wizard_btn", "dash_open_posters_btn")
+
+    // 2. Switch to Cotisations (ApartmentsScreen) Cards View and verify all active months fit [0dp, 360dp] without horizontal scroll
+    showApartmentsState.value = true
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("residence_hero_banner").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("apartments_cards_list").performScrollToIndex(2)
+    composeTestRule.waitForIdle()
+
+    val activeKeys = cfg.activeMonthColumns.map { it.key }
+    assertTrue("Expected at least 7 active months in default config", activeKeys.size >= 7)
+
+    activeKeys.forEach { key ->
+      val cellTag = "card_month_1_$key"
+      val bounds = composeTestRule.onNodeWithTag(cellTag).getUnclippedBoundsInRoot()
+      assertTrue("$cellTag must have >= 48dp accessible height: $bounds", bounds.height >= 48.dp)
+      assertTrue(
+        "$cellTag must fit strictly inside 360dp portrait width without left-right slider: $bounds",
+        bounds.left >= 0.dp && bounds.right <= 360.dp,
+      )
+    }
+
+    // Verify 1-tap direct month payment entry from the card month grid
+    val decTag = "card_month_1_${MonthColumn.DEC.key}"
+    composeTestRule.onNodeWithTag(decTag).performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("quick_cell_pay_full_btn").performClick()
+    composeTestRule.waitForIdle()
+    assertNotNull("Expected 1-tap quick month payment to save updated apartment", savedApt)
+    assertTrue("Expected DEC month to be paid (> 0 DH)", (savedApt?.dec ?: 0L) > 0L)
+
+    // 3. Switch to Compact Grid View and verify every month cell also fits [0dp, 360dp] with zero horizontal scroll
+    composeTestRule.onNodeWithTag("toggle_grid_view").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("apartments_grid_list").performScrollToIndex(2)
+    composeTestRule.waitForIdle()
+
+    activeKeys.forEach { key ->
+      val gridCellTag = "grid_cell_1_$key"
+      val bounds = composeTestRule.onNodeWithTag(gridCellTag).getUnclippedBoundsInRoot()
+      assertTrue("$gridCellTag must have >= 48dp accessible height: $bounds", bounds.height >= 48.dp)
+      assertTrue(
+        "$gridCellTag must fit strictly inside 360dp portrait width without left-right slider: $bounds",
+        bounds.left >= 0.dp && bounds.right <= 360.dp,
+      )
+    }
   }
 }

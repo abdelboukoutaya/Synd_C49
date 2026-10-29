@@ -8,7 +8,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,6 +77,7 @@ import com.example.ui.components.MetaCobaltBuyButton
 import com.example.ui.components.MetaSearchPill
 import com.example.ui.components.MetaSegmentedPillRow
 import com.example.ui.components.RemindedPillBadge
+import com.example.ui.components.ResidenceHeroBanner
 import com.example.ui.components.RoundIconCircleButton
 import com.example.ui.components.SageSecondaryButton
 import com.example.ui.components.StatusPillBadge
@@ -89,6 +89,10 @@ import com.example.ui.i18n.LocalStrings
 import com.example.ui.i18n.bidiLtr
 import com.example.ui.i18n.formatNumber
 import com.example.ui.i18n.localizeDigits
+import com.example.ui.theme.CoinbaseDarkErrorContainer
+import com.example.ui.theme.CoinbaseErrorTintLight
+import com.example.ui.theme.CoinbaseSuccessTintLight
+import com.example.ui.theme.CoinbaseWarningTintLight
 import com.example.ui.theme.LocalSyndicatTokens
 import com.example.ui.theme.cotisationColorForAmount
 import com.example.ui.viewmodel.StatusFilter
@@ -151,8 +155,6 @@ fun ApartmentsScreen(
       floorOk && queryOk && statusOk
     }
   }
-
-  val gridHorizontalScroll = rememberScrollState()
 
   Column(
     modifier = modifier
@@ -283,13 +285,26 @@ fun ApartmentsScreen(
 
     if (!isGridView) {
       // =========================================================================
-      // CARDS VIEW (§6: 1 Card per Apartment + Icon+Text Badge + mono rest + تذكير)
+      // CARDS VIEW : En-tête résidence + 1 Carte par Appartement avec grille mensuelle
+      // intégrée sur toute la largeur (ZÉRO glissement horizontal gauche-droite)
       // =========================================================================
       LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+          .fillMaxSize()
+          .testTag("apartments_cards_list"),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
       ) {
+        item(key = "cotisations_residence_banner") {
+          ResidenceHeroBanner(
+            residenceName = cfg.residenceName.ifBlank { strings.navApartments },
+            subtitle = "${strings.navApartments} · ${bidiLtr(localizeDigits(cfg.year.toString(), dig))}",
+            badgeText = strings.residenceCustomizePhotoShort,
+            compact = true,
+            onPhotoFeedback = onExportError,
+          )
+        }
+
         data.orderedFloors.forEach { floor ->
           val floorApts = filteredApartments.filter { it.floor == floor }
           if (floorApts.isNotEmpty()) {
@@ -305,13 +320,13 @@ fun ApartmentsScreen(
                 Text(
                   text = strings.floorWithPrefix(floor),
                   style = MaterialTheme.typography.titleMedium,
-                  fontWeight = FontWeight.Normal,
+                  fontWeight = FontWeight.SemiBold,
                   color = tokens.ink,
                 )
                 Text(
                   text = "${strings.apptSubtotal} ${formatDh(subtotal, cur, dig)}",
                   style = MaterialTheme.typography.labelLarge,
-                  fontFamily = monoOrDefault ?: MaterialTheme.typography.labelLarge.fontFamily,
+                  fontFamily = monoOrDefault,
                   fontWeight = FontWeight.Medium,
                   color = tokens.positiveDeep,
                 )
@@ -327,9 +342,8 @@ fun ApartmentsScreen(
                 config = cfg,
                 isAr = isAr,
                 onEditClick = { editingApartment = apt },
-                onRemindWhatsApp = {
-                  remindingApartment = apt
-                },
+                onQuickMonthClick = { month -> quickCellTarget = apt to month },
+                onRemindWhatsApp = { remindingApartment = apt },
                 onShareReceipt = {
                   scope.launch {
                     val receiptNo = onRequestReceiptNo(apt)
@@ -349,241 +363,156 @@ fun ApartmentsScreen(
       }
     } else {
       // =========================================================================
-      // STICKY-COLUMN 12-MONTH GRID VIEW (§5 & §6: canvasSoft header, mute 12sp, hairline rows, frozen name, mono numbers)
+      // COMPACT TABLE / GRID VIEW SANS SLIDER GAUCHE-DROITE :
+      // Tous les mois actifs s'affichent en grille multi-colonnes équilibrée (4 mois/ligne)
+      // sur 100 % de la largeur de l'écran du téléphone, sans aucun défilement horizontal.
       // =========================================================================
       val activeMonths = cfg.activeMonthColumns
-      Surface(
+      LazyColumn(
         modifier = Modifier
           .fillMaxSize()
-          .padding(horizontal = 12.dp, vertical = 4.dp),
-        shape = RoundedCornerShape(tokens.contentCardRadiusDp.dp),
-        color = tokens.cardBg,
-        border = BorderStroke(1.dp, tokens.cardBorder),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
+          .padding(horizontal = 12.dp)
+          .testTag("apartments_grid_list"),
+        contentPadding = PaddingValues(top = 4.dp, bottom = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
       ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-          // En-tête de tableau surfaceSoft, texte en caption (14sp, 500, mute), séparé par hairline
-          Row(
-            modifier = Modifier
-              .fillMaxWidth()
-              .background(tokens.surfaceSoft)
-              .padding(vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        item(key = "grid_tariffs_legend") {
+          Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = tokens.surfaceSoft,
+            border = BorderStroke(1.dp, tokens.divider),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            modifier = Modifier.fillMaxWidth(),
           ) {
-            Box(
-              modifier = Modifier
-                .width(148.dp)
-                .padding(horizontal = 12.dp),
-            ) {
-              Text(
-                text = "${strings.colAppt} · ${strings.colOwner}",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Medium,
-                color = tokens.mute,
-                maxLines = 1,
-              )
-            }
+            Text(
+              text = strings.apptMonthsSectionLabel,
+              style = MaterialTheme.typography.labelSmall,
+              fontWeight = FontWeight.Medium,
+              color = tokens.body,
+              modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            )
+          }
+        }
 
-            Row(
-              modifier = Modifier.horizontalScroll(gridHorizontalScroll),
-              verticalAlignment = Alignment.CenterVertically,
-            ) {
-              activeMonths.forEach { m ->
-                val fee = cfg.feeForMonth(m)
-                Column(
-                  modifier = Modifier
-                    .width(78.dp)
-                    .padding(horizontal = 12.dp),
-                  horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                  Text(
-                    text = strings.monthShort(m),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = tokens.mute,
-                    maxLines = 1,
-                  )
-                  Text(
-                    text = formatNumber(fee, dig),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontFamily = monoOrDefault ?: MaterialTheme.typography.labelSmall.fontFamily,
-                    fontWeight = FontWeight.Medium,
-                    color = cotisationColorForAmount(fee, cfg.defaultMonthlyFee),
-                  )
-                }
-              }
-              Box(
+        data.orderedFloors.forEach { floor ->
+          val floorApts = filteredApartments.filter { it.floor == floor }
+          if (floorApts.isNotEmpty()) {
+            item(key = "grid_floor_$floor") {
+              val subtotal = floorApts.sumOf { it.totalForConfig(cfg) }
+              Row(
                 modifier = Modifier
-                  .width(96.dp)
-                  .padding(horizontal = 12.dp),
-                contentAlignment = Alignment.Center,
+                  .fillMaxWidth()
+                  .padding(top = 4.dp, start = 4.dp, end = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
               ) {
                 Text(
-                  text = strings.colTotal,
+                  text = strings.floorWithPrefix(floor),
+                  style = MaterialTheme.typography.labelLarge,
+                  fontWeight = FontWeight.SemiBold,
+                  color = tokens.inkDeep,
+                )
+                Text(
+                  text = "${strings.apptSubtotal} ${formatDh(subtotal, cur, dig)}",
                   style = MaterialTheme.typography.labelMedium,
-                  fontWeight = FontWeight.Medium,
-                  color = tokens.mute,
+                  fontFamily = monoOrDefault,
+                  fontWeight = FontWeight.SemiBold,
+                  color = tokens.positiveDeep,
                 )
               }
             }
-          }
 
-          HorizontalDivider(thickness = 1.dp, color = tokens.divider)
+            items(
+              items = floorApts,
+              key = { "grid_row_${it.id.ifBlank { it.number.toString() }}" },
+            ) { apt ->
+              val ownerLabel = apt.displayOwner(isAr).ifBlank { "${strings.colAppt} ${apt.displayNumber}" }
+              val isVacant = apt.isVacantForConfig(cfg)
 
-          LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp),
-          ) {
-            data.orderedFloors.forEach { floor ->
-              val floorApts = filteredApartments.filter { it.floor == floor }
-              if (floorApts.isNotEmpty()) {
-                item(key = "grid_floor_$floor") {
-                  Column {
-                    Box(
-                      modifier = Modifier
-                        .fillMaxWidth()
-                        .background(tokens.surfaceSoft)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    ) {
-                      Text(
-                        text = strings.floorWithPrefix(floor),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = tokens.mute,
-                      )
-                    }
-                    HorizontalDivider(thickness = 1.dp, color = tokens.divider)
-                  }
-                }
-
-                items(
-                  items = floorApts,
-                  key = { "grid_row_${it.id.ifBlank { it.number.toString() }}" },
-                ) { apt ->
-                  val ownerLabel = apt.displayOwner(isAr).ifBlank { "—" }
-                  val isVacant = apt.isVacantForConfig(cfg)
-                  Column {
+              Surface(
+                shape = RoundedCornerShape(tokens.contentCardRadiusDp.dp),
+                color = tokens.cardBg,
+                border = BorderStroke(1.dp, tokens.cardBorder),
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+                modifier = Modifier.fillMaxWidth(),
+              ) {
+                Column(
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                  verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                  // Ligne d'en-tête compacte : N° + Propriétaire + Statut + Total encaissé
+                  Row(
+                    modifier = Modifier
+                      .fillMaxWidth()
+                      .clip(RoundedCornerShape(10.dp))
+                      .clickable { editingApartment = apt }
+                      .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                  ) {
                     Row(
-                      modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 52.dp),
+                      modifier = Modifier.weight(1f),
                       verticalAlignment = Alignment.CenterVertically,
+                      horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                      // Colonne figée Propriétaire (marge interne 12dp)
-                      Row(
-                        modifier = Modifier
-                          .width(148.dp)
-                          .heightIn(min = 48.dp)
-                          .clickable { editingApartment = apt }
-                          .padding(horizontal = 12.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                      Surface(
+                        shape = CircleShape,
+                        color = tokens.surfaceStrong,
+                        border = BorderStroke(1.dp, tokens.divider),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
+                        modifier = Modifier.size(30.dp),
                       ) {
-                        Surface(
-                          shape = CircleShape,
-                          color = tokens.surfaceSoft,
-                          border = BorderStroke(1.dp, tokens.divider),
-                          tonalElevation = 0.dp,
-                          shadowElevation = 0.dp,
-                          modifier = Modifier.size(26.dp),
-                        ) {
-                          Box(contentAlignment = Alignment.Center) {
-                            Text(
-                              text = localizeDigits(apt.displayNumber, dig),
-                              style = MaterialTheme.typography.labelSmall,
-                              fontFamily = monoOrDefault ?: MaterialTheme.typography.labelSmall.fontFamily,
-                              fontWeight = FontWeight.Medium,
-                              color = tokens.ink,
-                            )
-                          }
-                        }
-                        Text(
-                          text = if (isVacant && apt.displayOwner(isAr).isBlank()) {
-                            strings.badgeText(apt.badgeStatus(cfg))
-                          } else {
-                            ownerLabel
-                          },
-                          style = MaterialTheme.typography.bodySmall,
-                          fontWeight = FontWeight.Medium,
-                          color = if (isVacant) tokens.mute else tokens.ink,
-                          maxLines = 1,
-                          overflow = TextOverflow.Ellipsis,
-                          modifier = Modifier.weight(1f),
-                        )
-                      }
-
-                      // Cellules mensuelles défilables (cible 48dp, padding 12dp horizontal, nombres tabulaires Inter 500)
-                      Row(
-                        modifier = Modifier.horizontalScroll(gridHorizontalScroll),
-                        verticalAlignment = Alignment.CenterVertically,
-                      ) {
-                        activeMonths.forEach { m ->
-                          val paid = apt.amountFor(m)
-                          val expected = apt.expectedFeeForMonth(m, cfg)
-                          val isPartial = paid > 0L && expected > 0L && paid < expected
-                          val isLateMonth = !isVacant && m.monthNumber <= cfg.cutoffMonth.toInt() && paid < expected
-
-                          Box(
-                            modifier = Modifier
-                              .width(78.dp)
-                              .heightIn(min = 48.dp)
-                              .padding(horizontal = 4.dp, vertical = 4.dp)
-                              .clip(RoundedCornerShape(tokens.fieldRadiusDp.dp))
-                              .background(
-                                when {
-                                  paid > 0L -> tokens.surfaceSoft
-                                  isLateMonth -> tokens.negative.copy(alpha = 0.10f)
-                                  else -> Color.Transparent
-                                }
-                              )
-                              .clickable { quickCellTarget = apt to m }
-                              .padding(horizontal = 8.dp, vertical = 8.dp)
-                              .testTag("grid_cell_${apt.number}_${m.key}"),
-                            contentAlignment = Alignment.Center,
-                          ) {
-                            val cellText = when {
-                              paid > 0L -> formatNumber(paid, dig)
-                              isLateMonth -> "!"
-                              isVacant -> "—"
-                              else -> "·"
-                            }
-                            Text(
-                              text = cellText,
-                              style = MaterialTheme.typography.labelSmall,
-                              fontFamily = monoOrDefault ?: MaterialTheme.typography.labelSmall.fontFamily,
-                              fontWeight = if (paid > 0L) FontWeight.Medium else FontWeight.Normal,
-                              color = when {
-                                paid > 0L && isPartial -> tokens.ink
-                                paid > 0L -> cotisationColorForAmount(paid, cfg.defaultMonthlyFee)
-                                isLateMonth -> tokens.negativeDeep
-                                else -> tokens.mute
-                              },
-                              textAlign = TextAlign.Center,
-                              maxLines = 1,
-                            )
-                          }
-                        }
-
-                        // Total ligne
-                        Box(
-                          modifier = Modifier
-                            .width(96.dp)
-                            .padding(horizontal = 12.dp),
-                          contentAlignment = Alignment.Center,
-                        ) {
+                        Box(contentAlignment = Alignment.Center) {
                           Text(
-                            text = formatNumber(apt.totalForConfig(cfg), dig),
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = monoOrDefault ?: MaterialTheme.typography.bodySmall.fontFamily,
-                            fontWeight = FontWeight.Medium,
-                            color = tokens.ink,
+                            text = localizeDigits(apt.displayNumber, dig),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontFamily = monoOrDefault,
+                            fontWeight = FontWeight.SemiBold,
+                            color = tokens.inkDeep,
                           )
                         }
                       }
+                      Text(
+                        text = ownerLabel,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isVacant) tokens.mute else tokens.inkDeep,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                      )
                     }
-                    HorizontalDivider(thickness = 1.dp, color = tokens.divider)
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Row(
+                      verticalAlignment = Alignment.CenterVertically,
+                      horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                      StatusPillBadge(status = apt.badgeStatus(cfg))
+                      Text(
+                        text = formatDh(apt.totalForConfig(cfg), cur, dig),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontFamily = monoOrDefault,
+                        fontWeight = FontWeight.SemiBold,
+                        color = tokens.positiveDeep,
+                      )
+                    }
                   }
+
+                  // Grille mensuelle sans slider gauche-droite (4 colonnes par ligne sur 100 % de la largeur)
+                  ApartmentMonthsNoScrollGrid(
+                    apartment = apt,
+                    activeMonths = activeMonths,
+                    config = cfg,
+                    cellTagPrefix = "grid_cell_${apt.number}",
+                    onMonthClick = { m -> quickCellTarget = apt to m },
+                  )
                 }
               }
             }
@@ -631,6 +560,7 @@ private fun ApartmentFintechCard(
   config: SyndicatConfig,
   isAr: Boolean,
   onEditClick: () -> Unit,
+  onQuickMonthClick: (MonthColumn) -> Unit,
   onRemindWhatsApp: () -> Unit,
   onShareReceipt: () -> Unit,
 ) {
@@ -805,38 +735,37 @@ private fun ApartmentFintechCard(
       }
     }
 
-    // Missing Months Chips or Reminded Indicator
-    val missing = apartment.missingMonths(config)
-    if (missing.isNotEmpty() || apartment.lastReminderAt > 0L) {
+    Spacer(modifier = Modifier.height(12.dp))
+
+    // Grille directe de tous les mois actifs (4 colonnes par ligne, zéro slider gauche-droite)
+    Text(
+      text = strings.apptMonthsSectionLabel,
+      style = MaterialTheme.typography.labelSmall,
+      color = tokens.mute,
+    )
+    Spacer(modifier = Modifier.height(6.dp))
+    ApartmentMonthsNoScrollGrid(
+      apartment = apartment,
+      activeMonths = config.activeMonthColumns,
+      config = config,
+      cellTagPrefix = "card_month_${apartment.number}",
+      onMonthClick = onQuickMonthClick,
+    )
+
+    if (apartment.lastReminderAt > 0L) {
       Spacer(modifier = Modifier.height(10.dp))
-      val missingStr = missing.joinToString("، ") { strings.monthShort(it) }
+      val dt = bidiLtr(localizeDigits(SimpleDateFormat("dd/MM", Locale.US).format(Date(apartment.lastReminderAt)), dig))
       Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.End,
       ) {
-        if (missingStr.isNotEmpty()) {
-          Text(
-            text = "! ${strings.colMissingMonths}: $missingStr",
-            style = MaterialTheme.typography.labelSmall,
-            color = tokens.negativeDeep,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-          )
-        } else {
-          Spacer(modifier = Modifier.weight(1f))
-        }
-        if (apartment.lastReminderAt > 0L) {
-          val dt = bidiLtr(localizeDigits(SimpleDateFormat("dd/MM", Locale.US).format(Date(apartment.lastReminderAt)), dig))
-          RemindedPillBadge(label = "${strings.badgeReminded} $dt")
-        }
+        RemindedPillBadge(label = "${strings.badgeReminded} $dt")
       }
     }
 
     Spacer(modifier = Modifier.height(14.dp))
 
-    // Boutons d'action de chaque ligne en bouton secondaire blanc à contour hairline
+    // Boutons d'action de chaque carte
     FlowRow(
       modifier = Modifier.fillMaxWidth(),
       horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -867,6 +796,122 @@ private fun ApartmentFintechCard(
           onClick = onShareReceipt,
           modifier = Modifier.testTag("card_receipt_apt_${apartment.number}"),
         )
+      }
+    }
+  }
+}
+
+/**
+ * Grille mensuelle multi-lignes (4 mois par ligne) occupant 100 % de la largeur disponible
+ * sans aucun glissement horizontal gauche-droite (`horizontalScroll` proscrit).
+ * Chaque tuile respecte une hauteur minimale accessible de 48dp et permet la saisie directe en 1 clic.
+ */
+@Composable
+private fun ApartmentMonthsNoScrollGrid(
+  apartment: ApartmentRecord,
+  activeMonths: List<MonthColumn>,
+  config: SyndicatConfig,
+  cellTagPrefix: String,
+  onMonthClick: (MonthColumn) -> Unit,
+) {
+  val strings = LocalStrings.current
+  val tokens = LocalSyndicatTokens.current
+  val dig = config.digitsAr
+  val isVacant = apartment.isVacantForConfig(config)
+  val columnsPerRow = 4
+  val rows = remember(activeMonths) { activeMonths.chunked(columnsPerRow) }
+
+  Column(
+    modifier = Modifier.fillMaxWidth(),
+    verticalArrangement = Arrangement.spacedBy(6.dp),
+  ) {
+    rows.forEach { rowMonths ->
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        rowMonths.forEach { m ->
+          val paid = apartment.amountFor(m)
+          val expected = apartment.expectedFeeForMonth(m, config)
+          val isPartial = paid > 0L && expected > 0L && paid < expected
+          val isLateMonth = !isVacant && m.monthNumber <= config.cutoffMonth.toInt() && paid < expected
+          val isPaidFull = paid > 0L && !isPartial
+
+          val tileBg = when {
+            isPaidFull -> if (tokens.isDark) Color(0xFF0A2E1F) else CoinbaseSuccessTintLight
+            isPartial -> if (tokens.isDark) Color(0xFF332707) else CoinbaseWarningTintLight
+            isLateMonth -> if (tokens.isDark) CoinbaseDarkErrorContainer else CoinbaseErrorTintLight
+            else -> tokens.surfaceSoft
+          }
+          val tileBorder = when {
+            isPaidFull -> tokens.positive.copy(alpha = 0.36f)
+            isPartial -> tokens.warning.copy(alpha = 0.48f)
+            isLateMonth -> tokens.statusLateText.copy(alpha = 0.35f)
+            else -> tokens.divider
+          }
+          val valueColor = when {
+            isPaidFull -> cotisationColorForAmount(paid, config.defaultMonthlyFee)
+            isPartial -> tokens.warningContent
+            isLateMonth -> tokens.statusLateText
+            else -> tokens.mute
+          }
+          val valueLabel = when {
+            isPaidFull -> "✓ ${formatNumber(paid, dig)}"
+            isPartial -> "◐ ${formatNumber(paid, dig)}"
+            isLateMonth -> "! 0"
+            isVacant -> "—"
+            else -> formatNumber(expected, dig)
+          }
+
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = tileBg,
+            border = BorderStroke(1.dp, tileBorder),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            modifier = Modifier
+              .weight(1f)
+              .heightIn(min = 48.dp)
+              .clip(RoundedCornerShape(10.dp))
+              .clickable { onMonthClick(m) }
+              .testTag("${cellTagPrefix}_${m.key}"),
+          ) {
+            Column(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 6.dp),
+              horizontalAlignment = Alignment.CenterHorizontally,
+              verticalArrangement = Arrangement.Center,
+            ) {
+              Text(
+                text = strings.monthShort(m),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isLateMonth) tokens.statusLateText else tokens.inkDeep,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+              )
+              Spacer(modifier = Modifier.height(2.dp))
+              Text(
+                text = valueLabel,
+                style = MaterialTheme.typography.labelSmall,
+                fontFamily = tokens.numericFontFamily,
+                fontWeight = if (paid > 0L || isLateMonth) FontWeight.SemiBold else FontWeight.Normal,
+                color = valueColor,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+              )
+            }
+          }
+        }
+
+        // Complète la dernière ligne avec des espaces invisibles de même poids pour aligner les colonnes
+        val emptySlots = columnsPerRow - rowMonths.size
+        repeat(emptySlots) {
+          Spacer(modifier = Modifier.weight(1f))
+        }
       }
     }
   }
@@ -925,13 +970,22 @@ private fun QuickMonthCellPaymentDialog(
           modifier = Modifier.fillMaxWidth().testTag("quick_cell_amount_input"),
         )
 
-        // Meta button-buy-cta (#0064E0 Cobalt pill inside payment recording modal)
         MetaCobaltBuyButton(
           text = "${strings.apptPayFullBtn} (${formatDh(expectedFee, config.currency, config.digitsAr)})",
           icon = Icons.Default.DoneAll,
           onClick = { onSaveAmount(expectedFee) },
           modifier = Modifier.fillMaxWidth().testTag("quick_cell_pay_full_btn"),
         )
+
+        if (apartment.amountFor(month) > 0L) {
+          SageSecondaryButton(
+            text = strings.apptClearMonthZeroBtn,
+            icon = Icons.Default.Clear,
+            compact = true,
+            onClick = { onSaveAmount(0L) },
+            modifier = Modifier.fillMaxWidth().testTag("quick_cell_clear_zero_btn"),
+          )
+        }
       }
     },
     confirmButton = {
