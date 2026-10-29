@@ -513,6 +513,11 @@ private fun AuthenticatedSyndicatApp(
               },
               onNavigateToPosters = { currentDestination = AppDestination.POSTER },
               onNavigateToProjects = { currentDestination = AppDestination.PROJECTS },
+              onNavigateToApartments = {
+                viewModel.selectStatusFilter(StatusFilter.ALL)
+                currentDestination = AppDestination.APARTMENTS
+              },
+              onNavigateToExpenses = { currentDestination = AppDestination.EXPENSES },
               onNavigateToLateApartments = {
                 viewModel.selectStatusFilter(StatusFilter.LATE)
                 currentDestination = AppDestination.APARTMENTS

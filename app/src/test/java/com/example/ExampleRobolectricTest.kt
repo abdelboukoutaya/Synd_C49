@@ -925,12 +925,14 @@ class ExampleRobolectricTest {
           if (!showApartmentsState.value) {
             DashboardScreen(
               data = dashData,
-              isBackupOverdue = false,
+              isBackupOverdue = true,
               onTriggerBackupJson = {},
               onOpenWizard = {},
               onMarkReminded = { _, _, _ -> },
               onNavigateToPosters = {},
               onNavigateToProjects = {},
+              onNavigateToApartments = { showApartmentsState.value = true },
+              onNavigateToExpenses = {},
               onNavigateToLateApartments = {},
             )
           } else {
@@ -953,8 +955,11 @@ class ExampleRobolectricTest {
     }
     composeTestRule.waitForIdle()
 
-    // 1. Verify Dashboard top customizable ResidenceHeroBanner renders cleanly with accessible buttons
+    // 1. Verify recreated Dashboard: ResidenceHeroBanner, Treasury Portfolio Card, 4 Quick Actions, KPI Ring Grid & Chart
     composeTestRule.onNodeWithTag("residence_hero_banner").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("hero_cash_card").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("cash_now_value").assertIsDisplayed()
+
     val bannerBounds = composeTestRule.onNodeWithTag("residence_hero_banner").getUnclippedBoundsInRoot()
     val photoBtnBounds = composeTestRule.onNodeWithTag("customize_residence_photo_btn").getUnclippedBoundsInRoot()
     val wizardBtnBounds = composeTestRule.onNodeWithTag("dash_open_wizard_btn").getUnclippedBoundsInRoot()
@@ -965,8 +970,31 @@ class ExampleRobolectricTest {
     assertDpRectsDoNotOverlap(photoBtnBounds, wizardBtnBounds, "customize_residence_photo_btn", "dash_open_wizard_btn")
     assertDpRectsDoNotOverlap(wizardBtnBounds, postersBtnBounds, "dash_open_wizard_btn", "dash_open_posters_btn")
 
-    // 2. Switch to Cotisations (ApartmentsScreen) Cards View and verify all active months fit [0dp, 360dp] without horizontal scroll
-    showApartmentsState.value = true
+    composeTestRule.onNodeWithTag("dashboard_screen").performScrollToIndex(2)
+    composeTestRule.waitForIdle()
+    val quickTags = listOf("dash_quick_cotisations_btn", "dash_quick_expenses_btn", "dash_quick_remind_btn", "dash_quick_posters_btn")
+    quickTags.forEach { qTag ->
+      val qb = composeTestRule.onNodeWithTag(qTag).getUnclippedBoundsInRoot()
+      assertTrue("$qTag must fit inside 360dp and be >= 48dp tall: $qb", qb.left >= 0.dp && qb.right <= 360.dp && qb.height >= 48.dp)
+    }
+
+    composeTestRule.onNodeWithTag("dashboard_screen").performScrollToIndex(4)
+    composeTestRule.waitForIdle()
+    val kpiCollected = composeTestRule.onNodeWithTag("kpi_collected_card").getUnclippedBoundsInRoot()
+    val kpiExpenses = composeTestRule.onNodeWithTag("kpi_expenses_card").getUnclippedBoundsInRoot()
+    val kpiRate = composeTestRule.onNodeWithTag("kpi_rate_card").getUnclippedBoundsInRoot()
+    val kpiBalance = composeTestRule.onNodeWithTag("kpi_balance_card").getUnclippedBoundsInRoot()
+    assertDpRectsDoNotOverlap(kpiCollected, kpiExpenses, "kpi_collected_card", "kpi_expenses_card")
+    assertDpRectsDoNotOverlap(kpiRate, kpiBalance, "kpi_rate_card", "kpi_balance_card")
+
+    composeTestRule.onNodeWithTag("dashboard_screen").performScrollToIndex(7)
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("dash_monthly_chart_card").assertIsDisplayed()
+
+    // Scroll back up to quick actions and tap "Cotisations" quick action to navigate directly to ApartmentsScreen
+    composeTestRule.onNodeWithTag("dashboard_screen").performScrollToIndex(2)
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("dash_quick_cotisations_btn").performClick()
     composeTestRule.waitForIdle()
 
     composeTestRule.onNodeWithTag("residence_hero_banner").assertIsDisplayed()

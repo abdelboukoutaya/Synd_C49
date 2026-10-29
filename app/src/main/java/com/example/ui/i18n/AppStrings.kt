@@ -860,6 +860,28 @@ class SyndicatStrings(
     get() = if (language == AppLanguage.AR) "الأشهر (اضغط على أي شهر للتسجيل المباشر)" else "Mois (touchez un mois pour saisir directement)"
   val apptClearMonthZeroBtn: String
     get() = if (language == AppLanguage.AR) "تصفير هذا الشهر (0)" else "Remettre ce mois à 0"
+
+  // Recreated Fintech Dashboard labels
+  val dashLiveTreasuryBadge: String
+    get() = if (language == AppLanguage.AR) "خزينة السانديك المباشرة" else "Trésorerie en direct"
+  val dashPaidOutLabel: String
+    get() = if (language == AppLanguage.AR) "المؤدى للمزودين" else "Réglé prestataires"
+  val dashQuickCotisations: String
+    get() = if (language == AppLanguage.AR) "المساهمات" else "Cotisations"
+  val dashQuickExpenses: String
+    get() = if (language == AppLanguage.AR) "المصاريف" else "Dépenses"
+  val dashQuickRemind: String
+    get() = if (language == AppLanguage.AR) "تذكير واتساب" else "Relances"
+  val dashQuickExports: String
+    get() = if (language == AppLanguage.AR) "ملصقات PDF" else "Affiches PDF"
+  val dashUnitsSummary: (Int, Int) -> String
+    get() = { upToDate, occupied ->
+      if (language == AppLanguage.AR) {
+        "${bidiLtr("${formatNumber(upToDate.toLong())}/${formatNumber(occupied.toLong())}")} شقة في الوضعية السليمة"
+      } else {
+        "$upToDate/$occupied appartements à jour"
+      }
+    }
 }
 
 val ArabicStrings = SyndicatStrings(
