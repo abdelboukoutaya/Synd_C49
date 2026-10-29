@@ -1,0 +1,6 @@
+{
+  "name": "Syndicat C49",
+  "description": "Application Android « إدارة السانديك » en arabe (RTL) et français : configuration d'immeuble en 6 étapes, cotisations 12 mois, relances WhatsApp, dépenses, caisse, sauvegarde JSON et 3 exports PDF/PNG.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

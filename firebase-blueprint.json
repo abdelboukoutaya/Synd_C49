@@ -1,0 +1,166 @@
+{
+  "entities": {
+    "SyndicatConfig": {
+      "title": "SyndicatConfig",
+      "description": "Configuration générale de la copropriété : identité, arabe/français, structure par étage, tarifs mensuels, modèle WhatsApp et solde initial.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "UID Firebase du syndic propriétaire." },
+        "language": { "type": "string", "enum": ["ar", "fr"], "description": "Langue active de l'interface (ar RTL par défaut ou fr LTR)." },
+        "digitsAr": { "type": "boolean", "description": "Afficher les chiffres orientaux arabes (٠-٩)." },
+        "themeStyle": { "type": "string", "enum": ["airtable", "xai", "wise"], "description": "Style visuel de l'application (airtable = الأبيض الهادئ)." },
+        "themeMode": { "type": "string", "enum": ["system", "light", "dark"], "description": "Thème clair, sombre ou système." },
+        "fontScale": { "type": "string", "enum": ["small", "normal", "large"], "description": "Taille de police réglable." },
+        "syndicatName": { "type": "string", "description": "Nom du syndicat ou du trésorier." },
+        "residenceName": { "type": "string", "description": "Nom de l'immeuble / résidence." },
+        "address": { "type": "string", "description": "Adresse ou quartier." },
+        "city": { "type": "string", "description": "Ville de l'immeuble." },
+        "treasurerName": { "type": "string", "description": "Nom du syndic/trésorier affiché sur les documents." },
+        "buildingTitle": { "type": "string", "description": "Titre officiel de l'affiche." },
+        "currency": { "type": "string", "description": "Devise (ex: درهم, DH, MAD)." },
+        "year": { "type": "integer", "description": "Année fiscale de gestion." },
+        "openingBalanceDh": { "type": "integer", "description": "Solde initial reporté de la caisse." },
+        "dueDayOfMonth": { "type": "integer", "description": "Jour limite de paiement mensuel (1..31)." },
+        "minReminderAmountDh": { "type": "integer", "description": "Seuil minimal en DH pour relancer un retardataire." },
+        "whatsappTemplate": { "type": "string", "description": "Modèle de message WhatsApp personnalisable avec variables." },
+        "relanceHeaderNote": { "type": "string", "description": "Texte d'en-tête personnalisable pour l'affiche de relance." },
+        "includeRdc": { "type": "boolean", "description": "Inclure le rez-de-chaussée (الطابق الأرضي / RDC)." },
+        "floorsCount": { "type": "integer", "description": "Nombre total de niveaux (1..20)." },
+        "apartmentsCount": { "type": "integer", "description": "Nombre total d'appartements (1..120)." },
+        "floorAptCounts": { "type": "array", "description": "Nombre d'appartements par étage en mode avancé." },
+        "defaultMonthlyFee": { "type": "integer", "description": "Cotisation mensuelle par défaut." },
+        "cutoffMonth": { "type": "integer", "description": "Mois de référence (1..12) pour le calcul du dû et des relances." },
+        "activeMonths": { "type": "array", "description": "Liste des mois actifs (1..12)." },
+        "feeJan": { "type": "integer" },
+        "feeFeb": { "type": "integer" },
+        "feeMar": { "type": "integer" },
+        "feeApr": { "type": "integer" },
+        "feeMay": { "type": "integer" },
+        "feeJuin": { "type": "integer" },
+        "feeJuil": { "type": "integer" },
+        "feeAout": { "type": "integer" },
+        "feeSept": { "type": "integer" },
+        "feeOct": { "type": "integer" },
+        "feeNov": { "type": "integer" },
+        "feeDec": { "type": "integer" },
+        "footerNote": { "type": "string", "description": "Note de bas d'affiche." },
+        "onboardingCompleted": { "type": "boolean", "description": "Indique si l'assistant initial a été validé." },
+        "seeded": { "type": "boolean", "description": "Indique si la base initiale a été initialisée." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "FieldValue.serverTimestamp()." }
+      },
+      "required": ["userId", "buildingTitle", "residenceName", "year", "footerNote", "seeded", "createdAt", "updatedAt"]
+    },
+    "ApartmentRecord": {
+      "title": "ApartmentRecord",
+      "description": "Appartement, propriétaire (nom arabe, latin, WhatsApp), statut (occupé/vide/exonéré) et paiements des 12 mois.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "number": { "type": "integer" },
+        "customNumberLabel": { "type": "string", "description": "Numérotation personnalisée optionnelle (ex: A1, B2)." },
+        "floor": { "type": "string" },
+        "status": { "type": "string", "enum": ["occupied", "empty", "exempt"] },
+        "ownerName": { "type": "string", "description": "Nom latin du propriétaire/occupant." },
+        "ownerNameAr": { "type": "string", "description": "Nom en arabe du propriétaire/occupant." },
+        "phone": { "type": "string", "description": "Numéro de téléphone WhatsApp." },
+        "isTenant": { "type": "boolean", "description": "Indique s'il s'agit d'un locataire (كراء)." },
+        "customMonthlyFee": { "type": "integer", "description": "Tarif mensuel spécifique à cet appartement (-1 si standard)." },
+        "lastReminderAt": { "type": "integer", "description": "Horodatage ms de la dernière relance WhatsApp." },
+        "receiptCount": { "type": "integer", "description": "Compteur de reçus émis." },
+        "jan": { "type": "integer" },
+        "feb": { "type": "integer" },
+        "mar": { "type": "integer" },
+        "apr": { "type": "integer" },
+        "may": { "type": "integer" },
+        "juin": { "type": "integer" },
+        "juil": { "type": "integer" },
+        "aout": { "type": "integer" },
+        "sept": { "type": "integer" },
+        "oct": { "type": "integer" },
+        "nov": { "type": "integer" },
+        "dec": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "number", "floor", "ownerName", "juin", "juil", "aout", "sept", "oct", "nov", "dec", "createdAt", "updatedAt"]
+    },
+    "ExpenseRecord": {
+      "title": "ExpenseRecord",
+      "description": "Dépense du syndicat avec suivi du montant total, montant réglé au prestataire et reste à payer.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "amountDh": { "type": "integer" },
+        "paidAmountDh": { "type": "integer", "description": "Montant effectivement payé au prestataire (-1 = totalité)." },
+        "supplier": { "type": "string", "description": "Nom du fournisseur ou prestataire." },
+        "dateLabel": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "category", "amountDh", "dateLabel", "notes", "createdAt", "updatedAt"]
+    },
+    "ProjectRecord": {
+      "title": "ProjectRecord",
+      "description": "Projet de travaux/amélioration de la copropriété trié par priorité, avec suivi d'avancement (en cours) et seuil d'avance de caisse requis pour débuter (projets futurs), en arabe et français.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "UID Firebase du syndic propriétaire." },
+        "titleAr": { "type": "string", "description": "Titre du projet en arabe." },
+        "titleFr": { "type": "string", "description": "Titre du projet en français." },
+        "descriptionAr": { "type": "string", "description": "Description / étapes du projet en arabe." },
+        "descriptionFr": { "type": "string", "description": "Description / étapes du projet en français." },
+        "category": { "type": "string", "enum": ["Peinture", "Sécurité", "Étanchéité", "Ascenseur", "Plomberie", "Électricité", "Entretien", "Jardin", "Divers"] },
+        "priority": { "type": "integer", "description": "Priorité de 1 (Urgente) à 4 (Basse)." },
+        "status": { "type": "string", "enum": ["in_progress", "planned", "completed"], "description": "Statut du projet : en cours, futur/planifié ou terminé." },
+        "targetBudgetDh": { "type": "integer", "description": "Budget global estimé du projet en DH." },
+        "minCashToStartDh": { "type": "integer", "description": "Avance minimale disponible en caisse requise pour débuter le projet." },
+        "allocatedAmountDh": { "type": "integer", "description": "Montant déjà versé ou engagé sur le projet." },
+        "progressPercent": { "type": "integer", "description": "Pourcentage d'avancement (0..100)." },
+        "contractor": { "type": "string", "description": "Nom du prestataire ou artisan." },
+        "targetDateLabel": { "type": "string", "description": "Date cible ou échéance prévue." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "titleAr",
+        "titleFr",
+        "descriptionAr",
+        "descriptionFr",
+        "category",
+        "priority",
+        "status",
+        "targetBudgetDh",
+        "minCashToStartDh",
+        "allocatedAmountDh",
+        "progressPercent",
+        "contractor",
+        "targetDateLabel",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/SyndicatConfig" },
+      "description": "Configuration du syndicat par utilisateur."
+    },
+    "/users/{userId}/apartments/{apartmentId}": {
+      "schema": { "$ref": "#/entities/ApartmentRecord" },
+      "description": "Appartements, propriétaires et cotisations des 12 mois."
+    },
+    "/users/{userId}/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/ExpenseRecord" },
+      "description": "Dépenses et paiements fournisseurs."
+    },
+    "/users/{userId}/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/ProjectRecord" },
+      "description": "Projets de copropriété triés par priorité (en cours, futurs selon avance de caisse, terminés)."
+    }
+  }
+}

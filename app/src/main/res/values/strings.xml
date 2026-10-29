@@ -1,0 +1,66 @@
+<resources>
+    <string name="app_name">Syndicat C49</string>
+
+    <!-- Auth Screen -->
+    <string name="auth_badge">GESTION DE COPROPRIÉTÉ · SYNDIC</string>
+    <string name="auth_title">Syndicat C49</string>
+    <string name="auth_subtitle">Gestion personnalisable des cotisations mensuelles, dépenses d\'immeuble, relances et édition d\'affiches PDF/Image en Français et Arabe.</string>
+    <string name="auth_sign_in_google">Se connecter avec Google</string>
+    <string name="auth_security_note">Synchronisation cloud sécurisée et sauvegarde automatique de votre trésorerie.</string>
+
+    <!-- Navigation -->
+    <string name="nav_dashboard">Accueil</string>
+    <string name="nav_apartments">Cotisations</string>
+    <string name="nav_expenses">Dépenses</string>
+    <string name="nav_poster">Affiche</string>
+    <string name="nav_settings">Paramètres</string>
+
+    <!-- Dashboard -->
+    <string name="dash_balance_label">Solde disponible en caisse</string>
+    <string name="dash_caisse_collected">Total Caisse</string>
+    <string name="dash_total_expenses">Dépenses</string>
+    <string name="dash_floors_section">Recouvrement par étage</string>
+    <string name="dash_monthly_section">Encaissements mensuels</string>
+    <string name="dash_alerts_section">Liste de relance</string>
+    <string name="dash_all_up_to_date">Tous les appartements occupés sont à jour !</string>
+    <string name="relance_export_pdf">Relance PDF</string>
+    <string name="relance_export_image">Relance Image</string>
+
+    <!-- Apartments -->
+    <string name="appt_search_hint">Rechercher n° appt ou propriétaire…</string>
+    <string name="appt_filter_all">Tous</string>
+    <string name="appt_view_cards">Vue cartes</string>
+    <string name="appt_view_table">Grille officielle</string>
+    <string name="appt_vacant">Non renseigné</string>
+    <string name="appt_edit_title">Modifier l\'appartement</string>
+    <string name="appt_owner_label">Nom du propriétaire</string>
+    <string name="appt_save">Enregistrer</string>
+    <string name="appt_cancel">Annuler</string>
+
+    <!-- Expenses -->
+    <string name="exp_add_fab">Nouvelle dépense</string>
+    <string name="exp_empty_title">Aucune dépense enregistrée</string>
+    <string name="exp_empty_tip">Ajoutez les frais de ménage, d\'électricité ou d\'entretien pour calculer automatiquement le solde.</string>
+    <string name="exp_dialog_add">Nouvelle dépense</string>
+    <string name="exp_dialog_edit">Modifier la dépense</string>
+    <string name="exp_field_title">Libellé de la dépense</string>
+    <string name="exp_field_amount">Montant</string>
+    <string name="exp_field_date">Date (JJ/MM/AAAA)</string>
+    <string name="exp_field_notes">Notes / Détails (optionnel)</string>
+    <string name="exp_delete">Supprimer</string>
+
+    <!-- Poster / Export -->
+    <string name="poster_share_pdf">Affiche PDF</string>
+    <string name="poster_share_image">Affiche Image</string>
+    <string name="poster_share_whatsapp">Résumé texte</string>
+    <string name="poster_relance_section_title">Export de la liste de relance</string>
+    <string name="poster_relance_section_desc">Partagez la liste des appartements en retard de cotisation sous forme de PDF ou d\'image PNG prête pour WhatsApp.</string>
+    <string name="poster_edit_config">Paramètres complets du syndicat</string>
+    <string name="poster_reset_baseline">Restaurer les données de l\'affiche C49 (21/10/2026)</string>
+    <string name="theme_style_label">Style</string>
+    <string name="theme_style_xai">Sombre élégant</string>
+    <string name="theme_style_wise">Citron calme</string>
+    <string name="export_variant_print">Impression</string>
+    <string name="export_variant_screen">Écran</string>
+    <string name="sign_out">Se déconnecter</string>
+</resources>

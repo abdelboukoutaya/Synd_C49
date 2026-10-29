@@ -1,0 +1,261 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function okFee(v) {
+      return v is int && v >= 0 && v <= 100000;
+    }
+
+    function okRange(v, lo, hi) {
+      return v is int && v >= lo && v <= hi;
+    }
+
+    function okStr(v, maxLen) {
+      return v is string && v.size() <= maxLen;
+    }
+
+    function isValidSyndicatConfig(data) {
+      return data.keys().hasOnly([
+               'userId', 'language', 'digitsAr', 'themeStyle', 'themeMode', 'fontScale',
+               'syndicatName', 'residenceName', 'address', 'city', 'treasurerName',
+               'buildingTitle', 'currency', 'year', 'openingBalanceDh',
+               'dueDayOfMonth', 'minReminderAmountDh', 'whatsappTemplate', 'relanceHeaderNote',
+               'includeRdc', 'floorsCount', 'apartmentsCount', 'floorAptCounts',
+               'defaultMonthlyFee', 'cutoffMonth', 'activeMonths',
+               'feeJan', 'feeFeb', 'feeMar', 'feeApr', 'feeMay', 'feeJuin',
+               'feeJuil', 'feeAout', 'feeSept', 'feeOct', 'feeNov', 'feeDec',
+               'footerNote', 'onboardingCompleted', 'seeded', 'createdAt', 'updatedAt'
+             ]) &&
+             data.userId == request.auth.uid &&
+             data.get('language', 'ar') in ['fr', 'ar'] &&
+             data.get('digitsAr', false) is bool &&
+             data.get('themeStyle', 'airtable') in ['airtable', 'wise', 'xai'] &&
+             data.get('themeMode', 'system') in ['system', 'light', 'dark'] &&
+             data.get('fontScale', 'normal') in ['small', 'normal', 'large'] &&
+             okStr(data.get('syndicatName', 'S'), 100) &&
+             data.residenceName is string && data.residenceName.size() >= 1 && data.residenceName.size() <= 120 &&
+             okStr(data.get('address', ''), 200) &&
+             okStr(data.get('city', ''), 100) &&
+             okStr(data.get('treasurerName', ''), 100) &&
+             data.buildingTitle is string && data.buildingTitle.size() >= 1 && data.buildingTitle.size() <= 180 &&
+             okStr(data.get('currency', 'DH'), 15) &&
+             okRange(data.year, 2020, 2100) &&
+             okRange(data.get('openingBalanceDh', 0), -10000000, 100000000) &&
+             okRange(data.get('dueDayOfMonth', 5), 1, 31) &&
+             okFee(data.get('minReminderAmountDh', 20)) &&
+             okStr(data.get('whatsappTemplate', ''), 1000) &&
+             okStr(data.get('relanceHeaderNote', ''), 300) &&
+             data.get('includeRdc', true) is bool &&
+             okRange(data.get('floorsCount', 5), 1, 20) &&
+             okRange(data.get('apartmentsCount', 30), 1, 120) &&
+             data.get('floorAptCounts', []) is list &&
+             okFee(data.get('defaultMonthlyFee', 50)) &&
+             okRange(data.get('cutoffMonth', 10), 1, 12) &&
+             data.get('activeMonths', [6]) is list &&
+             okFee(data.get('feeJan', 0)) &&
+             okFee(data.get('feeFeb', 0)) &&
+             okFee(data.get('feeMar', 0)) &&
+             okFee(data.get('feeApr', 0)) &&
+             okFee(data.get('feeMay', 0)) &&
+             okFee(data.get('feeJuin', 0)) &&
+             okFee(data.get('feeJuil', 0)) &&
+             okFee(data.get('feeAout', 0)) &&
+             okFee(data.get('feeSept', 0)) &&
+             okFee(data.get('feeOct', 0)) &&
+             okFee(data.get('feeNov', 0)) &&
+             okFee(data.get('feeDec', 0)) &&
+             data.footerNote is string && data.footerNote.size() >= 1 && data.footerNote.size() <= 300 &&
+             data.get('onboardingCompleted', true) is bool &&
+             data.seeded is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidApartmentRecord(data) {
+      return data.keys().hasOnly([
+               'userId', 'number', 'customNumberLabel', 'floor', 'status',
+               'ownerName', 'ownerNameAr', 'phone', 'isTenant',
+               'customMonthlyFee', 'lastReminderAt', 'receiptCount',
+               'jan', 'feb', 'mar', 'apr', 'may',
+               'juin', 'juil', 'aout', 'sept', 'oct', 'nov', 'dec',
+               'createdAt', 'updatedAt'
+             ]) &&
+             data.userId == request.auth.uid &&
+             okRange(data.number, 1, 200) &&
+             okStr(data.get('customNumberLabel', ''), 20) &&
+             data.floor is string && data.floor.size() >= 1 && data.floor.size() <= 25 &&
+             data.get('status', 'occupied') in ['occupied', 'empty', 'exempt'] &&
+             okStr(data.ownerName, 80) &&
+             okStr(data.get('ownerNameAr', ''), 80) &&
+             okStr(data.get('phone', ''), 30) &&
+             data.get('isTenant', false) is bool &&
+             okRange(data.get('customMonthlyFee', -1), -1, 100000) &&
+             data.get('lastReminderAt', 0) is int && data.get('lastReminderAt', 0) >= 0 &&
+             okFee(data.get('receiptCount', 0)) &&
+             okFee(data.get('jan', 0)) &&
+             okFee(data.get('feb', 0)) &&
+             okFee(data.get('mar', 0)) &&
+             okFee(data.get('apr', 0)) &&
+             okFee(data.get('may', 0)) &&
+             okFee(data.juin) &&
+             okFee(data.juil) &&
+             okFee(data.aout) &&
+             okFee(data.sept) &&
+             okFee(data.oct) &&
+             okFee(data.nov) &&
+             okFee(data.dec) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidExpenseRecord(data) {
+      return data.keys().hasOnly([
+               'userId', 'title', 'category', 'amountDh', 'paidAmountDh', 'supplier',
+               'dateLabel', 'notes', 'createdAt', 'updatedAt'
+             ]) &&
+             data.userId == request.auth.uid &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 150 &&
+             data.category in [
+               'Historique', 'Ménage', 'Électricité', 'Eau',
+               'Entretien', 'Réparations', 'Ascenseur', 'Gardiennage', 'Divers'
+             ] &&
+             okRange(data.amountDh, 0, 10000000) &&
+             okRange(data.get('paidAmountDh', -1), -1, 10000000) &&
+             okStr(data.get('supplier', ''), 100) &&
+             data.dateLabel is string && data.dateLabel.size() >= 1 && data.dateLabel.size() <= 30 &&
+             okStr(data.notes, 300) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidProjectRecord(data) {
+      return data.keys().hasOnly([
+               'userId', 'titleAr', 'titleFr', 'descriptionAr', 'descriptionFr',
+               'category', 'priority', 'status',
+               'targetBudgetDh', 'minCashToStartDh', 'allocatedAmountDh', 'progressPercent',
+               'contractor', 'targetDateLabel', 'createdAt', 'updatedAt'
+             ]) &&
+             data.userId == request.auth.uid &&
+             okStr(data.titleAr, 150) &&
+             okStr(data.titleFr, 150) &&
+             (data.titleAr.size() >= 1 || data.titleFr.size() >= 1) &&
+             okStr(data.descriptionAr, 400) &&
+             okStr(data.descriptionFr, 400) &&
+             data.category in [
+               'Peinture', 'Sécurité', 'Étanchéité', 'Ascenseur',
+               'Plomberie', 'Électricité', 'Entretien', 'Jardin', 'Divers'
+             ] &&
+             okRange(data.priority, 1, 4) &&
+             data.status in ['in_progress', 'planned', 'completed'] &&
+             okRange(data.targetBudgetDh, 0, 10000000) &&
+             okRange(data.minCashToStartDh, 0, 10000000) &&
+             okRange(data.allocatedAmountDh, 0, 10000000) &&
+             okRange(data.progressPercent, 0, 100) &&
+             okStr(data.contractor, 100) &&
+             okStr(data.targetDateLabel, 30) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    match /users/{userId}/settings/{settingId} {
+      allow get: if isOwner(userId) && isValidId(userId) && isValidId(settingId);
+      allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(settingId) &&
+                       isValidSyndicatConfig(incoming());
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(settingId) &&
+                       isValidSyndicatConfig(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt;
+
+      allow delete: if isOwner(userId) && isValidId(userId) && isValidId(settingId);
+    }
+
+    match /users/{userId}/apartments/{apartmentId} {
+      allow get: if isOwner(userId) && isValidId(userId) && isValidId(apartmentId);
+      allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(apartmentId) &&
+                       isValidApartmentRecord(incoming());
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(apartmentId) &&
+                       isValidApartmentRecord(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt;
+
+      allow delete: if isOwner(userId) && isValidId(userId) && isValidId(apartmentId);
+    }
+
+    match /users/{userId}/expenses/{expenseId} {
+      allow get: if isOwner(userId) && isValidId(userId) && isValidId(expenseId);
+      allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(expenseId) &&
+                       isValidExpenseRecord(incoming());
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(expenseId) &&
+                       isValidExpenseRecord(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt;
+
+      allow delete: if isOwner(userId) && isValidId(userId) && isValidId(expenseId);
+    }
+
+    match /users/{userId}/projects/{projectId} {
+      allow get: if isOwner(userId) && isValidId(userId) && isValidId(projectId);
+      allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(projectId) &&
+                       isValidProjectRecord(incoming());
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(projectId) &&
+                       isValidProjectRecord(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt;
+
+      allow delete: if isOwner(userId) && isValidId(userId) && isValidId(projectId);
+    }
+  }
+}

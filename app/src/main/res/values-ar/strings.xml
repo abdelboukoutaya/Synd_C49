@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">Syndicat C49</string>
+
+    <!-- Auth Screen -->
+    <string name="auth_badge">إدارة السانديك · عربي RTL</string>
+    <string name="auth_title">إدارة السانديك</string>
+    <string name="auth_subtitle">تدبير متكامل للمساهمات الشهرية، المتأخرات، المصاريف، الصندوق وتذكيرات الواتساب مع ملصقات PDF وصور جاهزة.</string>
+    <string name="auth_sign_in_google">الدخول بواسطة Google</string>
+    <string name="auth_security_note">حفظ تلقائي للبيانات ونسخة احتياطية JSON.</string>
+
+    <!-- Navigation -->
+    <string name="nav_dashboard">لوحة القيادة</string>
+    <string name="nav_apartments">المساهمات</string>
+    <string name="nav_expenses">المصاريف</string>
+    <string name="nav_poster">الملصقات</string>
+    <string name="nav_settings">الإعدادات</string>
+    <string name="theme_style_label">النمط</string>
+    <string name="theme_style_xai">الداكن الأنيق</string>
+    <string name="theme_style_wise">الأخضر الهادئ</string>
+    <string name="export_variant_print">للطباعة</string>
+    <string name="export_variant_screen">للشاشة</string>
+</resources>
