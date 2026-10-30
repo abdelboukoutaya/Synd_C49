@@ -45,13 +45,15 @@ object LanguagePreferences {
   }
 
   fun getThemeStyle(context: Context): String {
-    return "airtable"
+    val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    return com.example.ui.theme.sanitizeThemeStyle(prefs.getString(KEY_THEME_STYLE, "coinbase"), "coinbase")
   }
 
   fun saveThemeStyle(context: Context, style: String) {
     val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val clean = com.example.ui.theme.sanitizeThemeStyle(style, "coinbase")
     prefs.edit()
-      .putString(KEY_THEME_STYLE, "airtable")
+      .putString(KEY_THEME_STYLE, clean)
       .putBoolean(KEY_AIRTABLE_MIGRATED_V1, true)
       .apply()
   }
@@ -59,7 +61,7 @@ object LanguagePreferences {
   fun isAirtableDefaultApplied(context: Context): Boolean = true
 
   fun markAirtableDefaultApplied(context: Context) {
-    saveThemeStyle(context, "airtable")
+    saveThemeStyle(context, getThemeStyle(context))
   }
 
   fun getPinCode(context: Context): String {
@@ -567,12 +569,17 @@ class SyndicatStrings(
     if (language == AppLanguage.FR) return category
     return when (category) {
       "Ménage" -> "النظافة"
+      "Sécurité" -> "الأمن والكاميرات"
+      "Gardiennage" -> "الحراسة"
       "Électricité" -> "الكهرباء"
       "Eau" -> "الماء"
+      "Plomberie" -> "السباكة والترصيص"
       "Ascenseur" -> "المصعد"
-      "Gardiennage" -> "الحراسة والكاميرات"
       "Entretien" -> "الصيانة"
       "Réparations" -> "الإصلاحات"
+      "Peinture" -> "الصباغة والترميم"
+      "Étanchéité" -> "العزل المائي"
+      "Jardin" -> "البستنة والمدخل"
       "Divers" -> "متنوعة"
       "Historique" -> "رصيد سابق"
       else -> category
@@ -694,21 +701,7 @@ class SyndicatStrings(
     }
   }
 
-  fun projectCategoryLabel(category: String): String {
-    if (language == AppLanguage.FR) return category
-    return when (category) {
-      "Peinture" -> "الصباغة والترميم"
-      "Sécurité" -> "الأمن والكاميرات"
-      "Étanchéité" -> "عزل السطح"
-      "Ascenseur" -> "المصعد"
-      "Plomberie" -> "السباكة والماء"
-      "Électricité" -> "الكهرباء والإنارة"
-      "Entretien" -> "الصيانة العامة"
-      "Jardin" -> "البستنة والمدخل"
-      "Divers" -> "أشغال متنوعة"
-      else -> category
-    }
-  }
+  fun projectCategoryLabel(category: String): String = categoryLabel(category)
 
   val projectProgressStateLabel: String
     get() = if (language == AppLanguage.AR) "نسبة التقدم والإنجاز" else "État d'avancement"
@@ -882,6 +875,114 @@ class SyndicatStrings(
         "$upToDate/$occupied appartements à jour"
       }
     }
+
+  // Separate Theme Choices (Meta, Coinbase, MiniMax)
+  val themeChoiceMeta: String
+    get() = "Meta"
+  val themeChoiceCoinbase: String
+    get() = "Coinbase"
+  val themeChoiceMinimax: String
+    get() = "MiniMax"
+
+  fun themeChoiceSubtitle(styleKey: String): String {
+    val family = com.example.ui.theme.resolveVisualThemeFamily(styleKey)
+    return if (language == AppLanguage.AR) {
+      when (family) {
+        "meta" -> "Meta · أزرق كوبالت (#0064E0) مع خلفية سحابية ناعمة وحواف دائرية رحبة."
+        "minimax" -> "MiniMax · مرجاني دافئ (#D93F26) على ورق عاجي وهندسة عصرية حادة."
+        else -> "Coinbase · أزرق مؤسسي نقي (#0052FF) مع أسطح بيضاء هادئة وتباين واضح."
+      }
+    } else {
+      when (family) {
+        "meta" -> "Meta · Bleu cobalt (#0064E0), fond nuage doux et cartes généreusement arrondies."
+        "minimax" -> "MiniMax · Corail vermillon (#D93F26), papier albâtre chaud et géométrie nette."
+        else -> "Coinbase · Bleu institutionnel (#0052FF), surfaces blanches épurées et fort contraste."
+      }
+    }
+  }
+
+  // Local Phone Storage & Optional Cloud Synchronization
+  val syncSectionTitle: String
+    get() = if (language == AppLanguage.AR) "التخزين على الهاتف والمزامنة الاختيارية" else "Stockage local & Synchronisation optionnelle"
+  val syncLocalBadge: String
+    get() = if (language == AppLanguage.AR) "تخزين محلي · بدون حساب" else "Stockage local · Sans compte"
+  val syncLocalDesc: String
+    get() = if (language == AppLanguage.AR) {
+      "التطبيق يشتغل بالكامل بدون حساب، وجميع بيانات الإقامة محفوظة محلياً على هاتفك. يمكنك ربط حساب Google اختيارياً لتفعيل المزامنة السحابية."
+    } else {
+      "L'application fonctionne intégralement sans compte avec stockage local sur ce téléphone. Connectez Google uniquement si vous souhaitez synchroniser vos données dans le cloud."
+    }
+  val syncCloudBadge: String
+    get() = if (language == AppLanguage.AR) "مزامنة سحابية مفعّلة" else "Synchronisation cloud active"
+  val syncCloudDesc: String
+    get() = if (language == AppLanguage.AR) {
+      "يتم حفظ نسخة محلية تلقائية على الهاتف مع مزامنة فورية عبر حساب Google الخاص بك."
+    } else {
+      "Vos données sont sauvegardées sur le téléphone et synchronisées en temps réel avec votre compte Google."
+    }
+  val syncConnectGoogleBtn: String
+    get() = if (language == AppLanguage.AR) "تفعيل المزامنة عبر Google (اختياري)" else "Activer la synchronisation Google (optionnel)"
+  val syncPushLocalBtn: String
+    get() = if (language == AppLanguage.AR) "إرسال بيانات الهاتف المحلية إلى السحابة" else "Envoyer les données locales vers le cloud"
+  val syncLocalMigratedToast: String
+    get() = if (language == AppLanguage.AR) "تمت مزامنة بيانات الهاتف المحلية مع حسابك السحابي." else "Données locales synchronisées vers votre compte cloud."
+  val signOutToLocal: String
+    get() = if (language == AppLanguage.AR) "إيقاف المزامنة والمتابعة محلياً بدون حساب" else "Se déconnecter (continuer en local sans compte)"
+  val authContinueWithoutAccount: String
+    get() = if (language == AppLanguage.AR) "المتابعة بدون حساب (تخزين محلي)" else "Continuer sans compte (stockage local)"
+
+  // Multi-Year Ledger, Payment History & Amount Coherence
+  val expErrPaidExceedsAmount: String
+    get() = if (language == AppLanguage.AR) {
+      "المبلغ المؤدى لا يمكن أن يتجاوز المبلغ الإجمالي."
+    } else {
+      "Le montant réglé ne peut pas dépasser le montant total."
+    }
+
+  val yearSelectorLabel: String
+    get() = if (language == AppLanguage.AR) "السنة المالية" else "Exercice"
+  val yearAddNextBtn: String
+    get() = if (language == AppLanguage.AR) "+ سنة" else "+ Année"
+
+  val paymentMethodFieldLabel: String
+    get() = if (language == AppLanguage.AR) "طريقة الأداء" else "Mode de paiement"
+  val paymentDateFieldLabel: String
+    get() = if (language == AppLanguage.AR) "تاريخ الأداء" else "Date du paiement"
+
+  fun paymentMethodLabel(methodCode: String): String {
+    return if (language == AppLanguage.AR) {
+      when (methodCode.trim().lowercase()) {
+        "transfer", "virement" -> "تحويل بنكي"
+        "check", "cheque", "chèque" -> "شيك"
+        "mobile" -> "أداء هاتفي"
+        "other", "autre" -> "أخرى"
+        else -> "نقداً"
+      }
+    } else {
+      when (methodCode.trim().lowercase()) {
+        "transfer", "virement" -> "Virement"
+        "check", "cheque", "chèque" -> "Chèque"
+        "mobile" -> "Mobile"
+        "other", "autre" -> "Autre"
+        else -> "Espèces"
+      }
+    }
+  }
+
+  val paymentHistoryTitle: String
+    get() = if (language == AppLanguage.AR) "سجل الأداءات والوصولات" else "Historique des paiements & reçus"
+  val paymentHistoryEmpty: String
+    get() = if (language == AppLanguage.AR) {
+      "لا توجد دفعات مؤرخة مسجلة لهذه الشقة بعد."
+    } else {
+      "Aucun versement horodaté enregistré pour cet appartement."
+    }
+  val paymentReceiptShareDesc: String
+    get() = if (language == AppLanguage.AR) "مشاركة الوصل" else "Partager le reçu"
+  val paymentDeleteDesc: String
+    get() = if (language == AppLanguage.AR) "حذف هذه الدفعة" else "Supprimer ce paiement"
+  val receiptMethodRowLabel: String
+    get() = if (language == AppLanguage.AR) "طريقة الأداء" else "Mode de règlement"
 }
 
 val ArabicStrings = SyndicatStrings(

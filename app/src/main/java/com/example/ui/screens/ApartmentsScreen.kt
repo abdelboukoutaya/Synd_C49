@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Contacts
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Payments
@@ -68,6 +69,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.model.ApartmentRecord
 import com.example.data.model.MonthColumn
+import com.example.data.model.PaymentMethod
+import com.example.data.model.PaymentRecord
 import com.example.data.model.SyndicatConfig
 import com.example.data.model.UnitStatus
 import com.example.ui.components.FintechPalePositiveCard
@@ -118,6 +121,9 @@ fun ApartmentsScreen(
   onMarkReminded: (ApartmentRecord, String?, String?) -> Unit,
   onRequestReceiptNo: suspend (ApartmentRecord) -> Long,
   onExportError: (String) -> Unit,
+  onSelectYear: (Long) -> Unit = {},
+  onSaveApartmentWithPayment: ((ApartmentRecord, ApartmentRecord, String, String, String) -> Unit)? = null,
+  onDeletePayment: (PaymentRecord) -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val context = LocalContext.current
@@ -135,6 +141,15 @@ fun ApartmentsScreen(
   var remindingApartment by remember { mutableStateOf<ApartmentRecord?>(null) }
   var showFilteredBatchRemind by remember { mutableStateOf(false) }
   var quickCellTarget by remember { mutableStateOf<Pair<ApartmentRecord, MonthColumn>?>(null) }
+
+  val saveApartmentWithMeta: (ApartmentRecord, ApartmentRecord, String, String, String) -> Unit =
+    { updated, prev, method, dateStr, notes ->
+      if (onSaveApartmentWithPayment != null) {
+        onSaveApartmentWithPayment(updated, prev, method, dateStr, notes)
+      } else {
+        onSaveApartment(updated, prev)
+      }
+    }
 
   val filteredApartments = remember(data.apartments, cfg, searchQuery, selectedFloor, statusFilter) {
     data.apartments.filter { apt ->
@@ -197,6 +212,46 @@ fun ApartmentsScreen(
           firstIcon = Icons.Default.ViewAgenda,
           secondIcon = Icons.Default.GridOn,
         )
+      }
+
+      // Multi-Year Selector Row (Exercice annuel)
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .testTag("apartments_year_selector"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        Text(
+          text = "${strings.yearSelectorLabel} :",
+          style = MaterialTheme.typography.labelLarge,
+          fontWeight = FontWeight.Medium,
+          color = tokens.body,
+        )
+        LazyRow(
+          modifier = Modifier.weight(1f),
+          horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+          items(data.availableYears) { yr ->
+            SyndicatFilterChip(
+              selected = yr == cfg.year,
+              onClick = { onSelectYear(yr) },
+              label = localizeDigits(yr.toString(), dig),
+              modifier = Modifier.testTag("year_chip_$yr"),
+            )
+          }
+          item {
+            SyndicatFilterChip(
+              selected = false,
+              onClick = {
+                val nextYr = ((data.availableYears.maxOrNull() ?: cfg.year) + 1L).coerceAtMost(2100L)
+                onSelectYear(nextYr)
+              },
+              label = strings.yearAddNextBtn,
+              modifier = Modifier.testTag("year_add_next_chip"),
+            )
+          }
+        }
       }
 
       // Meta search-pill ({colors.surface-soft} #F1F4F7, {rounded.full} 100dp, 2px #1876F2 focus border)
@@ -529,11 +584,11 @@ fun ApartmentsScreen(
       month = month,
       config = cfg,
       onDismiss = { quickCellTarget = null },
-      onSaveAmount = { newAmt ->
+      onSaveAmount = { newAmt, methodCode, dateStr ->
         val updated = apt.withMonthAmount(month, newAmt).let {
           if (newAmt > 0L && it.status == "empty") it.copy(status = "occupied") else it
         }
-        onSaveApartment(updated, apt)
+        saveApartmentWithMeta(updated, apt, methodCode, dateStr, "")
         quickCellTarget = null
       },
     )
@@ -541,12 +596,31 @@ fun ApartmentsScreen(
 
   // Comprehensive Apartment Edit & Multi-Month Payment Modal
   editingApartment?.let { apt ->
+    val liveApt = data.apartments.firstOrNull { it.number == apt.number } ?: apt
+    val aptPayments = remember(data.payments, liveApt.number) {
+      data.paymentsForApartment(liveApt.number)
+    }
     ApartmentPaymentAndOwnerModal(
-      apartment = apt,
+      apartment = liveApt,
       config = cfg,
+      paymentsHistory = aptPayments,
       onDismiss = { editingApartment = null },
-      onSave = { updated ->
-        onSaveApartment(updated, apt)
+      onSharePaymentReceipt = { payRecord ->
+        scope.launch {
+          val rNo = payRecord.receiptNumber.takeIf { it > 0L } ?: onRequestReceiptNo(liveApt)
+          PdfPosterExporter.sharePaymentReceiptImage(
+            context = context,
+            apartment = liveApt,
+            data = data,
+            receiptNo = rNo,
+            onError = onExportError,
+            payment = payRecord,
+          )
+        }
+      },
+      onDeletePayment = onDeletePayment,
+      onSave = { updated, methodCode, dateStr ->
+        saveApartmentWithMeta(updated, liveApt, methodCode, dateStr, "")
         editingApartment = null
       },
     )
@@ -917,29 +991,33 @@ private fun ApartmentMonthsNoScrollGrid(
   }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun QuickMonthCellPaymentDialog(
   apartment: ApartmentRecord,
   month: MonthColumn,
   config: SyndicatConfig,
   onDismiss: () -> Unit,
-  onSaveAmount: (Long) -> Unit,
+  onSaveAmount: (Long, String, String) -> Unit,
 ) {
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val today = remember { SimpleDateFormat("dd/MM/yyyy", Locale.FRANCE).format(Date()) }
   val expectedFee = apartment.expectedFeeForMonth(month, config)
     .takeIf { it > 0L } ?: config.feeForMonth(month)
   var amountText by remember(apartment, month) {
     val curAmt = apartment.amountFor(month)
     mutableStateOf(if (curAmt == 0L) "" else curAmt.toString())
   }
+  var selectedMethod by remember { mutableStateOf(PaymentMethod.CASH) }
+  var paymentDate by remember { mutableStateOf(today) }
 
   SyndicatDialog(
     onDismissRequest = onDismiss,
     title = {
       Column {
         Text(
-          text = "${strings.colAppt} ${apartment.displayNumber} · ${strings.monthFull(month)}",
+          text = "${strings.colAppt} ${apartment.displayNumber} · ${strings.monthFull(month)} ${localizeDigits(config.year.toString(), config.digitsAr)}",
           style = MaterialTheme.typography.titleLarge,
           fontWeight = FontWeight.Normal,
           color = tokens.ink,
@@ -970,10 +1048,40 @@ private fun QuickMonthCellPaymentDialog(
           modifier = Modifier.fillMaxWidth().testTag("quick_cell_amount_input"),
         )
 
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          Text(
+            text = strings.paymentMethodFieldLabel,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
+            color = tokens.body,
+          )
+          FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+          ) {
+            PaymentMethod.entries.forEach { m ->
+              SyndicatFilterChip(
+                selected = selectedMethod == m,
+                onClick = { selectedMethod = m },
+                label = strings.paymentMethodLabel(m.code),
+                modifier = Modifier.testTag("quick_pay_method_${m.code}"),
+              )
+            }
+          }
+        }
+
+        FintechTextField(
+          value = paymentDate,
+          onValueChange = { paymentDate = it.take(25) },
+          label = strings.paymentDateFieldLabel,
+          keyboardType = KeyboardType.Number,
+          modifier = Modifier.fillMaxWidth().testTag("quick_pay_date_input"),
+        )
+
         MetaCobaltBuyButton(
           text = "${strings.apptPayFullBtn} (${formatDh(expectedFee, config.currency, config.digitsAr)})",
           icon = Icons.Default.DoneAll,
-          onClick = { onSaveAmount(expectedFee) },
+          onClick = { onSaveAmount(expectedFee, selectedMethod.code, paymentDate.trim()) },
           modifier = Modifier.fillMaxWidth().testTag("quick_cell_pay_full_btn"),
         )
 
@@ -982,7 +1090,7 @@ private fun QuickMonthCellPaymentDialog(
             text = strings.apptClearMonthZeroBtn,
             icon = Icons.Default.Clear,
             compact = true,
-            onClick = { onSaveAmount(0L) },
+            onClick = { onSaveAmount(0L, selectedMethod.code, paymentDate.trim()) },
             modifier = Modifier.fillMaxWidth().testTag("quick_cell_clear_zero_btn"),
           )
         }
@@ -992,7 +1100,7 @@ private fun QuickMonthCellPaymentDialog(
       SageSecondaryButton(
         text = strings.apptSave,
         compact = true,
-        onClick = { onSaveAmount(amountText.toLongOrNull() ?: 0L) },
+        onClick = { onSaveAmount(amountText.toLongOrNull() ?: 0L, selectedMethod.code, paymentDate.trim()) },
         modifier = Modifier.testTag("quick_cell_save_btn"),
       )
     },
@@ -1011,8 +1119,11 @@ private fun QuickMonthCellPaymentDialog(
 private fun ApartmentPaymentAndOwnerModal(
   apartment: ApartmentRecord,
   config: SyndicatConfig,
+  paymentsHistory: List<PaymentRecord>,
   onDismiss: () -> Unit,
-  onSave: (ApartmentRecord) -> Unit,
+  onSharePaymentReceipt: (PaymentRecord) -> Unit,
+  onDeletePayment: (PaymentRecord) -> Unit,
+  onSave: (ApartmentRecord, String, String) -> Unit,
 ) {
   val context = LocalContext.current
   val strings = LocalStrings.current
@@ -1029,8 +1140,11 @@ private fun ApartmentPaymentAndOwnerModal(
     mutableStateOf(if (apartment.customMonthlyFee >= 0L) apartment.customMonthlyFee.toString() else "")
   }
   var lumpSumText by remember { mutableStateOf("") }
+  val today = remember { SimpleDateFormat("dd/MM/yyyy", Locale.FRANCE).format(Date()) }
+  var selectedMethod by remember { mutableStateOf(PaymentMethod.CASH) }
+  var paymentDate by remember { mutableStateOf(today) }
 
-  val monthInputs = remember(apartment.id) {
+  val monthInputs = remember(apartment.id, config.year) {
     mutableStateMapOf<MonthColumn, String>().apply {
       MonthColumn.entries.forEach { col ->
         val v = apartment.amountFor(col)
@@ -1227,6 +1341,125 @@ private fun ApartmentPaymentAndOwnerModal(
           }
         }
 
+        // Mode & Date de paiement (pour tout nouveau versement enregistré)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          Text(
+            text = strings.paymentMethodFieldLabel,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Medium,
+            color = tokens.ink,
+          )
+          FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+          ) {
+            PaymentMethod.entries.forEach { m ->
+              SyndicatFilterChip(
+                selected = selectedMethod == m,
+                onClick = { selectedMethod = m },
+                label = strings.paymentMethodLabel(m.code),
+                modifier = Modifier.testTag("modal_pay_method_${m.code}"),
+              )
+            }
+          }
+        }
+
+        FintechTextField(
+          value = paymentDate,
+          onValueChange = { paymentDate = it.take(25) },
+          label = strings.paymentDateFieldLabel,
+          keyboardType = KeyboardType.Number,
+          modifier = Modifier.fillMaxWidth().testTag("modal_pay_date_input"),
+        )
+
+        // Historique des paiements & reçus multi-années
+        HorizontalDivider(color = tokens.divider)
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("apartment_payment_history_section"),
+          verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          Text(
+            text = "${strings.paymentHistoryTitle} (${localizeDigits(paymentsHistory.size.toString(), dig)})",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = tokens.ink,
+          )
+          if (paymentsHistory.isEmpty()) {
+            Text(
+              text = strings.paymentHistoryEmpty,
+              style = MaterialTheme.typography.bodySmall,
+              color = tokens.mute,
+            )
+          } else {
+            paymentsHistory.take(15).forEach { pay ->
+              val monthsLabel = pay.effectiveMonthsCovered
+                .joinToString(" · ") { strings.monthShort(it) }
+                .ifBlank { "—" }
+              Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = tokens.surfaceSoft,
+                border = BorderStroke(1.dp, tokens.divider),
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .testTag("payment_history_item_${pay.id}"),
+              ) {
+                Row(
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                  Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                  ) {
+                    Text(
+                      text = "${formatDh(pay.amountDh, cur, dig)} · ${strings.paymentMethodLabel(pay.paymentMethod)}",
+                      style = MaterialTheme.typography.bodyMedium,
+                      fontWeight = FontWeight.SemiBold,
+                      color = tokens.ink,
+                    )
+                    Text(
+                      text = "${bidiLtr(localizeDigits(pay.paymentDate.ifBlank { "—" }, dig))} · ${localizeDigits(pay.year.toString(), dig)} ($monthsLabel) · #${"%03d".format(pay.receiptNumber)}",
+                      style = MaterialTheme.typography.bodySmall,
+                      color = tokens.body,
+                    )
+                  }
+                  Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                      onClick = { onSharePaymentReceipt(pay) },
+                      modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .testTag("share_payment_receipt_${pay.id}"),
+                    ) {
+                      Icon(
+                        imageVector = Icons.Default.Receipt,
+                        contentDescription = strings.paymentReceiptShareDesc,
+                        tint = MaterialTheme.colorScheme.primary,
+                      )
+                    }
+                    IconButton(
+                      onClick = { onDeletePayment(pay) },
+                      modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .testTag("delete_payment_${pay.id}"),
+                    ) {
+                      Icon(
+                        imageVector = Icons.Default.DeleteOutline,
+                        contentDescription = strings.paymentDeleteDesc,
+                        tint = tokens.negative,
+                      )
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
         HorizontalDivider(color = tokens.divider)
 
         // Owner & Contact Section
@@ -1325,7 +1558,7 @@ private fun ApartmentPaymentAndOwnerModal(
       MetaCobaltBuyButton(
         text = strings.apptSave,
         compact = true,
-        onClick = { onSave(buildCurrentDraft()) },
+        onClick = { onSave(buildCurrentDraft(), selectedMethod.code, paymentDate.trim()) },
         modifier = Modifier.testTag("save_apartment_button"),
       )
     },

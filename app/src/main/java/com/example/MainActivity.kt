@@ -76,6 +76,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.auth.signOutUser
+import com.example.data.local.LocalSyndicatRepository
+import com.example.data.repository.LOCAL_DEVICE_USER_ID
+import com.example.data.repository.SyndicatDataSource
 import com.example.data.repository.SyndicatRepository
 import com.example.ui.components.LimePrimaryButton
 import com.example.ui.components.PinLockGateScreen
@@ -97,6 +100,7 @@ import com.example.ui.theme.AppTheme
 import com.example.ui.theme.LocalSyndicatTokens
 import com.example.ui.theme.MetaCanvas
 import com.example.ui.theme.MetaInkDeep
+import com.example.ui.theme.sanitizeThemeStyle
 import com.example.ui.viewmodel.StatusFilter
 import com.example.ui.viewmodel.SyndicatViewModel
 import com.example.ui.viewmodel.UiState
@@ -144,10 +148,14 @@ fun SyndicatRootApp() {
   var currentLanguage by remember {
     mutableStateOf(LanguagePreferences.getSavedLanguage(context))
   }
+  var themeStyle by remember {
+    mutableStateOf(LanguagePreferences.getThemeStyle(context))
+  }
   var themeMode by remember { mutableStateOf("system") }
   var fontScale by remember { mutableStateOf("normal") }
   var savedPin by remember { mutableStateOf(LanguagePreferences.getPinCode(context)) }
   var pinUnlocked by rememberSaveable { mutableStateOf(false) }
+  var showOptionalAuthScreen by rememberSaveable { mutableStateOf(false) }
 
   var currentUser by remember { mutableStateOf(Firebase.auth.currentUser) }
 
@@ -174,13 +182,22 @@ fun SyndicatRootApp() {
     darkTheme = useDarkTheme,
     isArabic = currentLanguage == AppLanguage.AR,
     fontScale = fontScale,
+    themeStyle = themeStyle,
   ) {
     CompositionLocalProvider(
       LocalStrings provides activeStrings,
       LocalLayoutDirection provides layoutDir,
     ) {
       val user = currentUser
-      if (user == null) {
+      if (savedPin.isNotBlank() && !pinUnlocked) {
+        PinLockGateScreen(
+          expectedPin = savedPin,
+          onUnlocked = { pinUnlocked = true },
+        )
+      } else if (showOptionalAuthScreen && user == null) {
+        BackHandler {
+          showOptionalAuthScreen = false
+        }
         AuthScreen(
           currentLanguage = currentLanguage,
           onSelectLanguage = { newLang ->
@@ -189,17 +206,19 @@ fun SyndicatRootApp() {
           },
           onAuthSuccess = {
             currentUser = Firebase.auth.currentUser
+            showOptionalAuthScreen = false
+          },
+          onContinueWithoutAccount = {
+            showOptionalAuthScreen = false
           },
         )
-      } else if (savedPin.isNotBlank() && !pinUnlocked) {
-        PinLockGateScreen(
-          expectedPin = savedPin,
-          onUnlocked = { pinUnlocked = true },
-        )
       } else {
+        val activeUserId = user?.uid ?: LOCAL_DEVICE_USER_ID
+        val isCloudSynced = user != null
         AuthenticatedSyndicatApp(
-          currentUserId = user.uid,
-          userEmail = user.email,
+          currentUserId = activeUserId,
+          userEmail = user?.email,
+          isCloudSynced = isCloudSynced,
           currentLanguage = currentLanguage,
           onLanguageSynced = { syncedLang ->
             if (currentLanguage != syncedLang) {
@@ -207,8 +226,10 @@ fun SyndicatRootApp() {
               LanguagePreferences.saveLanguage(context, syncedLang)
             }
           },
-          onDisplayPrefsSynced = { _, syncedTheme, syncedScale ->
-            LanguagePreferences.saveThemeStyle(context, "airtable")
+          onDisplayPrefsSynced = { syncedStyle, syncedTheme, syncedScale ->
+            val cleanStyle = sanitizeThemeStyle(syncedStyle, themeStyle)
+            themeStyle = cleanStyle
+            LanguagePreferences.saveThemeStyle(context, cleanStyle)
             themeMode = syncedTheme
             fontScale = syncedScale
           },
@@ -220,9 +241,13 @@ fun SyndicatRootApp() {
             savedPin = newPin
             pinUnlocked = true
           },
+          onRequestGoogleSync = {
+            showOptionalAuthScreen = true
+          },
           onSignOutComplete = {
             LanguagePreferences.setHasPreviousGoogleSession(context, false)
             currentUser = null
+            showOptionalAuthScreen = false
           },
         )
       }
@@ -234,11 +259,13 @@ fun SyndicatRootApp() {
 private fun AuthenticatedSyndicatApp(
   currentUserId: String,
   userEmail: String?,
+  isCloudSynced: Boolean,
   currentLanguage: AppLanguage,
   onLanguageSynced: (AppLanguage) -> Unit,
   onDisplayPrefsSynced: (String, String, String) -> Unit,
   onUserSelectedLanguage: (AppLanguage) -> Unit,
   onPinUpdated: (String) -> Unit,
+  onRequestGoogleSync: () -> Unit,
   onSignOutComplete: () -> Unit,
 ) {
   val context = LocalContext.current
@@ -246,14 +273,21 @@ private fun AuthenticatedSyndicatApp(
   val tokens = LocalSyndicatTokens.current
   val scope = rememberCoroutineScope()
   val credentialManager = remember(context) { CredentialManager.create(context) }
+  val localRepo = remember(context) { LocalSyndicatRepository.getInstance(context) }
 
+  val viewModelKey = if (isCloudSynced) "syndicat_vm_cloud_$currentUserId" else "syndicat_vm_local"
   val viewModel: SyndicatViewModel = viewModel(
-    key = "syndicat_vm_$currentUserId",
+    key = viewModelKey,
     factory = object : ViewModelProvider.Factory {
       @Suppress("UNCHECKED_CAST")
       override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        val dataSource: SyndicatDataSource = if (isCloudSynced) {
+          SyndicatRepository(context.applicationContext)
+        } else {
+          localRepo
+        }
         return SyndicatViewModel(
-          repository = SyndicatRepository(context.applicationContext),
+          repository = dataSource,
           currentUserId = currentUserId,
         ) as T
       }
@@ -271,21 +305,38 @@ private fun AuthenticatedSyndicatApp(
   var isBackupOverdue by remember { mutableStateOf(LanguagePreferences.isBackupOverdue(context)) }
   val snackbarHostState = remember { SnackbarHostState() }
 
-  // Sync language, themeStyle, themeMode, fontScale & automatic weekly local JSON snapshot
-  LaunchedEffect(uiState) {
+  // When signing in with Google for the first time on an empty cloud profile, migrate local phone data automatically
+  LaunchedEffect(isCloudSynced, currentUserId) {
+    if (isCloudSynced && localRepo.hasLocalUserData()) {
+      try {
+        val cloudRepo = SyndicatRepository(context.applicationContext)
+        if (!cloudRepo.hasExistingCloudConfig(currentUserId)) {
+          val localSnapshot = localRepo.exportCurrentBackup(currentUserId)
+          if (localSnapshot != null) {
+            cloudRepo.restoreFromBackup(localSnapshot)
+            viewModel.showToastMessage(strings.syncLocalMigratedToast)
+          }
+        }
+      } catch (_: Exception) {
+      }
+    }
+  }
+
+  // Sync language, themeStyle, themeMode, fontScale & mirror cloud state to phone local storage
+  LaunchedEffect(uiState, isCloudSynced) {
     val state = uiState
     if (state is UiState.Success) {
       val cfg = state.data.config
       if (cfg.seeded) {
         onLanguageSynced(AppLanguage.fromCode(cfg.language))
-        onDisplayPrefsSynced("airtable", cfg.themeMode, cfg.fontScale)
-        if (cfg.themeStyle != "airtable") {
-          viewModel.updateDisplayPrefsInstant(themeStyle = "airtable")
-        }
+        onDisplayPrefsSynced(cfg.themeStyle, cfg.themeMode, cfg.fontScale)
         if (!cfg.onboardingCompleted) {
           showOnboardingWizard = true
         }
         BackupManager.saveAutoLocalSnapshot(context, state.data)
+        if (isCloudSynced) {
+          localRepo.mirrorFromCloud(state.data)
+        }
       }
     }
   }
@@ -537,7 +588,32 @@ private fun AuthenticatedSyndicatApp(
               onSelectFloor = viewModel::selectFloor,
               onSelectStatusFilter = viewModel::selectStatusFilter,
               onSaveApartment = { updated, previous ->
-                viewModel.saveApartment(updated, previous, data.config)
+                viewModel.saveApartment(
+                  apartment = updated,
+                  previousSnapshot = previous,
+                  config = data.config,
+                  baseYear = data.baseYear,
+                )
+              },
+              onSaveApartmentWithPayment = { updated, previous, methodCode, dateStr, notes ->
+                viewModel.saveApartment(
+                  apartment = updated,
+                  previousSnapshot = previous,
+                  config = data.config,
+                  baseYear = data.baseYear,
+                  paymentMethod = methodCode,
+                  paymentDate = dateStr,
+                  paymentNotes = notes,
+                )
+              },
+              onSelectYear = viewModel::selectYear,
+              onDeletePayment = { payment ->
+                viewModel.deletePaymentEntry(
+                  payment = payment,
+                  baseYear = data.baseYear,
+                  baseApartments = data.baseApartments,
+                  config = data.config,
+                )
               },
               onMarkReminded = { apt, updatedPhone, updatedTemplate ->
                 viewModel.markWhatsAppReminderSent(apt, data.config, updatedPhone, updatedTemplate)
@@ -591,11 +667,12 @@ private fun AuthenticatedSyndicatApp(
                 onUserSelectedLanguage(newLang)
                 viewModel.updateLanguageInstant(newLang.code)
               },
-              onUpdateDisplayPrefs = { digitsAr, _, thMode, fScale ->
+              onUpdateDisplayPrefs = { digitsAr, thStyle, thMode, fScale ->
+                val nextStyle = sanitizeThemeStyle(thStyle ?: data.config.themeStyle, data.config.themeStyle)
                 val nextMode = thMode ?: data.config.themeMode
                 val nextScale = fScale ?: data.config.fontScale
-                onDisplayPrefsSynced("airtable", nextMode, nextScale)
-                viewModel.updateDisplayPrefsInstant(digitsAr, "airtable", thMode, fScale)
+                onDisplayPrefsSynced(nextStyle, nextMode, nextScale)
+                viewModel.updateDisplayPrefsInstant(digitsAr, thStyle, thMode, fScale)
               },
               onOpenWizard = { showOnboardingWizard = true },
               onSaveConfig = { updatedCfg, resetBlank ->
@@ -618,6 +695,14 @@ private fun AuthenticatedSyndicatApp(
                 signOutUser(credentialManager, scope, onSignOutComplete, context)
               },
               onMessage = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+              isCloudSynced = isCloudSynced,
+              onConnectGoogleSync = onRequestGoogleSync,
+              onPushLocalToCloud = {
+                val localSnap = localRepo.exportCurrentBackup(currentUserId)
+                if (localSnap != null) {
+                  viewModel.restoreBackupData(localSnap, currentLanguage == AppLanguage.AR)
+                }
+              },
               modifier = contentMod,
             )
           }

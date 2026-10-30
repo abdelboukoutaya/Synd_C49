@@ -6,16 +6,23 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.model.ApartmentRecord
 import com.example.data.model.ExpenseRecord
 import com.example.data.model.MonthColumn
+import com.example.data.model.PaymentMethod
+import com.example.data.model.PaymentRecord
 import com.example.data.model.ProjectCaisseReadiness
 import com.example.data.model.ProjectRecord
 import com.example.data.model.ProjectStatus
 import com.example.data.model.SyndicatConfig
+import com.example.data.model.canonicalApartmentDocId
 import com.example.data.model.evaluatePlannedProjectsReadiness
+import com.example.data.model.projectApartmentsForYear
 import com.example.data.model.sortProjectsByPriority
-import com.example.data.repository.SyndicatRepository
+import com.example.data.repository.SyndicatDataSource
 import com.example.ui.i18n.formatNumber
 import com.example.util.ParsedOwnerRow
 import com.example.util.ParsedSyndicatBackup
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,7 +60,24 @@ data class SyndicatDashboardData(
   val apartments: List<ApartmentRecord>,
   val expenses: List<ExpenseRecord>,
   val projects: List<ProjectRecord> = emptyList(),
+  val payments: List<PaymentRecord> = emptyList(),
+  val baseApartments: List<ApartmentRecord> = apartments,
+  val baseYear: Long = config.year,
 ) {
+  /** Années disponibles dans le sélecteur d'exercice annuel */
+  val availableYears: List<Long>
+    get() = (setOf(baseYear - 1L, baseYear, baseYear + 1L, config.year) + payments.map { it.year })
+      .filter { it in 2020L..2100L }
+      .distinct()
+      .sorted()
+
+  /** Historique des paiements d'un appartement (trié du plus récent au plus ancien) */
+  fun paymentsForApartment(apartmentNumber: Long, yearFilter: Long? = null): List<PaymentRecord> {
+    return payments.filter { p ->
+      p.apartmentNumber == apartmentNumber && (yearFilter == null || p.year == yearFilter)
+    }
+  }
+
   /** Somme de tous les paiements encaissés sur les mois actifs */
   val totalCaisseDh: Long
     get() = apartments.sumOf { it.totalForConfig(config) }
@@ -146,7 +170,7 @@ data class SyndicatDashboardData(
 }
 
 class SyndicatViewModel(
-  private val repository: SyndicatRepository,
+  private val repository: SyndicatDataSource,
   private val currentUserId: String,
 ) : ViewModel() {
 
@@ -159,23 +183,61 @@ class SyndicatViewModel(
   private val _statusFilter = MutableStateFlow(StatusFilter.ALL)
   val statusFilter: StateFlow<StatusFilter> = _statusFilter.asStateFlow()
 
+  private val _selectedYear = MutableStateFlow<Long?>(null)
+  val selectedYear: StateFlow<Long?> = _selectedYear.asStateFlow()
+
   private val _isSaving = MutableStateFlow(false)
   val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
 
   private val _snackbarEvents = MutableSharedFlow<SnackbarUndoMessage>(extraBufferCapacity = 4)
   val snackbarEvents = _snackbarEvents.asSharedFlow()
 
-  val uiState: StateFlow<UiState<SyndicatDashboardData>> = combine(
+  private data class CoreStreams(
+    val config: SyndicatConfig?,
+    val apartments: List<ApartmentRecord>,
+    val expenses: List<ExpenseRecord>,
+    val projects: List<ProjectRecord>,
+  )
+
+  private val coreStreams = combine(
     repository.observeConfig(currentUserId),
     repository.observeApartments(currentUserId),
     repository.observeExpenses(currentUserId),
     repository.observeProjects(currentUserId),
   ) { config, apartments, expenses, projects ->
+    CoreStreams(config, apartments, expenses, projects)
+  }
+
+  val uiState: StateFlow<UiState<SyndicatDashboardData>> = combine(
+    coreStreams,
+    repository.observePayments(currentUserId),
+    _selectedYear,
+  ) { core, payments, explicitYear ->
+    val baseCfg = core.config ?: SyndicatConfig(userId = currentUserId)
+    val targetYear = explicitYear ?: baseCfg.year
+    val effectiveCfg = if (targetYear == baseCfg.year) {
+      baseCfg
+    } else {
+      baseCfg.copy(
+        year = targetYear,
+        activeMonths = MonthColumn.FULL_YEAR_NUMBERS,
+        cutoffMonth = 12L,
+      )
+    }
+    val projectedApts = projectApartmentsForYear(
+      baseApartments = core.apartments,
+      baseConfig = baseCfg,
+      targetYear = targetYear,
+      payments = payments,
+    )
     SyndicatDashboardData(
-      config = config ?: SyndicatConfig(userId = currentUserId),
-      apartments = apartments,
-      expenses = expenses,
-      projects = projects,
+      config = effectiveCfg,
+      apartments = projectedApts,
+      expenses = core.expenses,
+      projects = core.projects,
+      payments = payments,
+      baseApartments = core.apartments,
+      baseYear = baseCfg.year,
     )
   }
     .map<SyndicatDashboardData, UiState<SyndicatDashboardData>> { data ->
@@ -220,6 +282,10 @@ class SyndicatViewModel(
     _statusFilter.value = filter
   }
 
+  fun selectYear(year: Long?) {
+    _selectedYear.value = year?.coerceIn(2020L, 2100L)
+  }
+
   fun triggerUndoAction(action: suspend () -> Unit) {
     viewModelScope.launch {
       try {
@@ -234,25 +300,90 @@ class SyndicatViewModel(
     apartment: ApartmentRecord,
     previousSnapshot: ApartmentRecord? = null,
     config: SyndicatConfig,
+    baseYear: Long = config.year,
+    paymentMethod: String = "cash",
+    paymentDate: String = "",
+    paymentNotes: String = "",
     onSuccess: () -> Unit = {},
   ) {
     viewModelScope.launch {
       _isSaving.value = true
       try {
-        repository.updateApartment(apartment)
-        val isAr = config.language != "fr"
-        val total = formatDh(apartment.totalForConfig(config), config.currency, config.digitsAr)
-        val msg = if (isAr) {
-          "تم حفظ الشقة ${apartment.displayNumber} ($total)"
+        val canonicalApt = apartment.copy(id = canonicalApartmentDocId(apartment.number))
+        val prev = previousSnapshot?.copy(id = canonicalApartmentDocId(previousSnapshot.number))
+
+        // Compute positive payment delta across months to record in the payments table
+        val deltaMonths = if (prev != null) {
+          MonthColumn.entries.filter { col -> canonicalApt.amountFor(col) > prev.amountFor(col) }
         } else {
-          "Appartement ${apartment.displayNumber} mis à jour ($total)"
+          emptyList()
+        }
+        val deltaAmountDh = if (prev != null) {
+          deltaMonths.sumOf { col -> (canonicalApt.amountFor(col) - prev.amountFor(col)).coerceAtLeast(0L) }
+        } else {
+          0L
+        }
+
+        if (config.year == baseYear) {
+          repository.updateApartment(canonicalApt)
+        } else if (prev != null) {
+          // On a secondary fiscal year, update owner metadata only on the base apartment without clobbering baseYear's 12 months
+          val metadataOnly = prev.copy(
+            ownerName = canonicalApt.ownerName,
+            ownerNameAr = canonicalApt.ownerNameAr,
+            phone = canonicalApt.phone,
+            status = canonicalApt.status,
+            isTenant = canonicalApt.isTenant,
+            customMonthlyFee = canonicalApt.customMonthlyFee,
+          )
+          if (metadataOnly != prev) {
+            repository.updateApartment(metadataOnly)
+          }
+        }
+
+        var createdPaymentId: String? = null
+        if (deltaAmountDh > 0L) {
+          val receiptNo = repository.incrementReceiptCount(canonicalApt)
+          val todayStr = paymentDate.trim().ifBlank {
+            SimpleDateFormat("dd/MM/yyyy", Locale.FRANCE).format(Date())
+          }
+          createdPaymentId = repository.addPayment(
+            PaymentRecord(
+              userId = currentUserId,
+              apartmentId = canonicalApartmentDocId(canonicalApt.number),
+              apartmentNumber = canonicalApt.number,
+              year = config.year,
+              month = if (deltaMonths.size == 1) deltaMonths.first().monthNumber.toLong() else 0L,
+              monthsCovered = deltaMonths.map { it.monthNumber.toLong() },
+              amountDh = deltaAmountDh,
+              paymentDate = todayStr,
+              paymentMethod = PaymentMethod.fromCode(paymentMethod).code,
+              receiptNumber = receiptNo,
+              notes = paymentNotes.trim(),
+            )
+          )
+        }
+
+        val isAr = config.language != "fr"
+        val total = formatDh(canonicalApt.totalForConfig(config), config.currency, config.digitsAr)
+        val msg = if (isAr) {
+          "تم حفظ الشقة ${canonicalApt.displayNumber} ($total)"
+        } else {
+          "Appartement ${canonicalApt.displayNumber} mis à jour ($total)"
         }
         val undoLabel = if (isAr) "تراجع" else "Annuler"
         _snackbarEvents.tryEmit(
           SnackbarUndoMessage(
             message = msg,
-            undoLabel = if (previousSnapshot != null) undoLabel else null,
-            onUndo = previousSnapshot?.let { prev -> { repository.updateApartment(prev) } },
+            undoLabel = if (prev != null || createdPaymentId != null) undoLabel else null,
+            onUndo = if (prev != null || createdPaymentId != null) {
+              {
+                if (createdPaymentId != null) repository.deletePayment(createdPaymentId)
+                if (prev != null && config.year == baseYear) repository.updateApartment(prev)
+              }
+            } else {
+              null
+            },
           )
         )
         onSuccess()
@@ -260,6 +391,46 @@ class SyndicatViewModel(
         _snackbarEvents.tryEmit(SnackbarUndoMessage(e.localizedMessage ?: "خطأ في الحفظ."))
       } finally {
         _isSaving.value = false
+      }
+    }
+  }
+
+  fun deletePaymentEntry(
+    payment: PaymentRecord,
+    baseYear: Long,
+    baseApartments: List<ApartmentRecord>,
+    config: SyndicatConfig,
+  ) {
+    viewModelScope.launch {
+      try {
+        repository.deletePayment(payment.id)
+        if (payment.year == baseYear) {
+          val baseApt = baseApartments.firstOrNull { it.number == payment.apartmentNumber }
+          if (baseApt != null) {
+            var adjusted: ApartmentRecord = baseApt
+            var toSubtract = payment.amountDh
+            val covered = payment.effectiveMonthsCovered.reversed()
+            for (col in covered) {
+              if (toSubtract <= 0L) break
+              val cur = adjusted.amountFor(col)
+              val dec = minOf(cur, toSubtract)
+              adjusted = adjusted.withMonthAmount(col, (cur - dec).coerceAtLeast(0L))
+              toSubtract -= dec
+            }
+            if (adjusted != baseApt) {
+              repository.updateApartment(adjusted)
+            }
+          }
+        }
+        val isAr = config.language != "fr"
+        val msg = if (isAr) {
+          "تم إلغاء الدفعة (${formatDh(payment.amountDh, config.currency, config.digitsAr)})"
+        } else {
+          "Paiement annulé (${formatDh(payment.amountDh, config.currency, config.digitsAr)})"
+        }
+        _snackbarEvents.tryEmit(SnackbarUndoMessage(msg))
+      } catch (e: Exception) {
+        _snackbarEvents.tryEmit(SnackbarUndoMessage(e.localizedMessage ?: "تعذر حذف الدفعة."))
       }
     }
   }

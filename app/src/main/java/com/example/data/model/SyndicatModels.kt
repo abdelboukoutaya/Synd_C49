@@ -60,17 +60,70 @@ enum class PaymentBadgeStatus {
   EXEMPT,
 }
 
-val EXPENSE_CATEGORIES = listOf(
+val ALL_SYNDICAT_CATEGORIES = listOf(
+  "Historique",
   "Ménage",
+  "Sécurité",
+  "Gardiennage",
   "Électricité",
   "Eau",
+  "Plomberie",
   "Ascenseur",
-  "Gardiennage",
   "Entretien",
   "Réparations",
+  "Peinture",
+  "Étanchéité",
+  "Jardin",
+  "Divers",
+)
+
+val EXPENSE_CATEGORIES = listOf(
+  "Ménage",
+  "Sécurité",
+  "Gardiennage",
+  "Électricité",
+  "Eau",
+  "Plomberie",
+  "Ascenseur",
+  "Entretien",
+  "Réparations",
+  "Peinture",
+  "Étanchéité",
+  "Jardin",
   "Divers",
   "Historique",
 )
+
+fun normalizeSyndicatCategory(raw: String?, fallback: String = "Divers"): String {
+  val trimmed = raw?.trim().orEmpty()
+  if (trimmed in ALL_SYNDICAT_CATEGORIES) return trimmed
+  return when (trimmed.lowercase()) {
+    "نظافة", "النظافة", "menage", "ménage" -> "Ménage"
+    "أمن", "الأمن", "كاميرات", "الأمن والكاميرات", "securite", "sécurité" -> "Sécurité"
+    "حراسة", "الحراسة", "gardiennage" -> "Gardiennage"
+    "كهرباء", "الكهرباء", "electricite", "électricité" -> "Électricité"
+    "ماء", "الماء", "eau" -> "Eau"
+    "سباكة", "السباكة", "ترصيص", "plomberie" -> "Plomberie"
+    "مصعد", "المصعد", "ascenseur" -> "Ascenseur"
+    "صيانة", "الصيانة", "entretien" -> "Entretien"
+    "إصلاحات", "الإصلاحات", "reparations", "réparations" -> "Réparations"
+    "صباغة", "الصباغة", "peinture" -> "Peinture"
+    "عزل", "العزل", "العزل المائي", "etancheite", "étanchéité" -> "Étanchéité"
+    "حديقة", "الحديقة", "jardin" -> "Jardin"
+    "رصيد سابق", "historique" -> "Historique"
+    "متنوعة", "divers" -> "Divers"
+    else -> fallback
+  }
+}
+
+fun canonicalApartmentDocId(number: Long): String {
+  val safeNum = number.coerceIn(1L, 200L)
+  return "appt_%02d".format(safeNum)
+}
+
+fun isCoherentApartmentId(id: String, number: Long): Boolean {
+  return number in 1L..200L && id == canonicalApartmentDocId(number)
+}
 
 const val DEFAULT_WHATSAPP_TEMPLATE_AR =
   "السلام عليكم {الاسم}\n" +
@@ -119,7 +172,7 @@ data class SyndicatConfig(
   val userId: String = "",
   val language: String = "ar",
   val digitsAr: Boolean = false,
-  val themeStyle: String = "airtable",
+  val themeStyle: String = "coinbase",
   val themeMode: String = "system",
   val fontScale: String = "normal",
   val syndicatName: String = "إدارة السانديك",
@@ -498,16 +551,156 @@ data class ExpenseRecord(
 }
 
 val PROJECT_CATEGORIES = listOf(
-  "Peinture",
   "Sécurité",
+  "Peinture",
   "Étanchéité",
   "Ascenseur",
   "Plomberie",
   "Électricité",
+  "Eau",
   "Entretien",
+  "Réparations",
+  "Ménage",
+  "Gardiennage",
   "Jardin",
   "Divers",
 )
+
+enum class PaymentMethod(val code: String) {
+  CASH("cash"),
+  TRANSFER("transfer"),
+  CHECK("check"),
+  MOBILE("mobile"),
+  OTHER("other");
+
+  companion object {
+    val VALID_CODES = entries.map { it.code }.toSet()
+
+    fun fromCode(code: String?): PaymentMethod = when (code?.trim()?.lowercase()) {
+      "transfer", "virement" -> TRANSFER
+      "check", "cheque", "chèque" -> CHECK
+      "mobile" -> MOBILE
+      "other", "autre" -> OTHER
+      else -> CASH
+    }
+  }
+}
+
+@IgnoreExtraProperties
+data class PaymentRecord(
+  @DocumentId val id: String = "",
+  val userId: String = "",
+  val apartmentId: String = "",
+  val apartmentNumber: Long = 1L,
+  val year: Long = 2026L,
+  val month: Long = 0L,
+  val monthsCovered: List<Long> = emptyList(),
+  val amountDh: Long = 0L,
+  val paymentDate: String = "",
+  val paymentMethod: String = "cash",
+  val receiptNumber: Long = 0L,
+  val notes: String = "",
+  @ServerTimestamp val createdAt: Timestamp? = null,
+  @ServerTimestamp val updatedAt: Timestamp? = null,
+) {
+  @get:Exclude
+  val parsedMethod: PaymentMethod
+    get() = PaymentMethod.fromCode(paymentMethod)
+
+  @get:Exclude
+  val effectiveMonthsCovered: List<MonthColumn>
+    get() {
+      val fromList = monthsCovered
+        .filter { it in 1L..12L }
+        .distinct()
+        .sorted()
+        .map { MonthColumn.fromNumber(it.toInt()) }
+      if (fromList.isNotEmpty()) return fromList
+      return if (month in 1L..12L) listOf(MonthColumn.fromNumber(month.toInt())) else emptyList()
+    }
+}
+
+/**
+ * Projects apartments' 12 monthly paid cells (jan..dec) for [targetYear]:
+ * - When [targetYear] != [baseConfig.year], computes monthly cells exclusively from [payments]
+ *   recorded for [targetYear] (starting from 0 DH on all 12 months so each year has its own ledger).
+ * - When [targetYear] == [baseConfig.year], uses [baseApartments] directly, unless an apartment
+ *   has 0 DH on all months while [payments] has entries for (apartmentNumber, targetYear), in
+ *   which case those payment entries are projected onto the apartment.
+ */
+fun projectApartmentsForYear(
+  baseApartments: List<ApartmentRecord>,
+  baseConfig: SyndicatConfig,
+  targetYear: Long,
+  payments: List<PaymentRecord>,
+): List<ApartmentRecord> {
+  if (targetYear == baseConfig.year && payments.none { it.year == targetYear }) {
+    return baseApartments
+  }
+  val byAptNumber = payments
+    .filter { it.year == targetYear && it.amountDh > 0L }
+    .sortedBy { it.createdAt?.seconds ?: 0L }
+    .groupBy { it.apartmentNumber }
+
+  return baseApartments.map { apt ->
+    val aptPayments = byAptNumber[apt.number].orEmpty()
+    if (targetYear == baseConfig.year) {
+      if (apt.totalAllMonthsDh > 0L || aptPayments.isEmpty()) {
+        apt
+      } else {
+        applyPaymentRecordsToBlankApartment(apt, aptPayments, baseConfig.copy(year = targetYear))
+      }
+    } else {
+      val blankForYear = apt.copy(
+        jan = 0L, feb = 0L, mar = 0L, apr = 0L, may = 0L, juin = 0L,
+        juil = 0L, aout = 0L, sept = 0L, oct = 0L, nov = 0L, dec = 0L,
+      )
+      if (aptPayments.isEmpty()) {
+        blankForYear
+      } else {
+        applyPaymentRecordsToBlankApartment(blankForYear, aptPayments, baseConfig.copy(year = targetYear))
+      }
+    }
+  }
+}
+
+private fun applyPaymentRecordsToBlankApartment(
+  blankApt: ApartmentRecord,
+  payments: List<PaymentRecord>,
+  yearConfig: SyndicatConfig,
+): ApartmentRecord {
+  var current = blankApt
+  for (p in payments) {
+    val amt = p.amountDh.coerceAtLeast(0L)
+    if (amt <= 0L) continue
+    if (current.status == "empty") {
+      current = current.copy(status = "occupied")
+    }
+    if (p.month in 1L..12L && p.monthsCovered.size <= 1) {
+      val col = MonthColumn.fromNumber(p.month.toInt())
+      current = current.withMonthAmount(col, current.amountFor(col) + amt)
+    } else if (p.monthsCovered.isNotEmpty()) {
+      var pool = amt
+      val cols = p.monthsCovered
+        .filter { it in 1L..12L }
+        .distinct()
+        .sorted()
+        .map { MonthColumn.fromNumber(it.toInt()) }
+      for (col in cols) {
+        if (pool <= 0L) break
+        val target = if (current.customMonthlyFee >= 0L) current.customMonthlyFee else yearConfig.feeForMonth(col)
+        val cur = current.amountFor(col)
+        val needed = (target - cur).coerceAtLeast(0L)
+        val add = if (col == cols.last()) pool else minOf(pool, needed.takeIf { it > 0L } ?: pool)
+        current = current.withMonthAmount(col, cur + add)
+        pool -= add
+      }
+    } else {
+      current = current.applyLumpSumPayment(amt, yearConfig)
+    }
+  }
+  return current
+}
 
 enum class ProjectStatus(val code: String, val sortOrder: Int) {
   IN_PROGRESS("in_progress", 0),

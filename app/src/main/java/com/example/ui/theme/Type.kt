@@ -85,8 +85,9 @@ fun fontScaleMultiplier(scaleKey: String?): Float = when (scaleKey) {
 fun buildCoinbaseTypography(
   isArabic: Boolean = true,
   scaleMultiplier: Float = 1.0f,
+  latinFontOverride: FontFamily? = null,
 ): Typography {
-  val text = if (isArabic) IbmPlexSansArabicFontFamily else CoinbaseSansFontFamily
+  val text = if (isArabic) IbmPlexSansArabicFontFamily else (latinFontOverride ?: CoinbaseSansFontFamily)
   val numeric = CoinbaseMonoFontFamily
   val s = scaleMultiplier.coerceIn(0.85f, 1.25f)
 
@@ -219,11 +220,28 @@ fun buildCoinbaseTypography(
   )
 }
 
+fun buildAppTypography(
+  themeStyle: String = "coinbase",
+  isArabic: Boolean = true,
+  scaleMultiplier: Float = 1.0f,
+): Typography {
+  val latinFamily = when (resolveVisualThemeFamily(themeStyle)) {
+    "meta" -> MetaOptimisticLatinFontFamily
+    "minimax" -> MontserratFontFamily
+    else -> CoinbaseSansFontFamily
+  }
+  return buildCoinbaseTypography(
+    isArabic = isArabic,
+    scaleMultiplier = scaleMultiplier,
+    latinFontOverride = latinFamily,
+  )
+}
+
 // Compatibility with the previous theme files
 fun buildMetaTypography(
   isArabic: Boolean = true,
   scaleMultiplier: Float = 1.0f,
-): Typography = buildCoinbaseTypography(isArabic = isArabic, scaleMultiplier = scaleMultiplier)
+): Typography = buildAppTypography(themeStyle = "meta", isArabic = isArabic, scaleMultiplier = scaleMultiplier)
 
 fun buildAirtableTypography(
   isArabic: Boolean = true,

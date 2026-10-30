@@ -1,7 +1,9 @@
 package com.example.data.repository
 
 import com.example.base.FirestoreEmulatorTestBase
+import com.example.data.model.ApartmentRecord
 import com.example.data.model.MonthColumn
+import com.example.data.model.PaymentRecord
 import com.example.data.model.ProjectRecord
 import com.example.data.model.SyndicatConfig
 import com.google.firebase.firestore.FirebaseFirestoreException
@@ -119,16 +121,18 @@ class SyndicatRepositoryRuleTest : FirestoreEmulatorTestBase() {
     assertEquals(1500L, savedCfg.openingBalanceDh)
     assertEquals(150L, savedCfg.feeMar)
     assertEquals(32L, savedCfg.apartmentsCount)
-    assertEquals("airtable", savedCfg.themeStyle)
+    assertEquals("coinbase", savedCfg.themeStyle)
 
-    withTimeout(DEFAULT_TIMEOUT_MS) {
-      repository.updateDisplayPrefs(themeMode = "dark")
+    for (targetStyle in listOf("meta", "minimax", "coinbase")) {
+      withTimeout(DEFAULT_TIMEOUT_MS) {
+        repository.updateDisplayPrefs(themeStyle = targetStyle, themeMode = "dark")
+      }
+      val styledCfg = withTimeout(FLOW_TIMEOUT_MS) {
+        repository.observeConfig(aliceUid).first { it?.themeStyle == targetStyle && it.themeMode == "dark" }!!
+      }
+      assertEquals("dark", styledCfg.themeMode)
+      assertEquals(targetStyle, styledCfg.themeStyle)
     }
-    val darkCfg = withTimeout(FLOW_TIMEOUT_MS) {
-      repository.observeConfig(aliceUid).first { it?.themeMode == "dark" }!!
-    }
-    assertEquals("dark", darkCfg.themeMode)
-    assertEquals("airtable", darkCfg.themeStyle)
 
     // Verify seeded projects & ProjectRecord CRUD + priority sorting
     val seededProjects = withTimeout(FLOW_TIMEOUT_MS) {
@@ -241,6 +245,136 @@ class SyndicatRepositoryRuleTest : FirestoreEmulatorTestBase() {
       assertNotNull("Expected nested FirebaseFirestoreException, got $e", firestoreEx)
       assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, firestoreEx!!.code)
     }
+  }
+
+  @Test
+  fun unifiedExpenseCategories_multiYearPayments_andAmountAndApartmentIdCoherence() = runBlocking {
+    val aliceUid = signInTestUser("syndic_items456_${UUID.randomUUID().toString().take(8)}@test.com")
+    val repository = SyndicatRepository(firestore, auth)
+
+    withTimeout(DEFAULT_TIMEOUT_MS) {
+      repository.ensureSeeded(forceReset = true)
+    }
+
+    // Item 4: Expense with "Sécurité" (cameras) and "Peinture" must succeed without falling back to "Divers"
+    val cameraExpId = withTimeout(DEFAULT_TIMEOUT_MS) {
+      repository.addExpense(
+        title = "Caméras de surveillance entrée",
+        category = "Sécurité",
+        amountDh = 1800L,
+        paidAmountDh = 1200L,
+        supplier = "SecurMaroc",
+        dateLabel = "18/10/2026",
+        notes = "Acompte caméras",
+      )
+    }
+    val paintExpId = withTimeout(DEFAULT_TIMEOUT_MS) {
+      repository.addExpense(
+        title = "Retouche peinture cage d'escalier",
+        category = "Peinture",
+        amountDh = 650L,
+        paidAmountDh = 650L,
+        supplier = "Artisan Peintre",
+        dateLabel = "20/10/2026",
+        notes = "",
+      )
+    }
+
+    val expenses = withTimeout(FLOW_TIMEOUT_MS) {
+      repository.observeExpenses(aliceUid).first { list ->
+        list.any { it.id == cameraExpId } && list.any { it.id == paintExpId }
+      }
+    }
+    assertEquals("Sécurité", expenses.first { it.id == cameraExpId }.category)
+    assertEquals("Peinture", expenses.first { it.id == paintExpId }.category)
+
+    // Item 6a: paidAmountDh > amountDh must be rejected
+    try {
+      repository.addExpense(
+        title = "Facture incohérente",
+        category = "Sécurité",
+        amountDh = 500L,
+        paidAmountDh = 750L,
+        supplier = "Test",
+        dateLabel = "21/10/2026",
+        notes = "",
+      )
+      fail("Expected IllegalArgumentException when paidAmountDh > amountDh")
+    } catch (_: IllegalArgumentException) {
+      // Expected
+    }
+
+    // Item 6b: Apartment ID mismatching apartment number must be rejected
+    try {
+      repository.updateApartment(
+        ApartmentRecord(
+          id = "appt_09",
+          userId = aliceUid,
+          number = 1L,
+          floor = "RDC",
+          status = "occupied",
+        )
+      )
+      fail("Expected IllegalArgumentException when apartment document ID does not match number")
+    } catch (_: IllegalArgumentException) {
+      // Expected
+    }
+
+    // Item 5: Multi-year PaymentRecord table with date, mode, receiptNumber & apartment coherence
+    val pay2026Id = withTimeout(DEFAULT_TIMEOUT_MS) {
+      repository.addPayment(
+        PaymentRecord(
+          apartmentId = "appt_01",
+          apartmentNumber = 1L,
+          year = 2026L,
+          month = 11L,
+          monthsCovered = listOf(11L, 12L),
+          amountDh = 100L,
+          paymentDate = "05/11/2026",
+          paymentMethod = "transfer",
+          receiptNumber = 12L,
+          notes = "Virement Nov+Déc 2026",
+        )
+      )
+    }
+    val pay2027Id = withTimeout(DEFAULT_TIMEOUT_MS) {
+      repository.addPayment(
+        PaymentRecord(
+          apartmentId = "appt_01",
+          apartmentNumber = 1L,
+          year = 2027L,
+          month = 1L,
+          monthsCovered = listOf(1L, 2L, 3L),
+          amountDh = 150L,
+          paymentDate = "10/01/2027",
+          paymentMethod = "check",
+          receiptNumber = 13L,
+          notes = "Trimestre 1 2027",
+        )
+      )
+    }
+
+    val observedPayments = withTimeout(FLOW_TIMEOUT_MS) {
+      repository.observePayments(aliceUid).first { list ->
+        list.any { it.id == pay2026Id } && list.any { it.id == pay2027Id }
+      }
+    }
+    val p26 = observedPayments.first { it.id == pay2026Id }
+    val p27 = observedPayments.first { it.id == pay2027Id }
+    assertEquals("transfer", p26.paymentMethod)
+    assertEquals("05/11/2026", p26.paymentDate)
+    assertEquals(2026L, p26.year)
+    assertEquals("check", p27.paymentMethod)
+    assertEquals(2027L, p27.year)
+    assertEquals(listOf(1L, 2L, 3L), p27.monthsCovered)
+
+    withTimeout(DEFAULT_TIMEOUT_MS) {
+      repository.deletePayment(pay2027Id)
+    }
+    val afterDelete = withTimeout(FLOW_TIMEOUT_MS) {
+      repository.observePayments(aliceUid).first { list -> list.none { it.id == pay2027Id } }
+    }
+    assertTrue(afterDelete.any { it.id == pay2026Id })
   }
 
   private companion object {

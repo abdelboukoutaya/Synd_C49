@@ -8,53 +8,83 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 
 // ============================================================================
-// Coinbase Design System — palette (source : DESIGN.md Coinbase)
-// Coinbase Blue is the single brand voltage; everything else is white, ink and soft gray.
+// Supported Theme Identifiers (Blueprint + Firestore Rules + Local Storage)
 // ============================================================================
 
-// Brand & accent
-val CoinbasePrimary = Color(0xFF0052FF)          // {colors.primary} — every primary CTA pill, links
-val CoinbasePrimaryActive = Color(0xFF003ECC)    // {colors.primary-active} — pressed state
-val CoinbasePrimaryDisabled = Color(0xFFA8B8CC)  // {colors.primary-disabled}
-val CoinbaseOnPrimary = Color(0xFFFFFFFF)        // {colors.on-primary}
-val CoinbaseAccentYellow = Color(0xFFF4B000)     // {colors.accent-yellow} — illustrative only, never an action color
+val VALID_THEME_STYLES: Set<String> = setOf(
+  "coinbase",
+  "meta",
+  "minimax",
+  "airtable",
+  "wise",
+  "xai",
+)
 
-// Surfaces
-val CoinbaseCanvas = Color(0xFFFFFFFF)           // {colors.canvas} — page floor, cards
-val CoinbaseSurfaceSoft = Color(0xFFF7F7F7)      // {colors.surface-soft} — subtle alternating bands
-val CoinbaseSurfaceStrong = Color(0xFFEEF0F3)    // {colors.surface-strong} — secondary buttons, search pill, badges
-val CoinbaseSurfaceDark = Color(0xFF0A0B0D)      // {colors.surface-dark} — dark editorial bands
-val CoinbaseSurfaceDarkElevated = Color(0xFF16181C) // {colors.surface-dark-elevated} — cards on dark
+val SELECTABLE_THEME_STYLES: List<String> = listOf(
+  "meta",
+  "coinbase",
+  "minimax",
+)
 
-// Hairlines
-val CoinbaseHairline = Color(0xFFDEE1E6)         // {colors.hairline} — 1px dividers and card outlines
-val CoinbaseHairlineSoft = Color(0xFFEEF0F3)     // {colors.hairline-soft}
+/**
+ * Validates a themeStyle string before storing in Firestore or local JSON.
+ * Keeps legacy values ("airtable", "wise", "xai") valid while supporting
+ * the 3 distinct choices ("meta", "coinbase", "minimax").
+ */
+fun sanitizeThemeStyle(raw: String?, fallback: String = "coinbase"): String {
+  val cleaned = raw?.trim()?.lowercase()
+  return if (cleaned != null && cleaned in VALID_THEME_STYLES) cleaned else fallback
+}
 
-// Text
-val CoinbaseInk = Color(0xFF0A0B0D)              // {colors.ink} — headings, nav, strong text
-val CoinbaseBody = Color(0xFF5B616E)             // {colors.body} — running text
-val CoinbaseMuted = Color(0xFF7C828A)            // {colors.muted} — secondary labels
-val CoinbaseMutedSoft = Color(0xFFA8ACB3)        // {colors.muted-soft} — disabled text
-val CoinbaseOnDark = Color(0xFFFFFFFF)           // {colors.on-dark}
-val CoinbaseOnDarkSoft = Color(0xFFA8ACB3)       // {colors.on-dark-soft}
+/**
+ * Resolves any stored themeStyle (including legacy "airtable", "wise", "xai")
+ * to one of the 3 active visual design systems ("meta", "coinbase", "minimax").
+ */
+fun resolveVisualThemeFamily(raw: String?): String = when (raw?.trim()?.lowercase()) {
+  "meta", "xai" -> "meta"
+  "minimax", "wise" -> "minimax"
+  "coinbase", "airtable" -> "coinbase"
+  else -> "coinbase"
+}
 
-// Semantics (the source defines them for text only, never for button or large background fills)
-val CoinbaseSemanticUp = Color(0xFF05B169)       // {colors.semantic-up}
-val CoinbaseSemanticDown = Color(0xFFCF202F)     // {colors.semantic-down}
+// ============================================================================
+// 1. Coinbase Design System — Palette
+// ============================================================================
 
-// ----------------------------------------------------------------------------
-// Adaptations for the syndicate app (derived, not in DESIGN.md — validate visually)
-// ----------------------------------------------------------------------------
-val CoinbasePositiveDeep = Color(0xFF087443)     // semantic-up darkened: ≈5.8:1 on white (semantic-up is only ≈2.8:1)
-val CoinbaseNegativeDeep = Color(0xFFA81724)     // semantic-down darkened for text on tinted surfaces (≈7.5:1 on white)
-val CoinbasePrimaryTintLight = Color(0xFFE6EEFF) // primary at ~10% on white (selected / info containers)
+val CoinbasePrimary = Color(0xFF0052FF)
+val CoinbasePrimaryActive = Color(0xFF003ECC)
+val CoinbasePrimaryDisabled = Color(0xFFA8B8CC)
+val CoinbaseOnPrimary = Color(0xFFFFFFFF)
+val CoinbaseAccentYellow = Color(0xFFF4B000)
+
+val CoinbaseCanvas = Color(0xFFFFFFFF)
+val CoinbaseSurfaceSoft = Color(0xFFF7F7F7)
+val CoinbaseSurfaceStrong = Color(0xFFEEF0F3)
+val CoinbaseSurfaceDark = Color(0xFF0A0B0D)
+val CoinbaseSurfaceDarkElevated = Color(0xFF16181C)
+
+val CoinbaseHairline = Color(0xFFDEE1E6)
+val CoinbaseHairlineSoft = Color(0xFFEEF0F3)
+
+val CoinbaseInk = Color(0xFF0A0B0D)
+val CoinbaseBody = Color(0xFF5B616E)
+val CoinbaseMuted = Color(0xFF7C828A)
+val CoinbaseMutedSoft = Color(0xFFA8ACB3)
+val CoinbaseOnDark = Color(0xFFFFFFFF)
+val CoinbaseOnDarkSoft = Color(0xFFA8ACB3)
+
+val CoinbaseSemanticUp = Color(0xFF05B169)
+val CoinbaseSemanticDown = Color(0xFFCF202F)
+
+val CoinbasePositiveDeep = Color(0xFF087443)
+val CoinbaseNegativeDeep = Color(0xFFA81724)
+val CoinbasePrimaryTintLight = Color(0xFFE6EEFF)
 val CoinbaseSuccessTintLight = Color(0xFFE6F7F0)
 val CoinbaseWarningTintLight = Color(0xFFFEF7E6)
 val CoinbaseErrorTintLight = Color(0xFFFAE9EA)
 
-// Dark mode (DESIGN.md only gives surface-dark and surface-dark-elevated; the rest is derived)
-val CoinbaseDarkScreenBg = CoinbaseSurfaceDark            // #0A0B0D
-val CoinbaseDarkCardBg = CoinbaseSurfaceDarkElevated      // #16181C
+val CoinbaseDarkScreenBg = CoinbaseSurfaceDark
+val CoinbaseDarkCardBg = CoinbaseSurfaceDarkElevated
 val CoinbaseDarkSurfaceLow = Color(0xFF111317)
 val CoinbaseDarkSurfaceSoft = Color(0xFF1C1F24)
 val CoinbaseDarkSurfaceHigh = Color(0xFF262A31)
@@ -62,21 +92,79 @@ val CoinbaseDarkHairline = Color(0xFF2D3138)
 val CoinbaseDarkHairlineSoft = Color(0xFF22262C)
 val CoinbaseDarkInkDeep = Color(0xFFFFFFFF)
 val CoinbaseDarkInk = Color(0xFFE6E8EB)
-val CoinbaseDarkCharcoal = CoinbaseOnDarkSoft             // #A8ACB3 — secondary text (≈7.9:1 on cards)
-val CoinbaseDarkSteel = CoinbaseMuted                     // #7C828A — quiet labels (≈4.6:1 on cards)
-val CoinbaseDarkBlueText = Color(0xFF5B8CFF)              // Coinbase Blue lightened for text/links on dark (≈6.3:1)
+val CoinbaseDarkCharcoal = CoinbaseOnDarkSoft
+val CoinbaseDarkSteel = CoinbaseMuted
+val CoinbaseDarkBlueText = Color(0xFF5B8CFF)
 val CoinbaseDarkBlueContainer = Color(0xFF0D2B6B)
-val CoinbasePrimarySoftOnDark = Color(0xFF8FB0FF)           // pressed link on dark surfaces
-val CoinbaseDarkSuccess = CoinbaseSemanticUp              // ≈6.4:1 on dark cards
-val CoinbaseDarkCritical = Color(0xFFFF6B78)              // semantic-down lightened for dark (≈6.5:1)
+val CoinbasePrimarySoftOnDark = Color(0xFF8FB0FF)
+val CoinbaseDarkSuccess = CoinbaseSemanticUp
+val CoinbaseDarkCritical = Color(0xFFFF6B78)
 val CoinbaseDarkErrorContainer = Color(0xFF3B1219)
 
 // ============================================================================
-// Backwards-compatible aliases (Meta* and Airtable*) so the rest of the app keeps compiling.
-// New code should use SyndicatDesignTokens (LocalSyndicatTokens) or the Coinbase* names.
+// 2. Meta Design System — Palette (source : DESIGNmeta.md)
 // ============================================================================
 
-// ---- Meta* aliases -------------------------------------------------------
+val MetaBrandCobalt = Color(0xFF0064E0)
+val MetaBrandCobaltDeep = Color(0xFF0457CB)
+val MetaBrandCobaltSoft = Color(0xFF4DA3FF)
+val MetaSoftCloud = Color(0xFFF1F4F7)
+val MetaSoftCloudStrong = Color(0xFFE3E9F0)
+val MetaDeepInk = Color(0xFF0A1317)
+val MetaTextInk = Color(0xFF1C1E21)
+val MetaBodyCharcoal = Color(0xFF444950)
+val MetaMutedSteel = Color(0xFF5D6C7B)
+val MetaStoneGray = Color(0xFF8595A4)
+val MetaLineHairline = Color(0xFFCED0D4)
+val MetaLineSoft = Color(0xFFDEE3E9)
+val MetaOculusAccent = Color(0xFFA121CE)
+val MetaSuccessGreen = Color(0xFF1E7E34)
+val MetaCriticalRed = Color(0xFFD91B3A)
+val MetaTintLight = Color(0xFFE7F1FD)
+
+val MetaDarkBg = Color(0xFF0A1317)
+val MetaDarkCard = Color(0xFF142028)
+val MetaDarkElevated = Color(0xFF1C2B36)
+val MetaDarkHigh = Color(0xFF253746)
+val MetaDarkBorder = Color(0xFF2C3F4F)
+val MetaDarkTint = Color(0xFF0E2F5E)
+
+// ============================================================================
+// 3. MiniMax Design System — Palette (Warm Editorial Studio + Vermilion Coral)
+// ============================================================================
+
+val MiniMaxPrimary = Color(0xFFD93F26)
+val MiniMaxPrimaryActive = Color(0xFFB8301A)
+val MiniMaxPrimaryOnDark = Color(0xFFFF826E)
+val MiniMaxWarmPaper = Color(0xFFFAF8F5)
+val MiniMaxCardWhite = Color(0xFFFFFFFF)
+val MiniMaxSurfaceSoft = Color(0xFFF3F0EB)
+val MiniMaxSurfaceStrong = Color(0xFFEAE5DD)
+val MiniMaxHairline = Color(0xFFDCD6CC)
+val MiniMaxDivider = Color(0xFFE8E3DA)
+val MiniMaxInkDeep = Color(0xFF141518)
+val MiniMaxInk = Color(0xFF1C1D22)
+val MiniMaxBody = Color(0xFF4E525C)
+val MiniMaxMuted = Color(0xFF6E7380)
+val MiniMaxStone = Color(0xFF9B9FA8)
+val MiniMaxTintLight = Color(0xFFFFECE8)
+val MiniMaxPositiveDeep = Color(0xFF0F7652)
+val MiniMaxNegativeDeep = Color(0xFFB42318)
+val MiniMaxAccentAmber = Color(0xFFD97706)
+
+val MiniMaxDarkBg = Color(0xFF111216)
+val MiniMaxDarkCard = Color(0xFF1A1C22)
+val MiniMaxDarkSoft = Color(0xFF22252D)
+val MiniMaxDarkHigh = Color(0xFF2C303A)
+val MiniMaxDarkBorder = Color(0xFF323642)
+val MiniMaxDarkTint = Color(0xFF421912)
+val MiniMaxDarkSuccess = Color(0xFF34D399)
+val MiniMaxDarkCritical = Color(0xFFFF7A70)
+
+// ============================================================================
+// Backwards-compatible aliases (Meta* and Airtable*) so existing screens compile
+// ============================================================================
+
 val MetaPrimaryCobalt = CoinbasePrimary
 val MetaPrimaryDeep = CoinbasePrimaryActive
 val MetaPrimarySoft = CoinbaseDarkBlueText
@@ -86,7 +174,7 @@ val MetaOnInkButton = CoinbaseOnDark
 val MetaFbBlue = CoinbasePrimary
 val MetaRadioSelected = CoinbasePrimaryActive
 val MetaLink = CoinbasePrimary
-val MetaOculusPurple = CoinbasePrimary          // Coinbase has no secondary brand color
+val MetaOculusPurple = MetaOculusAccent
 val MetaSuccess = CoinbaseSemanticUp
 val MetaSuccessBg = CoinbaseSemanticUp
 val MetaAttention = CoinbaseAccentYellow
@@ -127,28 +215,22 @@ val MetaDarkSuccess = CoinbaseDarkSuccess
 val MetaDarkCritical = CoinbaseDarkCritical
 val MetaDarkErrorContainer = CoinbaseDarkErrorContainer
 
-// ---- Airtable* aliases ---------------------------------------------------
 val AirtablePrimary = CoinbasePrimary
 val AirtablePrimaryActive = CoinbasePrimaryActive
 val AirtableOnPrimary = CoinbaseOnPrimary
 val AirtablePrimaryContainer = CoinbasePrimaryTintLight
 val AirtableOnPrimaryContainer = CoinbasePrimaryActive
-
 val AirtableInk = MetaInkDeep
 val AirtableBody = MetaInk
 val AirtableMuted = MetaSteel
-
 val AirtableCanvas = MetaCanvas
 val AirtableSurfaceSoft = MetaSurfaceSoft
 val AirtableSurfaceContainer = MetaSurfaceSoft
 val AirtableSurfaceStrong = MetaSurfaceContainer
 val AirtableSurfaceDark = CoinbaseSurfaceDark
 val AirtableSurfaceDarkElevated = CoinbaseSurfaceDarkElevated
-
 val AirtableHairline = MetaHairline
 val AirtableBorderStrong = CoinbaseMuted
-
-// Signature showcase surfaces mapped to Coinbase's white + ink + soft-gray system
 val AirtableSignatureForest = CoinbaseSurfaceDark
 val AirtableSignatureCoral = CoinbaseSurfaceDark
 val AirtableSignatureCream = CoinbaseSurfaceSoft
@@ -156,7 +238,6 @@ val AirtableSignatureMint = CoinbaseSurfaceSoft
 val AirtableSignaturePeach = CoinbaseSurfaceSoft
 val AirtableSignatureYellow = CoinbaseAccentYellow
 val AirtableSignatureMustard = CoinbaseAccentYellow
-
 val AirtableLink = CoinbasePrimary
 val AirtableLinkActive = CoinbasePrimaryActive
 val AirtableInfo = CoinbasePrimary
@@ -165,7 +246,6 @@ val AirtableInfoBorder = CoinbasePrimary
 val AirtableSuccess = CoinbasePositiveDeep
 val AirtableSuccessBorder = CoinbaseSemanticUp
 val AirtableErrorContainerLight = CoinbaseErrorTintLight
-
 val AirtableDarkScreenBg = CoinbaseDarkScreenBg
 val AirtableDarkCardBg = CoinbaseDarkCardBg
 val AirtableDarkSurfaceLow = CoinbaseDarkSurfaceLow
@@ -184,54 +264,52 @@ val AirtableDarkCoralText = CoinbaseDarkCritical
 val AirtableDarkErrorContainer = CoinbaseDarkErrorContainer
 
 // ============================================================================
-// Design tokens (same field names as before so existing screens keep working)
+// Design tokens shared across Coinbase, Meta, and MiniMax
 // ============================================================================
 
 @Immutable
 data class SyndicatDesignTokens(
-  val id: String = "airtable", // Stored Firestore config key preserved for rule compatibility
+  val id: String = "coinbase",
   val designSystemName: String = "Coinbase",
   val labelAr: String = "الأزرق المؤسسي",
-  val primary: Color,               // {colors.primary} Coinbase Blue — every primary CTA pill (one per screen)
-  val onPrimary: Color,             // #FFFFFF
-  val primaryActive: Color,         // {colors.primary-active} #003ECC
-  val buyCta: Color,                // same Coinbase Blue (kept for compatibility)
-  val buyCtaPressed: Color,         // #003ECC
-  val onBuyCta: Color,              // #FFFFFF
-  val inkDeep: Color,               // {colors.ink} #0A0B0D (white in dark)
-  val ink: Color,                   // {colors.ink}
-  val body: Color,                  // {colors.body} #5B616E
-  val mute: Color,                  // {colors.muted} #7C828A
-  val stone: Color,                 // {colors.muted-soft} #A8ACB3 — disabled / decorative only
-  val canvas: Color,                // {colors.canvas} #FFFFFF
-  val canvasSoft: Color,            // {colors.surface-strong} #EEF0F3 — tiles, search pill, table header
-  val divider: Color,               // {colors.hairline-soft} #EEF0F3 — row dividers
-  val hairline: Color,              // {colors.hairline} #DEE1E6 — card outlines
-  val disabledBg: Color,            // {colors.primary-disabled} #A8B8CC
-  val positive: Color,              // {colors.semantic-up} #05B169 (icons, dark mode text)
-  val positiveDeep: Color,          // derived #087443 — text on light surfaces (≥4.5:1)
-  val attention: Color,             // {colors.accent-yellow} #F4B000
-  val warning: Color,               // {colors.accent-yellow} #F4B000
-  val warningContent: Color,        // {colors.ink} — text next to the yellow indicator
-  val negative: Color,              // {colors.semantic-down} #CF202F
-  val negativeDeep: Color,          // derived #A81724 — text on tinted surfaces
-  val negativeBg: Color,            // solid red kept for compatibility (white text, ≈5.4:1)
+  val primary: Color,
+  val onPrimary: Color,
+  val primaryActive: Color,
+  val buyCta: Color,
+  val buyCtaPressed: Color,
+  val onBuyCta: Color,
+  val inkDeep: Color,
+  val ink: Color,
+  val body: Color,
+  val mute: Color,
+  val stone: Color,
+  val canvas: Color,
+  val canvasSoft: Color,
+  val divider: Color,
+  val hairline: Color,
+  val disabledBg: Color,
+  val positive: Color,
+  val positiveDeep: Color,
+  val attention: Color,
+  val warning: Color,
+  val warningContent: Color,
+  val negative: Color,
+  val negativeDeep: Color,
+  val negativeBg: Color,
   val isDark: Boolean,
   val screenBg: Color = canvas,
   val navBg: Color = canvas,
   val cardBg: Color = canvas,
   val cardBorder: Color = hairline,
-  // Coinbase radius scale: lg=16dp (mid cards), xl=24dp (feature cards, tiles), md=12dp (inputs), pill=100dp
   val featureCardRadiusDp: Int = 24,
   val cardRadiusDp: Int = 24,
   val contentCardRadiusDp: Int = 16,
   val buttonRadiusDp: Int = 100,
   val badgeRadiusDp: Int = 100,
-  val defaultCardPaddingDp: Int = 24, // 32px on desktop, reduced for phones
+  val defaultCardPaddingDp: Int = 24,
   val fieldBg: Color = canvas,
-  // DESIGN.md uses a 1px hairline; on phones a darker border keeps ≈3:1 non-text contrast
   val fieldBorder: Color = CoinbaseMuted,
-  val fieldFocusBorder: Color = CoinbasePrimary,   // 2px Coinbase Blue on focus
+  val fieldFocusBorder: Color = CoinbasePrimary,
   val radioSelectedBorder: Color = CoinbasePrimaryActive,
   val fieldRadiusDp: Int = 12,
   val trackBg: Color = divider,
@@ -244,30 +322,26 @@ data class SyndicatDesignTokens(
   val signaturePeach: Color = CoinbaseSurfaceSoft,
   val signatureYellow: Color = CoinbaseAccentYellow,
   val signatureMustard: Color = CoinbaseAccentYellow,
-  val oculusPurple: Color = CoinbasePrimary, // no secondary brand color in Coinbase
+  val oculusPurple: Color = CoinbasePrimary,
   val linkColor: Color = CoinbasePrimary,
   val linkActiveColor: Color = CoinbasePrimaryActive,
   val infoColor: Color = CoinbasePrimary,
   val infoBorder: Color = CoinbasePrimary,
-  val monoFontFamily: FontFamily = InterNumericFontFamily,   // substitute for CoinbaseMono
+  val monoFontFamily: FontFamily = InterNumericFontFamily,
   val numericFontFamily: FontFamily = InterNumericFontFamily,
-  // ---- New tokens (Coinbase) ----
   val onDark: Color = CoinbaseOnDark,
   val onDarkSoft: Color = CoinbaseOnDarkSoft,
-  val darkBand: Color = CoinbaseSurfaceDark,                 // full-bleed dark editorial band / hero card
-  val darkBandElevated: Color = CoinbaseSurfaceDarkElevated, // card floating on a dark band
-  val badgeBg: Color = CoinbaseSurfaceStrong,                // neutral pill behind status text
-  val primaryTint: Color = CoinbasePrimaryTintLight,         // selected / info container
-  val statusPaidText: Color = positiveDeep,                  // status = colored text + icon on a neutral pill
+  val darkBand: Color = CoinbaseSurfaceDark,
+  val darkBandElevated: Color = CoinbaseSurfaceDarkElevated,
+  val badgeBg: Color = CoinbaseSurfaceStrong,
+  val primaryTint: Color = CoinbasePrimaryTintLight,
+  val statusPaidText: Color = positiveDeep,
   val statusLateText: Color = negativeDeep,
   val statusPartialDot: Color = warning,
 ) {
   val themeStyle: String
     get() = id
 
-  /**
-   * Coinbase weight rhythm: 400 display & body, 500 nav/numbers, 600 titles & buttons, 700 emphasized body.
-   */
   fun weight(requested: FontWeight): FontWeight = when {
     requested.weight <= 300 -> FontWeight.Light
     requested.weight >= 700 -> FontWeight.Bold
@@ -277,7 +351,14 @@ data class SyndicatDesignTokens(
   }
 }
 
+// ----------------------------------------------------------------------------
+// 1. Coinbase Tokens (Light & Dark)
+// ----------------------------------------------------------------------------
+
 val CoinbaseLightTokens = SyndicatDesignTokens(
+  id = "coinbase",
+  designSystemName = "Coinbase",
+  labelAr = "Coinbase الأزرق",
   primary = CoinbasePrimary,
   onPrimary = CoinbaseOnPrimary,
   primaryActive = CoinbasePrimaryActive,
@@ -307,10 +388,16 @@ val CoinbaseLightTokens = SyndicatDesignTokens(
   navBg = CoinbaseCanvas,
   cardBg = CoinbaseCanvas,
   cardBorder = CoinbaseHairline,
+  featureCardRadiusDp = 24,
+  cardRadiusDp = 24,
+  contentCardRadiusDp = 16,
+  buttonRadiusDp = 100,
+  badgeRadiusDp = 100,
   fieldBg = CoinbaseCanvas,
   fieldBorder = CoinbaseMuted,
   fieldFocusBorder = CoinbasePrimary,
   radioSelectedBorder = CoinbasePrimaryActive,
+  fieldRadiusDp = 12,
   trackBg = CoinbaseHairlineSoft,
   surfaceSoft = CoinbaseSurfaceSoft,
   surfaceStrong = CoinbaseSurfaceStrong,
@@ -326,7 +413,10 @@ val CoinbaseLightTokens = SyndicatDesignTokens(
 )
 
 val CoinbaseDarkTokens = SyndicatDesignTokens(
-  primary = CoinbasePrimary,           // brand blue pill keeps white text (≈5.7:1) in dark mode too
+  id = "coinbase",
+  designSystemName = "Coinbase",
+  labelAr = "Coinbase الأزرق",
+  primary = CoinbasePrimary,
   onPrimary = CoinbaseOnPrimary,
   primaryActive = CoinbasePrimaryActive,
   buyCta = CoinbasePrimary,
@@ -355,10 +445,16 @@ val CoinbaseDarkTokens = SyndicatDesignTokens(
   navBg = CoinbaseDarkScreenBg,
   cardBg = CoinbaseDarkCardBg,
   cardBorder = CoinbaseDarkHairline,
+  featureCardRadiusDp = 24,
+  cardRadiusDp = 24,
+  contentCardRadiusDp = 16,
+  buttonRadiusDp = 100,
+  badgeRadiusDp = 100,
   fieldBg = CoinbaseDarkCardBg,
   fieldBorder = CoinbaseMuted,
   fieldFocusBorder = CoinbaseDarkBlueText,
   radioSelectedBorder = CoinbaseDarkBlueText,
+  fieldRadiusDp = 12,
   trackBg = CoinbaseDarkHairline,
   surfaceSoft = CoinbaseDarkSurfaceSoft,
   surfaceStrong = CoinbaseDarkSurfaceHigh,
@@ -380,11 +476,291 @@ val CoinbaseDarkTokens = SyndicatDesignTokens(
   statusPartialDot = CoinbaseAccentYellow,
 )
 
-// Compatibility names
-val MetaLightTokens = CoinbaseLightTokens
-val MetaDarkTokens = CoinbaseDarkTokens
+// ----------------------------------------------------------------------------
+// 2. Meta Tokens (Light & Dark — DESIGNmeta.md Cobalt #0064E0 + Soft Cloud #F1F4F7)
+// ----------------------------------------------------------------------------
+
+val MetaThemeLightTokens = SyndicatDesignTokens(
+  id = "meta",
+  designSystemName = "Meta",
+  labelAr = "Meta كوبالت",
+  primary = MetaBrandCobalt,
+  onPrimary = Color.White,
+  primaryActive = MetaBrandCobaltDeep,
+  buyCta = MetaBrandCobalt,
+  buyCtaPressed = MetaBrandCobaltDeep,
+  onBuyCta = Color.White,
+  inkDeep = MetaDeepInk,
+  ink = MetaTextInk,
+  body = MetaBodyCharcoal,
+  mute = MetaMutedSteel,
+  stone = MetaStoneGray,
+  canvas = Color.White,
+  canvasSoft = MetaSoftCloud,
+  divider = MetaLineSoft,
+  hairline = MetaLineHairline,
+  disabledBg = Color(0xFFBCC0C4),
+  positive = Color(0xFF31A24C),
+  positiveDeep = MetaSuccessGreen,
+  attention = Color(0xFFF2A918),
+  warning = Color(0xFFF7B928),
+  warningContent = MetaDeepInk,
+  negative = MetaCriticalRed,
+  negativeDeep = Color(0xFFB3142E),
+  negativeBg = MetaCriticalRed,
+  isDark = false,
+  screenBg = MetaSoftCloud,
+  navBg = Color.White,
+  cardBg = Color.White,
+  cardBorder = MetaLineHairline,
+  featureCardRadiusDp = 28,
+  cardRadiusDp = 24,
+  contentCardRadiusDp = 16,
+  buttonRadiusDp = 100,
+  badgeRadiusDp = 100,
+  fieldBg = Color.White,
+  fieldBorder = MetaMutedSteel,
+  fieldFocusBorder = MetaBrandCobalt,
+  radioSelectedBorder = MetaBrandCobaltDeep,
+  fieldRadiusDp = 14,
+  trackBg = MetaLineSoft,
+  surfaceSoft = MetaSoftCloud,
+  surfaceStrong = MetaSoftCloudStrong,
+  signatureForest = MetaDeepInk,
+  signatureCoral = MetaDeepInk,
+  signatureCream = MetaSoftCloud,
+  signatureMint = MetaSoftCloud,
+  signaturePeach = MetaSoftCloud,
+  oculusPurple = MetaOculusAccent,
+  linkColor = MetaBrandCobalt,
+  linkActiveColor = MetaBrandCobaltDeep,
+  infoColor = MetaBrandCobalt,
+  infoBorder = MetaBrandCobalt,
+  darkBand = MetaDeepInk,
+  darkBandElevated = MetaDarkCard,
+  badgeBg = MetaSoftCloudStrong,
+  primaryTint = MetaTintLight,
+  statusPaidText = MetaSuccessGreen,
+  statusLateText = Color(0xFFB3142E),
+  statusPartialDot = Color(0xFFF2A918),
+)
+
+val MetaThemeDarkTokens = SyndicatDesignTokens(
+  id = "meta",
+  designSystemName = "Meta",
+  labelAr = "Meta كوبالت",
+  primary = MetaBrandCobalt,
+  onPrimary = Color.White,
+  primaryActive = MetaBrandCobaltDeep,
+  buyCta = MetaBrandCobalt,
+  buyCtaPressed = MetaBrandCobaltDeep,
+  onBuyCta = Color.White,
+  inkDeep = Color.White,
+  ink = Color(0xFFE6ECF2),
+  body = Color(0xFFB0BEC9),
+  mute = Color(0xFF8595A4),
+  stone = Color(0xFF6B7C8C),
+  canvas = MetaDarkCard,
+  canvasSoft = MetaDarkElevated,
+  divider = Color(0xFF21313E),
+  hairline = MetaDarkBorder,
+  disabledBg = MetaDarkHigh,
+  positive = Color(0xFF4ADE80),
+  positiveDeep = Color(0xFF4ADE80),
+  attention = Color(0xFFF7B928),
+  warning = Color(0xFFF7B928),
+  warningContent = Color.White,
+  negative = Color(0xFFFF6B81),
+  negativeDeep = Color(0xFFFF6B81),
+  negativeBg = MetaCriticalRed,
+  isDark = true,
+  screenBg = MetaDarkBg,
+  navBg = MetaDarkBg,
+  cardBg = MetaDarkCard,
+  cardBorder = MetaDarkBorder,
+  featureCardRadiusDp = 28,
+  cardRadiusDp = 24,
+  contentCardRadiusDp = 16,
+  buttonRadiusDp = 100,
+  badgeRadiusDp = 100,
+  fieldBg = MetaDarkCard,
+  fieldBorder = MetaStoneGray,
+  fieldFocusBorder = MetaBrandCobaltSoft,
+  radioSelectedBorder = MetaBrandCobaltSoft,
+  fieldRadiusDp = 14,
+  trackBg = MetaDarkBorder,
+  surfaceSoft = MetaDarkElevated,
+  surfaceStrong = MetaDarkHigh,
+  signatureForest = MetaDarkElevated,
+  signatureCoral = MetaDarkElevated,
+  signatureCream = MetaDarkElevated,
+  signatureMint = MetaDarkElevated,
+  signaturePeach = MetaDarkElevated,
+  oculusPurple = Color(0xFFD580FF),
+  linkColor = MetaBrandCobaltSoft,
+  linkActiveColor = Color(0xFF82BEFF),
+  infoColor = MetaBrandCobaltSoft,
+  infoBorder = MetaBrandCobaltSoft,
+  darkBand = MetaDarkElevated,
+  darkBandElevated = MetaDarkHigh,
+  badgeBg = MetaDarkHigh,
+  primaryTint = MetaDarkTint,
+  statusPaidText = Color(0xFF4ADE80),
+  statusLateText = Color(0xFFFF6B81),
+  statusPartialDot = Color(0xFFF7B928),
+)
+
+// ----------------------------------------------------------------------------
+// 3. MiniMax Tokens (Light & Dark — Warm Alabaster + Coral Vermilion + Sharp Geometry)
+// ----------------------------------------------------------------------------
+
+val MiniMaxLightTokens = SyndicatDesignTokens(
+  id = "minimax",
+  designSystemName = "MiniMax",
+  labelAr = "MiniMax المرجاني",
+  primary = MiniMaxPrimary,
+  onPrimary = Color.White,
+  primaryActive = MiniMaxPrimaryActive,
+  buyCta = MiniMaxPrimary,
+  buyCtaPressed = MiniMaxPrimaryActive,
+  onBuyCta = Color.White,
+  inkDeep = MiniMaxInkDeep,
+  ink = MiniMaxInk,
+  body = MiniMaxBody,
+  mute = MiniMaxMuted,
+  stone = MiniMaxStone,
+  canvas = MiniMaxCardWhite,
+  canvasSoft = MiniMaxSurfaceSoft,
+  divider = MiniMaxDivider,
+  hairline = MiniMaxHairline,
+  disabledBg = Color(0xFFD5CFC7),
+  positive = Color(0xFF10B981),
+  positiveDeep = MiniMaxPositiveDeep,
+  attention = MiniMaxAccentAmber,
+  warning = MiniMaxAccentAmber,
+  warningContent = MiniMaxInkDeep,
+  negative = Color(0xFFD92D20),
+  negativeDeep = MiniMaxNegativeDeep,
+  negativeBg = Color(0xFFD92D20),
+  isDark = false,
+  screenBg = MiniMaxWarmPaper,
+  navBg = MiniMaxCardWhite,
+  cardBg = MiniMaxCardWhite,
+  cardBorder = MiniMaxHairline,
+  featureCardRadiusDp = 20,
+  cardRadiusDp = 18,
+  contentCardRadiusDp = 12,
+  buttonRadiusDp = 14,
+  badgeRadiusDp = 10,
+  fieldBg = MiniMaxCardWhite,
+  fieldBorder = MiniMaxMuted,
+  fieldFocusBorder = MiniMaxPrimary,
+  radioSelectedBorder = MiniMaxPrimaryActive,
+  fieldRadiusDp = 10,
+  trackBg = MiniMaxDivider,
+  surfaceSoft = MiniMaxSurfaceSoft,
+  surfaceStrong = MiniMaxSurfaceStrong,
+  signatureForest = MiniMaxInkDeep,
+  signatureCoral = MiniMaxInkDeep,
+  signatureCream = MiniMaxSurfaceSoft,
+  signatureMint = MiniMaxSurfaceSoft,
+  signaturePeach = MiniMaxSurfaceSoft,
+  signatureYellow = MiniMaxAccentAmber,
+  signatureMustard = MiniMaxAccentAmber,
+  oculusPurple = MiniMaxPrimary,
+  linkColor = MiniMaxPrimary,
+  linkActiveColor = MiniMaxPrimaryActive,
+  infoColor = MiniMaxPrimary,
+  infoBorder = MiniMaxPrimary,
+  darkBand = Color(0xFF18191E),
+  darkBandElevated = Color(0xFF23252C),
+  badgeBg = MiniMaxSurfaceStrong,
+  primaryTint = MiniMaxTintLight,
+  statusPaidText = MiniMaxPositiveDeep,
+  statusLateText = MiniMaxNegativeDeep,
+  statusPartialDot = MiniMaxAccentAmber,
+)
+
+val MiniMaxDarkTokens = SyndicatDesignTokens(
+  id = "minimax",
+  designSystemName = "MiniMax",
+  labelAr = "MiniMax المرجاني",
+  primary = MiniMaxPrimary,
+  onPrimary = Color.White,
+  primaryActive = MiniMaxPrimaryActive,
+  buyCta = MiniMaxPrimary,
+  buyCtaPressed = MiniMaxPrimaryActive,
+  onBuyCta = Color.White,
+  inkDeep = Color.White,
+  ink = Color(0xFFECEAE6),
+  body = Color(0xFFB5B7C0),
+  mute = Color(0xFF8A8E99),
+  stone = Color(0xFF6E727D),
+  canvas = MiniMaxDarkCard,
+  canvasSoft = MiniMaxDarkSoft,
+  divider = Color(0xFF252831),
+  hairline = MiniMaxDarkBorder,
+  disabledBg = MiniMaxDarkHigh,
+  positive = MiniMaxDarkSuccess,
+  positiveDeep = MiniMaxDarkSuccess,
+  attention = Color(0xFFFBBF24),
+  warning = Color(0xFFFBBF24),
+  warningContent = Color.White,
+  negative = MiniMaxDarkCritical,
+  negativeDeep = MiniMaxDarkCritical,
+  negativeBg = Color(0xFFD92D20),
+  isDark = true,
+  screenBg = MiniMaxDarkBg,
+  navBg = MiniMaxDarkBg,
+  cardBg = MiniMaxDarkCard,
+  cardBorder = MiniMaxDarkBorder,
+  featureCardRadiusDp = 20,
+  cardRadiusDp = 18,
+  contentCardRadiusDp = 12,
+  buttonRadiusDp = 14,
+  badgeRadiusDp = 10,
+  fieldBg = MiniMaxDarkCard,
+  fieldBorder = MiniMaxMuted,
+  fieldFocusBorder = MiniMaxPrimaryOnDark,
+  radioSelectedBorder = MiniMaxPrimaryOnDark,
+  fieldRadiusDp = 10,
+  trackBg = MiniMaxDarkBorder,
+  surfaceSoft = MiniMaxDarkSoft,
+  surfaceStrong = MiniMaxDarkHigh,
+  signatureForest = MiniMaxDarkSoft,
+  signatureCoral = MiniMaxDarkSoft,
+  signatureCream = MiniMaxDarkSoft,
+  signatureMint = MiniMaxDarkSoft,
+  signaturePeach = MiniMaxDarkSoft,
+  signatureYellow = Color(0xFFFBBF24),
+  signatureMustard = Color(0xFFFBBF24),
+  oculusPurple = MiniMaxPrimaryOnDark,
+  linkColor = MiniMaxPrimaryOnDark,
+  linkActiveColor = Color(0xFFFFA596),
+  infoColor = MiniMaxPrimaryOnDark,
+  infoBorder = MiniMaxPrimaryOnDark,
+  darkBand = MiniMaxDarkSoft,
+  darkBandElevated = MiniMaxDarkHigh,
+  badgeBg = MiniMaxDarkHigh,
+  primaryTint = MiniMaxDarkTint,
+  statusPaidText = MiniMaxDarkSuccess,
+  statusLateText = MiniMaxDarkCritical,
+  statusPartialDot = Color(0xFFFBBF24),
+)
+
+// Compatibility aliases
+val MetaLightTokens = MetaThemeLightTokens
+val MetaDarkTokens = MetaThemeDarkTokens
 val AirtableLightTokens = CoinbaseLightTokens
 val AirtableDarkTokens = CoinbaseDarkTokens
+
+fun tokensForThemeStyle(themeStyle: String?, darkTheme: Boolean): SyndicatDesignTokens {
+  return when (resolveVisualThemeFamily(themeStyle)) {
+    "meta" -> if (darkTheme) MetaThemeDarkTokens else MetaThemeLightTokens
+    "minimax" -> if (darkTheme) MiniMaxDarkTokens else MiniMaxLightTokens
+    else -> if (darkTheme) CoinbaseDarkTokens else CoinbaseLightTokens
+  }
+}
 
 val LocalSyndicatTokens = staticCompositionLocalOf { CoinbaseLightTokens }
 
@@ -397,8 +773,7 @@ fun isSpecialCotisationAmount(amountDh: Long, defaultMonthlyFee: Long = 50L): Bo
 }
 
 /**
- * Normal amount = positive (dark green on light surfaces for contrast, semantic-up on dark).
- * Special amount = Coinbase Blue accent (inline accent moment).
+ * Normal amount = positive status color; special amount = active theme brand link/accent color.
  */
 @Composable
 fun cotisationColorForAmount(
@@ -409,8 +784,8 @@ fun cotisationColorForAmount(
   val tokens = LocalSyndicatTokens.current
   val lightPaper = forceLightPaper || !tokens.isDark
   return if (isSpecialCotisationAmount(amountDh, defaultMonthlyFee)) {
-    if (lightPaper) CoinbasePrimary else CoinbaseDarkBlueText
+    if (lightPaper) tokens.primary else tokens.linkColor
   } else {
-    if (lightPaper) CoinbasePositiveDeep else CoinbaseDarkSuccess
+    if (lightPaper) tokens.positiveDeep else tokens.positive
   }
 }

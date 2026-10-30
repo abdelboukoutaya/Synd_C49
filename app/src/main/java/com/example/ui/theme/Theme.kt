@@ -19,12 +19,10 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 
-/**
- * Coinbase Design System — Light Material 3 ColorScheme:
- * pure white canvas (#FFFFFF), Ink (#0A0B0D), soft gray surfaces (#F7F7F7 / #EEF0F3)
- * and Coinbase Blue (#0052FF) as the single brand voltage for primary actions.
- * Coinbase has no secondary brand color: tertiary is a neutral gray.
- */
+// ============================================================================
+// 1. Coinbase ColorSchemes
+// ============================================================================
+
 val lightScheme: ColorScheme = lightColorScheme(
   primary = CoinbasePrimary,
   onPrimary = CoinbaseOnPrimary,
@@ -55,7 +53,6 @@ val lightScheme: ColorScheme = lightColorScheme(
   surfaceContainer = CoinbaseSurfaceSoft,
   surfaceContainerHigh = CoinbaseSurfaceStrong,
   surfaceContainerHighest = CoinbaseSurfaceStrong,
-  // Outlines: muted gray (~3.9:1) for field and outlined-button borders; hairline for dividers and cards
   outline = CoinbaseMuted,
   outlineVariant = CoinbaseHairline,
   error = CoinbaseSemanticDown,
@@ -65,12 +62,6 @@ val lightScheme: ColorScheme = lightColorScheme(
   scrim = CoinbaseInk.copy(alpha = 0.48f),
 )
 
-/**
- * Coinbase Design System — Dark Material 3 ColorScheme:
- * anchored on surface-dark (#0A0B0D) with surface-dark-elevated (#16181C) cards.
- * The brand blue is lightened (#5B8CFF) for text, icons and links; solid CTA pills keep #0052FF
- * (see CoinbaseDarkTokens.buyCta). Values other than the two dark surfaces are derived.
- */
 val darkScheme: ColorScheme = darkColorScheme(
   primary = CoinbaseDarkBlueText,
   onPrimary = CoinbaseInk,
@@ -110,14 +101,174 @@ val darkScheme: ColorScheme = darkColorScheme(
   scrim = Color.Black.copy(alpha = 0.68f),
 )
 
-/**
- * Coinbase border radius scale (DESIGN.md):
- * - extraSmall : 12dp ({rounded.md} — form inputs)
- * - small      : 16dp ({rounded.lg} — mid-size cards, list items)
- * - medium     : 24dp ({rounded.xl} — feature cards, product-UI cards, dialogs)
- * - large      : 24dp ({rounded.xl} — Coinbase has no larger card radius)
- * - extraLarge : 100dp ({rounded.pill} — every CTA button, search pill, badge)
- */
+// ============================================================================
+// 2. Meta ColorSchemes (Cobalt #0064E0 + Soft Cloud #F1F4F7 + Deep Ink #0A1317)
+// ============================================================================
+
+val metaLightScheme: ColorScheme = lightColorScheme(
+  primary = MetaBrandCobalt,
+  onPrimary = Color.White,
+  primaryContainer = MetaTintLight,
+  onPrimaryContainer = MetaBrandCobaltDeep,
+  secondary = MetaDeepInk,
+  onSecondary = Color.White,
+  secondaryContainer = MetaSoftCloudStrong,
+  onSecondaryContainer = MetaTextInk,
+  tertiary = MetaOculusAccent,
+  onTertiary = Color.White,
+  tertiaryContainer = MetaSoftCloud,
+  onTertiaryContainer = MetaTextInk,
+  background = MetaSoftCloud,
+  onBackground = MetaDeepInk,
+  surface = Color.White,
+  onSurface = MetaTextInk,
+  surfaceVariant = MetaSoftCloudStrong,
+  onSurfaceVariant = MetaBodyCharcoal,
+  surfaceTint = Color.Transparent,
+  inverseSurface = MetaDeepInk,
+  inverseOnSurface = Color.White,
+  inversePrimary = MetaBrandCobaltSoft,
+  surfaceDim = MetaSoftCloudStrong,
+  surfaceBright = Color.White,
+  surfaceContainerLowest = Color.White,
+  surfaceContainerLow = MetaSoftCloud,
+  surfaceContainer = MetaSoftCloud,
+  surfaceContainerHigh = MetaSoftCloudStrong,
+  surfaceContainerHighest = MetaSoftCloudStrong,
+  outline = MetaMutedSteel,
+  outlineVariant = MetaLineHairline,
+  error = MetaCriticalRed,
+  onError = Color.White,
+  errorContainer = CoinbaseErrorTintLight,
+  onErrorContainer = MetaCriticalRed,
+  scrim = MetaDeepInk.copy(alpha = 0.50f),
+)
+
+val metaDarkScheme: ColorScheme = darkColorScheme(
+  primary = MetaBrandCobaltSoft,
+  onPrimary = MetaDeepInk,
+  primaryContainer = MetaDarkTint,
+  onPrimaryContainer = Color.White,
+  secondary = Color.White,
+  onSecondary = MetaDeepInk,
+  secondaryContainer = MetaDarkElevated,
+  onSecondaryContainer = Color.White,
+  tertiary = Color(0xFFD580FF),
+  onTertiary = MetaDeepInk,
+  tertiaryContainer = MetaDarkHigh,
+  onTertiaryContainer = Color.White,
+  background = MetaDarkBg,
+  onBackground = Color.White,
+  surface = MetaDarkCard,
+  onSurface = Color(0xFFE6ECF2),
+  surfaceVariant = MetaDarkElevated,
+  onSurfaceVariant = Color(0xFFB0BEC9),
+  surfaceTint = Color.Transparent,
+  inverseSurface = Color.White,
+  inverseOnSurface = MetaDeepInk,
+  inversePrimary = MetaBrandCobalt,
+  surfaceDim = MetaDarkBg,
+  surfaceBright = MetaDarkHigh,
+  surfaceContainerLowest = MetaDarkBg,
+  surfaceContainerLow = MetaDarkCard,
+  surfaceContainer = MetaDarkCard,
+  surfaceContainerHigh = MetaDarkElevated,
+  surfaceContainerHighest = MetaDarkHigh,
+  outline = MetaStoneGray,
+  outlineVariant = MetaDarkBorder,
+  error = Color(0xFFFF6B81),
+  onError = MetaDeepInk,
+  errorContainer = CoinbaseDarkErrorContainer,
+  onErrorContainer = Color.White,
+  scrim = Color.Black.copy(alpha = 0.70f),
+)
+
+// ============================================================================
+// 3. MiniMax ColorSchemes (Warm Alabaster + Coral Vermilion #D93F26)
+// ============================================================================
+
+val miniMaxLightScheme: ColorScheme = lightColorScheme(
+  primary = MiniMaxPrimary,
+  onPrimary = Color.White,
+  primaryContainer = MiniMaxTintLight,
+  onPrimaryContainer = MiniMaxPrimaryActive,
+  secondary = MiniMaxInkDeep,
+  onSecondary = Color.White,
+  secondaryContainer = MiniMaxSurfaceStrong,
+  onSecondaryContainer = MiniMaxInkDeep,
+  tertiary = MiniMaxBody,
+  onTertiary = Color.White,
+  tertiaryContainer = MiniMaxSurfaceSoft,
+  onTertiaryContainer = MiniMaxInk,
+  background = MiniMaxWarmPaper,
+  onBackground = MiniMaxInkDeep,
+  surface = MiniMaxCardWhite,
+  onSurface = MiniMaxInk,
+  surfaceVariant = MiniMaxSurfaceStrong,
+  onSurfaceVariant = MiniMaxBody,
+  surfaceTint = Color.Transparent,
+  inverseSurface = MiniMaxDarkBg,
+  inverseOnSurface = Color.White,
+  inversePrimary = MiniMaxPrimaryOnDark,
+  surfaceDim = MiniMaxSurfaceStrong,
+  surfaceBright = MiniMaxCardWhite,
+  surfaceContainerLowest = MiniMaxCardWhite,
+  surfaceContainerLow = MiniMaxWarmPaper,
+  surfaceContainer = MiniMaxSurfaceSoft,
+  surfaceContainerHigh = MiniMaxSurfaceStrong,
+  surfaceContainerHighest = MiniMaxSurfaceStrong,
+  outline = MiniMaxMuted,
+  outlineVariant = MiniMaxHairline,
+  error = MiniMaxNegativeDeep,
+  onError = Color.White,
+  errorContainer = CoinbaseErrorTintLight,
+  onErrorContainer = MiniMaxNegativeDeep,
+  scrim = MiniMaxInkDeep.copy(alpha = 0.48f),
+)
+
+val miniMaxDarkScheme: ColorScheme = darkColorScheme(
+  primary = MiniMaxPrimaryOnDark,
+  onPrimary = MiniMaxInkDeep,
+  primaryContainer = MiniMaxDarkTint,
+  onPrimaryContainer = Color.White,
+  secondary = Color.White,
+  onSecondary = MiniMaxInkDeep,
+  secondaryContainer = MiniMaxDarkSoft,
+  onSecondaryContainer = Color.White,
+  tertiary = Color(0xFFB5B7C0),
+  onTertiary = MiniMaxInkDeep,
+  tertiaryContainer = MiniMaxDarkHigh,
+  onTertiaryContainer = Color.White,
+  background = MiniMaxDarkBg,
+  onBackground = Color.White,
+  surface = MiniMaxDarkCard,
+  onSurface = Color(0xFFECEAE6),
+  surfaceVariant = MiniMaxDarkSoft,
+  onSurfaceVariant = Color(0xFFB5B7C0),
+  surfaceTint = Color.Transparent,
+  inverseSurface = MiniMaxCardWhite,
+  inverseOnSurface = MiniMaxInkDeep,
+  inversePrimary = MiniMaxPrimary,
+  surfaceDim = MiniMaxDarkBg,
+  surfaceBright = MiniMaxDarkHigh,
+  surfaceContainerLowest = MiniMaxDarkBg,
+  surfaceContainerLow = MiniMaxDarkCard,
+  surfaceContainer = MiniMaxDarkCard,
+  surfaceContainerHigh = MiniMaxDarkSoft,
+  surfaceContainerHighest = MiniMaxDarkHigh,
+  outline = MiniMaxMuted,
+  outlineVariant = MiniMaxDarkBorder,
+  error = MiniMaxDarkCritical,
+  onError = MiniMaxInkDeep,
+  errorContainer = CoinbaseDarkErrorContainer,
+  onErrorContainer = Color.White,
+  scrim = Color.Black.copy(alpha = 0.70f),
+)
+
+// ============================================================================
+// Shapes per Design System
+// ============================================================================
+
 val AppShapes = Shapes(
   extraSmall = RoundedCornerShape(12.dp),
   small = RoundedCornerShape(16.dp),
@@ -126,16 +277,52 @@ val AppShapes = Shapes(
   extraLarge = RoundedCornerShape(100.dp),
 )
 
+val MetaShapes = Shapes(
+  extraSmall = RoundedCornerShape(14.dp),
+  small = RoundedCornerShape(16.dp),
+  medium = RoundedCornerShape(24.dp),
+  large = RoundedCornerShape(28.dp),
+  extraLarge = RoundedCornerShape(100.dp),
+)
+
+val MiniMaxShapes = Shapes(
+  extraSmall = RoundedCornerShape(10.dp),
+  small = RoundedCornerShape(12.dp),
+  medium = RoundedCornerShape(18.dp),
+  large = RoundedCornerShape(20.dp),
+  extraLarge = RoundedCornerShape(14.dp),
+)
+
+fun colorSchemeForStyle(themeStyle: String?, darkTheme: Boolean): ColorScheme {
+  return when (resolveVisualThemeFamily(themeStyle)) {
+    "meta" -> if (darkTheme) metaDarkScheme else metaLightScheme
+    "minimax" -> if (darkTheme) miniMaxDarkScheme else miniMaxLightScheme
+    else -> if (darkTheme) darkScheme else lightScheme
+  }
+}
+
+fun shapesForStyle(themeStyle: String?): Shapes {
+  return when (resolveVisualThemeFamily(themeStyle)) {
+    "meta" -> MetaShapes
+    "minimax" -> MiniMaxShapes
+    else -> AppShapes
+  }
+}
+
 @Composable
 fun AppTheme(
   darkTheme: Boolean = isSystemInDarkTheme(),
   isArabic: Boolean = true,
   fontScale: String = "normal",
+  themeStyle: String = "coinbase",
   content: @Composable () -> Unit,
 ) {
-  val colorScheme = if (darkTheme) darkScheme else lightScheme
-  val tokens = if (darkTheme) CoinbaseDarkTokens else CoinbaseLightTokens
-  val typography = buildCoinbaseTypography(
+  val family = resolveVisualThemeFamily(themeStyle)
+  val colorScheme = colorSchemeForStyle(family, darkTheme)
+  val tokens = tokensForThemeStyle(family, darkTheme)
+  val shapes = shapesForStyle(family)
+  val typography = buildAppTypography(
+    themeStyle = family,
     isArabic = isArabic,
     scaleMultiplier = fontScaleMultiplier(fontScale),
   )
@@ -145,7 +332,7 @@ fun AppTheme(
     SideEffect {
       val window = (view.context as? Activity)?.window ?: return@SideEffect
       @Suppress("DEPRECATION")
-      window.statusBarColor = colorScheme.background.toArgb()
+      window.statusBarColor = tokens.screenBg.toArgb()
       @Suppress("DEPRECATION")
       window.navigationBarColor = tokens.navBg.toArgb()
       val insetsController = WindowCompat.getInsetsController(window, view)
@@ -156,13 +343,12 @@ fun AppTheme(
 
   CompositionLocalProvider(
     LocalSyndicatTokens provides tokens,
-    // Arabic UI is laid out right-to-left. Remove this line if the layout direction is already set elsewhere.
     LocalLayoutDirection provides if (isArabic) LayoutDirection.Rtl else LayoutDirection.Ltr,
   ) {
     MaterialTheme(
       colorScheme = colorScheme,
       typography = typography,
-      shapes = AppShapes,
+      shapes = shapes,
       content = content,
     )
   }

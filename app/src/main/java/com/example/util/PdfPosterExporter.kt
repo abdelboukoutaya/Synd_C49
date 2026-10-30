@@ -16,6 +16,7 @@ import com.example.R
 import com.example.data.model.ApartmentRecord
 import com.example.data.model.ExpenseRecord
 import com.example.data.model.MonthColumn
+import com.example.data.model.PaymentRecord
 import com.example.ui.i18n.AppLanguage
 import com.example.ui.i18n.RLM
 import com.example.ui.i18n.bidiLtr
@@ -572,6 +573,7 @@ object PdfPosterExporter {
     receiptNo: Long,
     scale: Float = 2.0f,
     variant: ExportVariant = ExportVariant.SCREEN,
+    payment: PaymentRecord? = null,
   ): Bitmap {
     val w = RECEIPT_PORTRAIT_WIDTH
     val h = RECEIPT_PORTRAIT_HEIGHT
@@ -579,7 +581,7 @@ object PdfPosterExporter {
     val (bitmap, effScale) = createScaledBitmap(w, h, scale = scale, forceScreen1080Px = force1080)
     val canvas = Canvas(bitmap)
     canvas.scale(effScale, effScale)
-    drawPaymentReceiptCanvas(context, canvas, w, h, apartment, data, receiptNo)
+    drawPaymentReceiptCanvas(context, canvas, w, h, apartment, data, receiptNo, payment)
     return bitmap
   }
 
@@ -590,16 +592,27 @@ object PdfPosterExporter {
     receiptNo: Long,
     onError: (String) -> Unit,
     variant: ExportVariant = ExportVariant.SCREEN,
+    payment: PaymentRecord? = null,
   ) {
     try {
       val strings = stringsForLanguage(data.config.language)
-      val bitmap = generatePaymentReceiptBitmap(context, apartment, data, receiptNo, scale = 2.2f, variant = variant)
+      val effReceiptNo = payment?.receiptNumber?.takeIf { it > 0L } ?: receiptNo
+      val bitmap = generatePaymentReceiptBitmap(
+        context = context,
+        apartment = apartment,
+        data = data,
+        receiptNo = effReceiptNo,
+        scale = 2.2f,
+        variant = variant,
+        payment = payment,
+      )
       val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
-      val outFile = File(exportDir, "Recu_Appt_${apartment.displayNumber}_No$receiptNo.png")
+      val yearSuffix = payment?.year ?: data.config.year
+      val outFile = File(exportDir, "Recu_Appt_${apartment.displayNumber}_${yearSuffix}_No$effReceiptNo.png")
       FileOutputStream(outFile).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
       bitmap.recycle()
 
-      shareFileUri(context, outFile, "image/png", "${strings.receiptDocTitle} #${"%03d".format(receiptNo)}")
+      shareFileUri(context, outFile, "image/png", "${strings.receiptDocTitle} #${"%03d".format(effReceiptNo)}")
     } catch (e: Exception) {
       onError(e.localizedMessage ?: "Receipt export error")
     }
@@ -1540,6 +1553,7 @@ object PdfPosterExporter {
     apartment: ApartmentRecord,
     data: SyndicatDashboardData,
     receiptNo: Long,
+    payment: PaymentRecord? = null,
   ) {
     val cfg = data.config
     val strings = stringsForLanguage(cfg.language)
@@ -1547,6 +1561,9 @@ object PdfPosterExporter {
     val pal = buildPalette(context, inkSaver = false)
     val cornerR = 12f
     val outerPad = 20f
+    val effectivePayment = payment ?: data.paymentsForApartment(apartment.number, cfg.year).firstOrNull()
+    val receiptYear = payment?.year ?: cfg.year
+    val paidAmountDh = payment?.amountDh ?: apartment.totalForConfig(cfg)
 
     canvas.drawColor(pal.pageBg)
     val cardRect = RectF(outerPad, outerPad, width - outerPad, height - outerPad)
@@ -1585,13 +1602,13 @@ object PdfPosterExporter {
       titleP,
     )
     canvas.drawText(
-      rtlAware(ellipsizeToWidth(cfg.residenceName, subP, innerW), isRtl),
+      rtlAware(ellipsizeToWidth("${cfg.residenceName} · ${bidiLtr(localizeDigits(receiptYear.toString(), cfg.digitsAr))}", subP, innerW), isRtl),
       width / 2f,
       86f,
       subP,
     )
 
-    // Encart montant total réglé en Menthe signature (#A8D8C4) bien lisible sur mobile
+    // Encart montant réglé en Menthe signature (#A8D8C4) bien lisible sur mobile
     val paidBox = RectF(38f, 134f, width - 38f, 214f)
     fill.color = SIGNATURE_MINT
     canvas.drawRoundRect(paidBox, 10f, 10f, fill)
@@ -1609,7 +1626,7 @@ object PdfPosterExporter {
     }
     canvas.drawText(rtlAware(strings.colPaid, isRtl), paidBox.centerX(), 160f, paidLblP)
     canvas.drawText(
-      rtlAware("✓ ${formatDh(apartment.totalForConfig(cfg), cfg.currency, cfg.digitsAr)}", isRtl),
+      rtlAware("✓ ${formatDh(paidAmountDh, cfg.currency, cfg.digitsAr)}", isRtl),
       paidBox.centerX(),
       194f,
       paidValP,
@@ -1632,10 +1649,17 @@ object PdfPosterExporter {
     val startX = if (isRtl) width - 40f else 40f
     val endX = if (isRtl) 40f else width - 40f
     val valueMaxW = (width - 80f) * 0.62f
-    val today = bidiLtr(localizeDigits(SimpleDateFormat("dd/MM/yyyy", Locale.FRANCE).format(Date()), cfg.digitsAr))
-    val paidMonths = cfg.activeMonthColumns.filter { apartment.amountFor(it) > 0L }
-      .joinToString(" · ") { strings.monthShort(it) }
-      .ifBlank { "—" }
+    val rawDate = effectivePayment?.paymentDate?.takeIf { it.isNotBlank() }
+      ?: SimpleDateFormat("dd/MM/yyyy", Locale.FRANCE).format(Date())
+    val formattedDate = bidiLtr(localizeDigits(rawDate, cfg.digitsAr))
+    val paidMonths = if (payment != null && payment.effectiveMonthsCovered.isNotEmpty()) {
+      payment.effectiveMonthsCovered.joinToString(" · ") { strings.monthShort(it) }
+    } else {
+      cfg.activeMonthColumns.filter { apartment.amountFor(it) > 0L }
+        .joinToString(" · ") { strings.monthShort(it) }
+        .ifBlank { "—" }
+    }
+    val methodLabel = strings.paymentMethodLabel(effectivePayment?.paymentMethod ?: "cash")
 
     val remDh = apartment.remainingDh(cfg)
     val remFormatted = if (remDh > 0L) {
@@ -1644,21 +1668,21 @@ object PdfPosterExporter {
       "✓ ${formatDh(0L, cfg.currency, cfg.digitsAr)}"
     }
 
-    var ry = 256f
+    var ry = 250f
     fun drawReceiptRow(label: String, value: String, valuePaint: Paint, allowWrap: Boolean = false) {
       canvas.drawText(rtlAware(label, isRtl), startX, ry, labelP)
       if (allowWrap) {
         val lines = wrapTextLines(value, valuePaint, valueMaxW, maxLines = 3)
         lines.forEachIndexed { i, ln ->
-          canvas.drawText(rtlAware(ln, isRtl), endX, ry + i * 18f, valuePaint)
+          canvas.drawText(rtlAware(ln, isRtl), endX, ry + i * 17f, valuePaint)
         }
-        ry += 22f + (lines.size - 1) * 18f
+        ry += 20f + (lines.size - 1) * 17f
       } else {
         canvas.drawText(rtlAware(ellipsizeToWidth(value, valuePaint, valueMaxW), isRtl), endX, ry, valuePaint)
-        ry += 22f
+        ry += 20f
       }
-      canvas.drawLine(40f, ry - 8f, width - 40f, ry - 8f, stroke)
-      ry += 24f
+      canvas.drawLine(40f, ry - 7f, width - 40f, ry - 7f, stroke)
+      ry += 21f
     }
 
     drawReceiptRow(
@@ -1678,11 +1702,16 @@ object PdfPosterExporter {
       valP,
       allowWrap = true,
     )
+    drawReceiptRow(
+      strings.receiptMethodRowLabel,
+      methodLabel,
+      valP,
+    )
     val remRowPaint = Paint(valNumP).apply {
       color = if (remDh > 0L) SIGNATURE_CORAL else SUCCESS_GREEN
     }
     drawReceiptRow(strings.colRemaining, remFormatted, remRowPaint)
-    drawReceiptRow(strings.datePrefix, today, valNumP)
+    drawReceiptRow(strings.datePrefix, formattedDate, valNumP)
 
     // Cachet inférieur éditorial en surfaceDark (#181D26) texte blanc
     val badgeRect = RectF(38f, height - 78f, width - 38f, height - 38f)

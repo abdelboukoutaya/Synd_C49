@@ -8,7 +8,7 @@
         "userId": { "type": "string", "description": "UID Firebase du syndic propriétaire." },
         "language": { "type": "string", "enum": ["ar", "fr"], "description": "Langue active de l'interface (ar RTL par défaut ou fr LTR)." },
         "digitsAr": { "type": "boolean", "description": "Afficher les chiffres orientaux arabes (٠-٩)." },
-        "themeStyle": { "type": "string", "enum": ["airtable", "xai", "wise"], "description": "Style visuel de l'application (airtable = الأبيض الهادئ)." },
+        "themeStyle": { "type": "string", "enum": ["airtable", "xai", "wise", "meta", "coinbase", "minimax"], "description": "Style visuel de l'application (meta, coinbase, minimax, ou valeurs héritées airtable/wise/xai)." },
         "themeMode": { "type": "string", "enum": ["system", "light", "dark"], "description": "Thème clair, sombre ou système." },
         "fontScale": { "type": "string", "enum": ["small", "normal", "large"], "description": "Taille de police réglable." },
         "syndicatName": { "type": "string", "description": "Nom du syndicat ou du trésorier." },
@@ -87,14 +87,17 @@
     },
     "ExpenseRecord": {
       "title": "ExpenseRecord",
-      "description": "Dépense du syndicat avec suivi du montant total, montant réglé au prestataire et reste à payer.",
+      "description": "Dépense du syndicat avec suivi du montant total, montant réglé au prestataire (paidAmountDh <= amountDh) et reste à payer.",
       "type": "object",
       "properties": {
         "userId": { "type": "string" },
         "title": { "type": "string" },
-        "category": { "type": "string" },
+        "category": {
+          "type": "string",
+          "enum": ["Historique", "Ménage", "Sécurité", "Gardiennage", "Électricité", "Eau", "Plomberie", "Ascenseur", "Entretien", "Réparations", "Peinture", "Étanchéité", "Jardin", "Divers"]
+        },
         "amountDh": { "type": "integer" },
-        "paidAmountDh": { "type": "integer", "description": "Montant effectivement payé au prestataire (-1 = totalité)." },
+        "paidAmountDh": { "type": "integer", "description": "Montant effectivement payé au prestataire (-1 = totalité, sinon 0 <= paidAmountDh <= amountDh)." },
         "supplier": { "type": "string", "description": "Nom du fournisseur ou prestataire." },
         "dateLabel": { "type": "string" },
         "notes": { "type": "string" },
@@ -102,6 +105,41 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "title", "category", "amountDh", "dateLabel", "notes", "createdAt", "updatedAt"]
+    },
+    "PaymentRecord": {
+      "title": "PaymentRecord",
+      "description": "Versement individuel d'un copropriétaire avec historique multi-années, date, mode de paiement (espèces, virement, chèque, mobile) et numéro de reçu.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "UID Firebase du syndic propriétaire." },
+        "apartmentId": { "type": "string", "description": "Identifiant canonique du document appartement (ex: appt_01)." },
+        "apartmentNumber": { "type": "integer", "description": "Numéro de l'appartement (1..200), cohérent avec apartmentId." },
+        "year": { "type": "integer", "description": "Année fiscale couverte par le paiement (2020..2100)." },
+        "month": { "type": "integer", "description": "Mois ciblé (1..12) ou 0 pour un règlement groupé multi-mois." },
+        "monthsCovered": { "type": "array", "description": "Liste des numéros de mois (1..12) réglés par ce paiement." },
+        "amountDh": { "type": "integer", "description": "Montant encaissé en DH (1..1000000)." },
+        "paymentDate": { "type": "string", "description": "Date du règlement (ex: 29/10/2026)." },
+        "paymentMethod": { "type": "string", "enum": ["cash", "transfer", "check", "mobile", "other"], "description": "Mode de règlement : espèces, virement, chèque, mobile ou autre." },
+        "receiptNumber": { "type": "integer", "description": "Numéro de reçu associé (0 si non émis, >= 1 sinon)." },
+        "notes": { "type": "string", "description": "Observation optionnelle (référence virement/chèque, etc.)." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "apartmentId",
+        "apartmentNumber",
+        "year",
+        "month",
+        "monthsCovered",
+        "amountDh",
+        "paymentDate",
+        "paymentMethod",
+        "receiptNumber",
+        "notes",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "ProjectRecord": {
       "title": "ProjectRecord",
@@ -113,7 +151,10 @@
         "titleFr": { "type": "string", "description": "Titre du projet en français." },
         "descriptionAr": { "type": "string", "description": "Description / étapes du projet en arabe." },
         "descriptionFr": { "type": "string", "description": "Description / étapes du projet en français." },
-        "category": { "type": "string", "enum": ["Peinture", "Sécurité", "Étanchéité", "Ascenseur", "Plomberie", "Électricité", "Entretien", "Jardin", "Divers"] },
+        "category": {
+          "type": "string",
+          "enum": ["Historique", "Ménage", "Sécurité", "Gardiennage", "Électricité", "Eau", "Plomberie", "Ascenseur", "Entretien", "Réparations", "Peinture", "Étanchéité", "Jardin", "Divers"]
+        },
         "priority": { "type": "integer", "description": "Priorité de 1 (Urgente) à 4 (Basse)." },
         "status": { "type": "string", "enum": ["in_progress", "planned", "completed"], "description": "Statut du projet : en cours, futur/planifié ou terminé." },
         "targetBudgetDh": { "type": "integer", "description": "Budget global estimé du projet en DH." },
@@ -152,11 +193,15 @@
     },
     "/users/{userId}/apartments/{apartmentId}": {
       "schema": { "$ref": "#/entities/ApartmentRecord" },
-      "description": "Appartements, propriétaires et cotisations des 12 mois."
+      "description": "Appartements (identifiant appt_XX aligné avec number), propriétaires et cotisations de l'année active."
+    },
+    "/users/{userId}/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/PaymentRecord" },
+      "description": "Historique des paiements multi-années avec date, mode de règlement et numéro de reçu."
     },
     "/users/{userId}/expenses/{expenseId}": {
       "schema": { "$ref": "#/entities/ExpenseRecord" },
-      "description": "Dépenses et paiements fournisseurs."
+      "description": "Dépenses et paiements fournisseurs (avec cohérence paidAmountDh <= amountDh)."
     },
     "/users/{userId}/projects/{projectId}": {
       "schema": { "$ref": "#/entities/ProjectRecord" },

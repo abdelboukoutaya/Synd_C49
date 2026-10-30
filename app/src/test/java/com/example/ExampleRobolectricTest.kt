@@ -16,9 +16,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.LayoutDirection
@@ -32,10 +34,12 @@ import com.example.auth.findActivity
 import com.example.data.model.ApartmentRecord
 import com.example.data.model.ExpenseRecord
 import com.example.data.model.MonthColumn
+import com.example.data.model.PaymentRecord
 import com.example.data.model.ProjectPriority
 import com.example.data.model.ProjectRecord
 import com.example.data.model.ProjectStatus
 import com.example.data.model.SyndicatConfig
+import com.example.data.model.projectApartmentsForYear
 import com.example.data.seed.InitialSyndicatData
 import com.example.ui.components.FintechTextField
 import com.example.ui.i18n.AppLanguage
@@ -58,13 +62,21 @@ import com.example.ui.theme.CoinbaseCanvas
 import com.example.ui.theme.CoinbaseDarkCardBg
 import com.example.ui.theme.CoinbaseDarkScreenBg
 import com.example.ui.theme.CoinbaseDarkTokens
+import com.example.data.local.LocalSyndicatRepository
+import com.example.data.repository.LOCAL_DEVICE_USER_ID
+import com.example.ui.screens.SettingsScreen
 import com.example.ui.theme.CoinbaseLightTokens
 import com.example.ui.theme.CoinbaseOnPrimary
 import com.example.ui.theme.CoinbasePrimary
 import com.example.ui.theme.CoinbaseSurfaceSoft
 import com.example.ui.theme.CoinbaseSurfaceStrong
+import com.example.ui.theme.MetaBrandCobalt
+import com.example.ui.theme.MetaThemeLightTokens
+import com.example.ui.theme.MiniMaxLightTokens
+import com.example.ui.theme.MiniMaxPrimary
 import com.example.ui.theme.darkScheme
 import com.example.ui.theme.lightScheme
+import com.example.ui.theme.tokensForThemeStyle
 import com.example.ui.viewmodel.StatusFilter
 import com.example.ui.viewmodel.SyndicatDashboardData
 import com.example.ui.viewmodel.formatDh
@@ -74,7 +86,10 @@ import com.example.util.ExportVariant
 import com.example.util.PdfPosterExporter
 import com.example.util.RelanceExportOptions
 import com.example.util.WhatsAppHelper
+import java.io.File
 import java.text.Bidi
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -178,7 +193,19 @@ class ExampleRobolectricTest {
     assertEquals(FontWeight.Medium, CoinbaseLightTokens.weight(FontWeight.Medium))
     assertEquals(FontWeight.SemiBold, CoinbaseLightTokens.weight(FontWeight.SemiBold))
     assertEquals(FontWeight.Bold, CoinbaseLightTokens.weight(FontWeight.Bold))
-    assertEquals("airtable", SyndicatConfig().themeStyle)
+    assertEquals("coinbase", SyndicatConfig().themeStyle)
+
+    // Verify separate Meta, Coinbase, and MiniMax theme token sets
+    assertEquals("Meta", MetaThemeLightTokens.designSystemName)
+    assertEquals(MetaBrandCobalt, tokensForThemeStyle("meta", darkTheme = false).primary)
+    assertEquals(28, MetaThemeLightTokens.featureCardRadiusDp)
+
+    assertEquals("Coinbase", tokensForThemeStyle("coinbase", darkTheme = false).designSystemName)
+    assertEquals(CoinbasePrimary, tokensForThemeStyle("coinbase", darkTheme = false).primary)
+
+    assertEquals("MiniMax", MiniMaxLightTokens.designSystemName)
+    assertEquals(MiniMaxPrimary, tokensForThemeStyle("minimax", darkTheme = false).primary)
+    assertEquals(14, MiniMaxLightTokens.buttonRadiusDp)
   }
 
   @Test
@@ -1038,5 +1065,296 @@ class ExampleRobolectricTest {
         bounds.left >= 0.dp && bounds.right <= 360.dp,
       )
     }
+  }
+
+  @Test
+  fun localSyndicatRepositoryWorksOfflineWithoutAccountAndPersistsThemes() = runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val storeFile = File(context.cacheDir, "local_syndicat_test_${System.nanoTime()}.json")
+    try {
+      val repo = LocalSyndicatRepository(context, storageFileOverride = storeFile)
+      repo.ensureSeeded()
+
+      val seededApts = repo.observeApartments(LOCAL_DEVICE_USER_ID).first()
+      assertEquals(30, seededApts.size)
+      assertEquals(8200L, seededApts.sumOf { it.totalAllMonthsDh })
+
+      val apt1 = seededApts.first { it.number == 1L }
+      repo.updateApartment(apt1.copy(dec = 100L))
+      repo.addExpense(
+        title = "Nettoyage escaliers",
+        category = "نظافة",
+        amountDh = 250L,
+        dateLabel = "2026-04-01",
+        notes = "",
+      )
+      repo.updateDisplayPrefs(themeStyle = "meta")
+
+      // Re-instantiate repository on same phone file to verify durable disk persistence
+      val reloadedRepo = LocalSyndicatRepository(context, storageFileOverride = storeFile)
+      val reloadedConfig = reloadedRepo.observeConfig(LOCAL_DEVICE_USER_ID).first()
+      assertNotNull(reloadedConfig)
+      assertEquals("meta", reloadedConfig?.themeStyle)
+
+      val reloadedApts = reloadedRepo.observeApartments(LOCAL_DEVICE_USER_ID).first()
+      assertEquals(8300L, reloadedApts.sumOf { it.totalAllMonthsDh })
+      assertEquals(2, reloadedRepo.observeExpenses(LOCAL_DEVICE_USER_ID).first().size)
+    } finally {
+      storeFile.delete()
+    }
+  }
+
+  @Test
+  @Config(sdk = [36], qualifiers = "w412dp-h1000dp")
+  fun settingsScreenExposesLocalSyncAndSeparateMetaCoinbaseMiniMaxThemes() {
+    var selectedThemeStyle: String? = null
+    var connectGoogleClicked = false
+
+    val sampleData = SyndicatDashboardData(
+      config = SyndicatConfig(themeStyle = "coinbase", onboardingCompleted = true, seeded = true),
+      apartments = listOf(
+        ApartmentRecord(id = "apt_1", number = 1L, floor = "RDC", ownerName = "Karim Benali", juin = 100L),
+      ),
+      expenses = emptyList(),
+      projects = emptyList(),
+    )
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(
+        LocalStrings provides stringsForLanguage("fr"),
+        LocalLayoutDirection provides LayoutDirection.Ltr,
+      ) {
+        AppTheme(darkTheme = false, isArabic = false, themeStyle = "coinbase") {
+          SettingsScreen(
+            data = sampleData,
+            currentUserId = LOCAL_DEVICE_USER_ID,
+            userEmail = null,
+            currentLanguage = AppLanguage.FR,
+            isSaving = false,
+            onSelectLanguage = {},
+            onUpdateDisplayPrefs = { _, style, _, _ -> selectedThemeStyle = style },
+            onOpenWizard = {},
+            onSaveConfig = { _, _ -> },
+            onRestoreBackup = {},
+            onImportCsvOwners = {},
+            onResetC49 = {},
+            onBackupExported = {},
+            onPinUpdated = {},
+            onSignOut = {},
+            onMessage = {},
+            isCloudSynced = false,
+            onConnectGoogleSync = { connectGoogleClicked = true },
+          )
+        }
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("settings_sync_card").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("settings_connect_google_btn").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    assertTrue("Expected optional Google sync CTA to invoke callback", connectGoogleClicked)
+
+    composeTestRule.onNodeWithTag("settings_screen").performScrollToIndex(3)
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("theme_style_meta").performClick()
+    composeTestRule.waitForIdle()
+    assertEquals("meta", selectedThemeStyle)
+
+    composeTestRule.onNodeWithTag("theme_style_minimax").performClick()
+    composeTestRule.waitForIdle()
+    assertEquals("minimax", selectedThemeStyle)
+
+    composeTestRule.onNodeWithTag("theme_style_coinbase").performClick()
+    composeTestRule.waitForIdle()
+    assertEquals("coinbase", selectedThemeStyle)
+  }
+
+  @Test
+  @Config(sdk = [36], qualifiers = "w412dp-h1000dp")
+  fun multiYearPaymentsUnifiedCategoriesAndCoherenceWorkEndToEnd() = runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val storeFile = File(context.cacheDir, "local_syndicat_items456_${System.nanoTime()}.json")
+    try {
+      val repo = LocalSyndicatRepository(context, storageFileOverride = storeFile)
+      repo.ensureSeeded()
+
+      // 1. Item 4: "Sécurité" and "Peinture" preserved on expenses
+      val camExpId = repo.addExpense(
+        title = "Caméras surveillance parking",
+        category = "Sécurité",
+        amountDh = 2400L,
+        paidAmountDh = 1500L,
+        supplier = "VisionSecur",
+        dateLabel = "15/10/2026",
+        notes = "4 caméras IP",
+      )
+      val savedCamExp = repo.observeExpenses(LOCAL_DEVICE_USER_ID).first().first { it.id == camExpId }
+      assertEquals("Sécurité", savedCamExp.category)
+      assertEquals(1500L, savedCamExp.effectivePaidDh)
+
+      // 2. Item 6: paidAmountDh > amountDh and apartment ID mismatch rejected locally
+      var paidExceedsRejected = false
+      try {
+        repo.addExpense(
+          title = "Erreur montant",
+          category = "Sécurité",
+          amountDh = 300L,
+          paidAmountDh = 450L,
+          dateLabel = "15/10/2026",
+          notes = "",
+        )
+      } catch (_: IllegalArgumentException) {
+        paidExceedsRejected = true
+      }
+      assertTrue("Expected paidAmountDh > amountDh to be rejected", paidExceedsRejected)
+
+      var wrongAptIdRejected = false
+      try {
+        repo.updateApartment(ApartmentRecord(id = "appt_05", number = 1L, floor = "RDC"))
+      } catch (_: IllegalArgumentException) {
+        wrongAptIdRejected = true
+      }
+      assertTrue("Expected mismatched apartment document ID to be rejected", wrongAptIdRejected)
+
+      // 3. Item 5: Multi-year PaymentRecord persistence + projection across 2026 & 2027
+      val pay27Id = repo.addPayment(
+        PaymentRecord(
+          apartmentId = "appt_01",
+          apartmentNumber = 1L,
+          year = 2027L,
+          month = 6L,
+          monthsCovered = listOf(6L, 7L),
+          amountDh = 200L,
+          paymentDate = "04/06/2027",
+          paymentMethod = "transfer",
+          receiptNumber = 7L,
+          notes = "Virement été 2027",
+        )
+      )
+      val reloadedRepo = LocalSyndicatRepository(context, storageFileOverride = storeFile)
+      val cfg = reloadedRepo.observeConfig(LOCAL_DEVICE_USER_ID).first()!!
+      val baseApts = reloadedRepo.observeApartments(LOCAL_DEVICE_USER_ID).first()
+      val payments = reloadedRepo.observePayments(LOCAL_DEVICE_USER_ID).first()
+      assertEquals(1, payments.size)
+      assertEquals(pay27Id, payments.first().id)
+      assertEquals("transfer", payments.first().paymentMethod)
+
+      val projected2027 = projectApartmentsForYear(baseApts, cfg, 2027L, payments)
+      val apt1In2027 = projected2027.first { it.number == 1L }
+      assertEquals(100L, apt1In2027.juin)
+      assertEquals(100L, apt1In2027.juil)
+      assertEquals(0L, projected2027.first { it.number == 2L }.totalAllMonthsDh)
+
+      // 4. UI verification: ApartmentsScreen multi-year selector & payment history + receipt bitmap
+      var chosenYear: Long? = null
+      val dash2027 = SyndicatDashboardData(
+        config = cfg.copy(year = 2027L),
+        apartments = projected2027,
+        expenses = reloadedRepo.observeExpenses(LOCAL_DEVICE_USER_ID).first(),
+        projects = reloadedRepo.observeProjects(LOCAL_DEVICE_USER_ID).first(),
+        payments = payments,
+        baseApartments = baseApts,
+        baseYear = cfg.year,
+      )
+      val receiptBmp = com.example.util.PdfPosterExporter.generatePaymentReceiptBitmap(
+        context = context,
+        apartment = apt1In2027,
+        data = dash2027,
+        receiptNo = 7L,
+        payment = payments.first(),
+      )
+      assertTrue(receiptBmp.width > 0 && receiptBmp.height > 0)
+      receiptBmp.recycle()
+
+      composeTestRule.setContent {
+        CompositionLocalProvider(
+          LocalStrings provides stringsForLanguage("fr"),
+          LocalLayoutDirection provides LayoutDirection.Ltr,
+        ) {
+          AppTheme(darkTheme = false, isArabic = false, themeStyle = "coinbase") {
+            ApartmentsScreen(
+              data = dash2027,
+              searchQuery = "",
+              selectedFloor = null,
+              statusFilter = com.example.ui.viewmodel.StatusFilter.ALL,
+              onSearchQueryChange = {},
+              onSelectFloor = {},
+              onSelectStatusFilter = {},
+              onSaveApartment = { _, _ -> },
+              onMarkReminded = { _, _, _ -> },
+              onRequestReceiptNo = { 8L },
+              onExportError = {},
+              onSelectYear = { yr -> chosenYear = yr },
+            )
+          }
+        }
+      }
+      composeTestRule.waitForIdle()
+      composeTestRule.onNodeWithTag("apartments_year_selector").assertIsDisplayed()
+      composeTestRule.onNodeWithTag("year_chip_2026").performClick()
+      composeTestRule.waitForIdle()
+      assertEquals(2026L, chosenYear)
+    } finally {
+      storeFile.delete()
+    }
+  }
+
+  @Test
+  @Config(sdk = [36], qualifiers = "w412dp-h1000dp")
+  fun expensesScreenSupportsSecuriteCategoryAndRejectsPaidExceedingAmount() {
+    var submittedCategory: String? = null
+    var submittedCount = 0
+    val frStrings = stringsForLanguage("fr")
+    val sampleData = SyndicatDashboardData(
+      config = SyndicatConfig(language = "fr", currency = "DH", onboardingCompleted = true, seeded = true),
+      apartments = listOf(ApartmentRecord(id = "appt_01", number = 1L, floor = "RDC")),
+      expenses = emptyList(),
+      projects = emptyList(),
+    )
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(
+        LocalStrings provides frStrings,
+        LocalLayoutDirection provides LayoutDirection.Ltr,
+      ) {
+        AppTheme(darkTheme = false, isArabic = false, themeStyle = "meta") {
+          ExpensesScreen(
+            data = sampleData,
+            onAddExpense = { _, cat, _, _, _, _, _ ->
+              submittedCategory = cat
+              submittedCount++
+            },
+            onUpdateExpense = {},
+            onDeleteExpense = {},
+            onExportError = {},
+          )
+        }
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("add_expense_fab").performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("expense_title_input").performTextReplacement("Caméras hall")
+    composeTestRule.onNodeWithTag("expense_amount_input").performTextReplacement("500")
+    composeTestRule.onNodeWithTag("expense_paid_amount_input").performTextReplacement("800")
+    composeTestRule.onNodeWithTag("expense_category_Sécurité").performScrollTo().performClick()
+    composeTestRule.onNodeWithTag("save_expense_button").performClick()
+    composeTestRule.waitForIdle()
+
+    // Must NOT submit when paidAmountDh (800) > amountDh (500), and must display validation error
+    assertEquals(0, submittedCount)
+    composeTestRule.onNodeWithText(frStrings.expErrPaidExceedsAmount).assertIsDisplayed()
+
+    // Fix paidAmountDh to 500 -> submits with category "Sécurité"
+    composeTestRule.onNodeWithTag("expense_paid_amount_input").performTextReplacement("500")
+    composeTestRule.onNodeWithTag("save_expense_button").performClick()
+    composeTestRule.waitForIdle()
+
+    assertEquals(1, submittedCount)
+    assertEquals("Sécurité", submittedCategory)
   }
 }

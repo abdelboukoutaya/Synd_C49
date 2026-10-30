@@ -85,6 +85,7 @@ fun AuthScreen(
   currentLanguage: AppLanguage,
   onSelectLanguage: (AppLanguage) -> Unit,
   onAuthSuccess: () -> Unit,
+  onContinueWithoutAccount: (() -> Unit)? = null,
 ) {
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
@@ -334,6 +335,21 @@ fun AuthScreen(
               modifier = Modifier
                 .fillMaxWidth()
                 .testTag("auth_cancel_button"),
+            )
+          }
+
+          if (onContinueWithoutAccount != null && !isLoading) {
+            Spacer(modifier = Modifier.height(12.dp))
+            SageSecondaryButton(
+              text = strings.authContinueWithoutAccount,
+              onClick = {
+                silentAuthJob?.cancel()
+                interactiveAuthJob?.cancel()
+                onContinueWithoutAccount()
+              },
+              modifier = Modifier
+                .fillMaxWidth()
+                .testTag("auth_continue_local_btn"),
             )
           }
 

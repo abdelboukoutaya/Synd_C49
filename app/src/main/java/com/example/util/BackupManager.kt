@@ -6,12 +6,14 @@ import androidx.core.content.FileProvider
 import com.example.data.model.ApartmentRecord
 import com.example.data.model.DEFAULT_RELANCE_HEADER_AR
 import com.example.data.model.DEFAULT_WHATSAPP_TEMPLATE_AR
-import com.example.data.model.EXPENSE_CATEGORIES
 import com.example.data.model.ExpenseRecord
 import com.example.data.model.MonthColumn
-import com.example.data.model.PROJECT_CATEGORIES
+import com.example.data.model.PaymentMethod
+import com.example.data.model.PaymentRecord
 import com.example.data.model.ProjectRecord
 import com.example.data.model.SyndicatConfig
+import com.example.data.model.canonicalApartmentDocId
+import com.example.data.model.normalizeSyndicatCategory
 import com.example.ui.i18n.LanguagePreferences
 import com.example.ui.viewmodel.SyndicatDashboardData
 import java.io.File
@@ -26,6 +28,7 @@ data class ParsedSyndicatBackup(
   val apartments: List<ApartmentRecord>,
   val expenses: List<ExpenseRecord>,
   val projects: List<ProjectRecord> = emptyList(),
+  val payments: List<PaymentRecord> = emptyList(),
 )
 
 data class ParsedOwnerRow(
@@ -56,7 +59,7 @@ object BackupManager {
       put("treasurerName", cfg.treasurerName)
       put("buildingTitle", cfg.buildingTitle)
       put("currency", cfg.currency)
-      put("year", cfg.year)
+      put("year", data.baseYear)
       put("openingBalanceDh", cfg.openingBalanceDh)
       put("dueDayOfMonth", cfg.dueDayOfMonth)
       put("minReminderAmountDh", cfg.minReminderAmountDh)
@@ -85,12 +88,14 @@ object BackupManager {
     }
     root.put("config", cfgObj)
 
+    val sourceApartments = data.baseApartments.ifEmpty { data.apartments }
     val apptsArr = JSONArray()
-    for (appt in data.apartments.sortedBy { it.number }) {
+    for (appt in sourceApartments.sortedBy { it.number }) {
+      val safeNum = appt.number.coerceIn(1L, 200L)
       apptsArr.put(
         JSONObject().apply {
-          put("id", appt.id.ifBlank { "appt_%02d".format(appt.number) })
-          put("number", appt.number)
+          put("id", canonicalApartmentDocId(safeNum))
+          put("number", safeNum)
           put("customNumberLabel", appt.customNumberLabel)
           put("floor", appt.floor)
           put("status", appt.status)
@@ -118,15 +123,38 @@ object BackupManager {
     }
     root.put("apartments", apptsArr)
 
+    val payArr = JSONArray()
+    for (pay in data.payments) {
+      val safeAptNum = pay.apartmentNumber.coerceIn(1L, 200L)
+      payArr.put(
+        JSONObject().apply {
+          put("id", pay.id)
+          put("apartmentId", canonicalApartmentDocId(safeAptNum))
+          put("apartmentNumber", safeAptNum)
+          put("year", pay.year.coerceIn(2020L, 2100L))
+          put("month", pay.month.coerceIn(0L, 12L))
+          put("monthsCovered", JSONArray(pay.monthsCovered.filter { it in 1L..12L }))
+          put("amountDh", pay.amountDh.coerceIn(1L, 1_000_000L))
+          put("paymentDate", pay.paymentDate)
+          put("paymentMethod", PaymentMethod.fromCode(pay.paymentMethod).code)
+          put("receiptNumber", pay.receiptNumber.coerceIn(0L, 100_000L))
+          put("notes", pay.notes)
+        }
+      )
+    }
+    root.put("payments", payArr)
+
     val expArr = JSONArray()
     for (exp in data.expenses) {
+      val safeAmt = exp.amountDh.coerceIn(0L, 10_000_000L)
+      val safePaid = if (exp.paidAmountDh < 0L) -1L else exp.paidAmountDh.coerceIn(0L, safeAmt)
       expArr.put(
         JSONObject().apply {
           put("id", exp.id)
           put("title", exp.title)
-          put("category", exp.category)
-          put("amountDh", exp.amountDh)
-          put("paidAmountDh", exp.paidAmountDh)
+          put("category", normalizeSyndicatCategory(exp.category))
+          put("amountDh", safeAmt)
+          put("paidAmountDh", safePaid)
           put("supplier", exp.supplier)
           put("dateLabel", exp.dateLabel)
           put("notes", exp.notes)
@@ -144,7 +172,7 @@ object BackupManager {
           put("titleFr", proj.titleFr)
           put("descriptionAr", proj.descriptionAr)
           put("descriptionFr", proj.descriptionFr)
-          put("category", proj.category)
+          put("category", normalizeSyndicatCategory(proj.category, "Entretien"))
           put("priority", proj.priority)
           put("status", proj.status)
           put("targetBudgetDh", proj.targetBudgetDh)
@@ -186,7 +214,7 @@ object BackupManager {
       userId = targetUserId,
       language = cfgObj.optString("language", "ar").let { if (it == "fr") "fr" else "ar" },
       digitsAr = cfgObj.optBoolean("digitsAr", false),
-      themeStyle = "airtable",
+      themeStyle = com.example.ui.theme.sanitizeThemeStyle(cfgObj.optString("themeStyle", "coinbase"), "coinbase"),
       themeMode = cfgObj.optString("themeMode", "system").let { if (it in listOf("system", "light", "dark")) it else "system" },
       fontScale = cfgObj.optString("fontScale", "normal").let { if (it in listOf("small", "normal", "large")) it else "normal" },
       syndicatName = cfgObj.optString("syndicatName", "إدارة السانديك").take(100),
@@ -234,7 +262,7 @@ object BackupManager {
         val num = obj.optLong("number", (i + 1).toLong()).coerceIn(1L, 200L)
         appts.add(
           ApartmentRecord(
-            id = obj.optString("id", "appt_%02d".format(num)).replace(Regex("[^a-zA-Z0-9_-]"), "_"),
+            id = canonicalApartmentDocId(num),
             userId = targetUserId,
             number = num,
             customNumberLabel = obj.optString("customNumberLabel", "").take(20),
@@ -264,13 +292,51 @@ object BackupManager {
       }
     }
 
+    val payments = mutableListOf<PaymentRecord>()
+    val payArr = root.optJSONArray("payments")
+    if (payArr != null) {
+      for (i in 0 until payArr.length()) {
+        val obj = payArr.optJSONObject(i) ?: continue
+        val aptNum = obj.optLong("apartmentNumber", 1L).coerceIn(1L, 200L)
+        val amt = obj.optLong("amountDh", 0L).coerceIn(0L, 1_000_000L)
+        if (amt <= 0L) continue
+        val monthsCov = mutableListOf<Long>()
+        val covArr = obj.optJSONArray("monthsCovered")
+        if (covArr != null) {
+          for (j in 0 until covArr.length()) {
+            val m = covArr.optLong(j, -1L)
+            if (m in 1L..12L) monthsCov.add(m)
+          }
+        }
+        val monthVal = obj.optLong("month", 0L).coerceIn(0L, 12L)
+        payments.add(
+          PaymentRecord(
+            id = obj.optString("id", "pay_restored_$i").replace(Regex("[^a-zA-Z0-9_-]"), "_").ifBlank { "pay_restored_$i" },
+            userId = targetUserId,
+            apartmentId = canonicalApartmentDocId(aptNum),
+            apartmentNumber = aptNum,
+            year = obj.optLong("year", config.year).coerceIn(2020L, 2100L),
+            month = monthVal,
+            monthsCovered = monthsCov.distinct().sorted().take(12),
+            amountDh = amt,
+            paymentDate = obj.optString("paymentDate", "01/01/${config.year}").ifBlank { "01/01/${config.year}" }.take(30),
+            paymentMethod = PaymentMethod.fromCode(obj.optString("paymentMethod", "cash")).code,
+            receiptNumber = obj.optLong("receiptNumber", 0L).coerceIn(0L, 100_000L),
+            notes = obj.optString("notes", "").take(300),
+          )
+        )
+      }
+    }
+
     val expenses = mutableListOf<ExpenseRecord>()
     val expArr = root.optJSONArray("expenses")
     if (expArr != null) {
       for (i in 0 until expArr.length()) {
         val obj = expArr.optJSONObject(i) ?: continue
-        val cat = obj.optString("category", "Divers").let { if (it in EXPENSE_CATEGORIES) it else "Divers" }
+        val cat = normalizeSyndicatCategory(obj.optString("category", "Divers"))
         val amt = obj.optLong("amountDh", 0L).coerceIn(0L, 10_000_000L)
+        val rawPaid = obj.optLong("paidAmountDh", -1L)
+        val safePaid = if (rawPaid < 0L) -1L else rawPaid.coerceIn(0L, amt)
         expenses.add(
           ExpenseRecord(
             id = obj.optString("id", "exp_restored_$i").replace(Regex("[^a-zA-Z0-9_-]"), "_"),
@@ -278,7 +344,7 @@ object BackupManager {
             title = obj.optString("title", "مصروف").ifBlank { "مصروف" }.take(150),
             category = cat,
             amountDh = amt,
-            paidAmountDh = obj.optLong("paidAmountDh", -1L).coerceIn(-1L, 10_000_000L),
+            paidAmountDh = safePaid,
             supplier = obj.optString("supplier", "").take(100),
             dateLabel = obj.optString("dateLabel", "01/01/2026").ifBlank { "01/01/2026" }.take(30),
             notes = obj.optString("notes", "").take(300),
@@ -292,7 +358,7 @@ object BackupManager {
     if (projArr != null) {
       for (i in 0 until projArr.length()) {
         val obj = projArr.optJSONObject(i) ?: continue
-        val cat = obj.optString("category", "Entretien").let { if (it in PROJECT_CATEGORIES) it else "Divers" }
+        val cat = normalizeSyndicatCategory(obj.optString("category", "Entretien"), "Entretien")
         val status = obj.optString("status", "planned").let {
           if (it in listOf("in_progress", "planned", "completed")) it else "planned"
         }
@@ -325,6 +391,7 @@ object BackupManager {
       apartments = appts,
       expenses = expenses,
       projects = projects,
+      payments = payments,
     )
   }
 

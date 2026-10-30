@@ -702,10 +702,12 @@ private fun ExpenseEditorModal(
           onValueChange = { next ->
             paidManuallyEdited = true
             paidText = next.filter { it.isDigit() }.take(8)
+            errorMsg = null
           },
           label = strings.expFieldPaidAmount(currency),
           placeholder = amountText.ifBlank { "500" },
           keyboardType = KeyboardType.Number,
+          errorText = if (errorMsg == strings.expErrPaidExceedsAmount) errorMsg else null,
           modifier = Modifier.fillMaxWidth().testTag("expense_paid_amount_input"),
         )
 
@@ -745,6 +747,7 @@ private fun ExpenseEditorModal(
                 selected = category == cat,
                 onClick = { category = cat },
                 label = strings.categoryLabel(cat),
+                modifier = Modifier.testTag("expense_category_$cat"),
               )
             }
           }
@@ -767,12 +770,13 @@ private fun ExpenseEditorModal(
         compact = true,
         onClick = {
           val amt = amountText.toLongOrNull() ?: 0L
-          val paid = (paidText.toLongOrNull() ?: amt).coerceIn(0L, amt)
+          val rawPaid = if (paidText.isBlank()) amt else (paidText.toLongOrNull() ?: 0L)
           when {
             title.isBlank() -> errorMsg = strings.expErrTitle
             amt <= 0L -> errorMsg = strings.expErrAmount
+            rawPaid > amt -> errorMsg = strings.expErrPaidExceedsAmount
             dateLabel.isBlank() -> errorMsg = strings.expErrDate
-            else -> onConfirm(title.trim(), category, amt, paid, supplier.trim(), dateLabel.trim(), notes.trim())
+            else -> onConfirm(title.trim(), category, amt, rawPaid, supplier.trim(), dateLabel.trim(), notes.trim())
           }
         },
         modifier = Modifier.testTag("save_expense_button"),

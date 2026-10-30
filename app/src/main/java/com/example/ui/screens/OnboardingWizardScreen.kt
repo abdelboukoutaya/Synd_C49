@@ -229,7 +229,7 @@ fun OnboardingWizardScreen(
       floorsCount = floorsCount.toLong(),
       apartmentsCount = totalApartmentsCount.toLong(),
       floorAptCounts = computedFloorCounts.map { it.toLong() },
-      themeStyle = "airtable",
+      themeStyle = com.example.ui.theme.sanitizeThemeStyle(initialConfig.themeStyle, "coinbase"),
       onboardingCompleted = true,
       seeded = true,
     )

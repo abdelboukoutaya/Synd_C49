@@ -54,7 +54,7 @@ service cloud.firestore {
              data.userId == request.auth.uid &&
              data.get('language', 'ar') in ['fr', 'ar'] &&
              data.get('digitsAr', false) is bool &&
-             data.get('themeStyle', 'airtable') in ['airtable', 'wise', 'xai'] &&
+             data.get('themeStyle', 'coinbase') in ['airtable', 'wise', 'xai', 'meta', 'coinbase', 'minimax'] &&
              data.get('themeMode', 'system') in ['system', 'light', 'dark'] &&
              data.get('fontScale', 'normal') in ['small', 'normal', 'large'] &&
              okStr(data.get('syndicatName', 'S'), 100) &&
@@ -133,6 +133,18 @@ service cloud.firestore {
              data.updatedAt is timestamp && data.updatedAt <= request.time;
     }
 
+    function expectedApartmentDocId(num) {
+      return num < 10 ? ('appt_0' + string(num)) : ('appt_' + string(num));
+    }
+
+    function isValidSyndicatCategory(cat) {
+      return cat in [
+        'Historique', 'Ménage', 'Sécurité', 'Gardiennage', 'Électricité', 'Eau',
+        'Plomberie', 'Ascenseur', 'Entretien', 'Réparations', 'Peinture',
+        'Étanchéité', 'Jardin', 'Divers'
+      ];
+    }
+
     function isValidExpenseRecord(data) {
       return data.keys().hasOnly([
                'userId', 'title', 'category', 'amountDh', 'paidAmountDh', 'supplier',
@@ -140,14 +152,32 @@ service cloud.firestore {
              ]) &&
              data.userId == request.auth.uid &&
              data.title is string && data.title.size() >= 1 && data.title.size() <= 150 &&
-             data.category in [
-               'Historique', 'Ménage', 'Électricité', 'Eau',
-               'Entretien', 'Réparations', 'Ascenseur', 'Gardiennage', 'Divers'
-             ] &&
+             isValidSyndicatCategory(data.category) &&
              okRange(data.amountDh, 0, 10000000) &&
-             okRange(data.get('paidAmountDh', -1), -1, 10000000) &&
+             okRange(data.get('paidAmountDh', -1), -1, data.amountDh) &&
              okStr(data.get('supplier', ''), 100) &&
              data.dateLabel is string && data.dateLabel.size() >= 1 && data.dateLabel.size() <= 30 &&
+             okStr(data.notes, 300) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidPaymentRecord(data) {
+      return data.keys().hasOnly([
+               'userId', 'apartmentId', 'apartmentNumber', 'year', 'month',
+               'monthsCovered', 'amountDh', 'paymentDate', 'paymentMethod',
+               'receiptNumber', 'notes', 'createdAt', 'updatedAt'
+             ]) &&
+             data.userId == request.auth.uid &&
+             okRange(data.apartmentNumber, 1, 200) &&
+             data.apartmentId == expectedApartmentDocId(data.apartmentNumber) &&
+             okRange(data.year, 2020, 2100) &&
+             okRange(data.month, 0, 12) &&
+             data.monthsCovered is list && data.monthsCovered.size() <= 12 &&
+             okRange(data.amountDh, 1, 1000000) &&
+             data.paymentDate is string && data.paymentDate.size() >= 1 && data.paymentDate.size() <= 30 &&
+             data.paymentMethod in ['cash', 'transfer', 'check', 'mobile', 'other'] &&
+             okRange(data.receiptNumber, 0, 100000) &&
              okStr(data.notes, 300) &&
              data.createdAt is timestamp && data.createdAt <= request.time &&
              data.updatedAt is timestamp && data.updatedAt <= request.time;
@@ -166,10 +196,7 @@ service cloud.firestore {
              (data.titleAr.size() >= 1 || data.titleFr.size() >= 1) &&
              okStr(data.descriptionAr, 400) &&
              okStr(data.descriptionFr, 400) &&
-             data.category in [
-               'Peinture', 'Sécurité', 'Étanchéité', 'Ascenseur',
-               'Plomberie', 'Électricité', 'Entretien', 'Jardin', 'Divers'
-             ] &&
+             isValidSyndicatCategory(data.category) &&
              okRange(data.priority, 1, 4) &&
              data.status in ['in_progress', 'planned', 'completed'] &&
              okRange(data.targetBudgetDh, 0, 10000000) &&
@@ -184,7 +211,7 @@ service cloud.firestore {
 
     match /users/{userId}/settings/{settingId} {
       allow get: if isOwner(userId) && isValidId(userId) && isValidId(settingId);
-      allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+      allow list: if isOwner(userId);
 
       allow create: if isOwner(userId) &&
                        isValidId(userId) &&
@@ -203,26 +230,48 @@ service cloud.firestore {
 
     match /users/{userId}/apartments/{apartmentId} {
       allow get: if isOwner(userId) && isValidId(userId) && isValidId(apartmentId);
-      allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+      allow list: if isOwner(userId);
 
       allow create: if isOwner(userId) &&
                        isValidId(userId) &&
                        isValidId(apartmentId) &&
-                       isValidApartmentRecord(incoming());
+                       isValidApartmentRecord(incoming()) &&
+                       apartmentId == expectedApartmentDocId(incoming().number);
 
       allow update: if isOwner(userId) &&
                        isValidId(userId) &&
                        isValidId(apartmentId) &&
                        isValidApartmentRecord(incoming()) &&
+                       apartmentId == expectedApartmentDocId(incoming().number) &&
+                       incoming().number == existing().number &&
                        incoming().userId == existing().userId &&
                        incoming().createdAt == existing().createdAt;
 
       allow delete: if isOwner(userId) && isValidId(userId) && isValidId(apartmentId);
     }
 
+    match /users/{userId}/payments/{paymentId} {
+      allow get: if isOwner(userId) && isValidId(userId) && isValidId(paymentId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(paymentId) &&
+                       isValidPaymentRecord(incoming());
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(paymentId) &&
+                       isValidPaymentRecord(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt;
+
+      allow delete: if isOwner(userId) && isValidId(userId) && isValidId(paymentId);
+    }
+
     match /users/{userId}/expenses/{expenseId} {
       allow get: if isOwner(userId) && isValidId(userId) && isValidId(expenseId);
-      allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+      allow list: if isOwner(userId);
 
       allow create: if isOwner(userId) &&
                        isValidId(userId) &&
@@ -241,7 +290,7 @@ service cloud.firestore {
 
     match /users/{userId}/projects/{projectId} {
       allow get: if isOwner(userId) && isValidId(userId) && isValidId(projectId);
-      allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+      allow list: if isOwner(userId);
 
       allow create: if isOwner(userId) &&
                        isValidId(userId) &&

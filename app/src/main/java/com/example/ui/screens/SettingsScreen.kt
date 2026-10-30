@@ -28,14 +28,18 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -80,6 +84,8 @@ import com.example.ui.i18n.LocalStrings
 import com.example.ui.i18n.localizeDigits
 import com.example.ui.theme.LocalSyndicatTokens
 import com.example.ui.theme.cotisationColorForAmount
+import com.example.ui.theme.resolveVisualThemeFamily
+import com.example.ui.theme.sanitizeThemeStyle
 import com.example.ui.viewmodel.SyndicatDashboardData
 import com.example.util.BackupManager
 import com.example.util.ParsedOwnerRow
@@ -106,6 +112,9 @@ fun SettingsScreen(
   onPinUpdated: (String) -> Unit,
   onSignOut: () -> Unit,
   onMessage: (String) -> Unit,
+  isCloudSynced: Boolean = !userEmail.isNullOrBlank(),
+  onConnectGoogleSync: () -> Unit = {},
+  onPushLocalToCloud: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val context = LocalContext.current
@@ -248,7 +257,7 @@ fun SettingsScreen(
       whatsappTemplate = whatsappTemplate.trim(),
       minReminderAmountDh = (minReminderText.toLongOrNull() ?: 20L).coerceIn(0L, 100_000L),
       relanceHeaderNote = relanceHeaderNote.trim().ifBlank { "—" },
-      themeStyle = "airtable",
+      themeStyle = sanitizeThemeStyle(cfg.themeStyle, "coinbase"),
       onboardingCompleted = true,
     )
     MonthColumn.entries.forEach { col ->
@@ -313,6 +322,94 @@ fun SettingsScreen(
       }
     }
 
+    // 1b. Local Storage & Optional Cloud Synchronization Card
+    item {
+      AirtableSoftCard(
+        modifier = Modifier
+          .fillMaxWidth()
+          .testTag("settings_sync_card"),
+        padding = 24.dp,
+      ) {
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+          Icon(
+            imageVector = if (isCloudSynced) Icons.Default.CloudDone else Icons.Default.PhoneAndroid,
+            contentDescription = strings.syncSectionTitle,
+            tint = if (isCloudSynced) tokens.statusPaidText else tokens.linkColor,
+          )
+          Text(
+            text = strings.syncSectionTitle,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = tokens.inkDeep,
+            modifier = Modifier.weight(1f),
+          )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Surface(
+          shape = RoundedCornerShape(tokens.badgeRadiusDp.dp),
+          color = tokens.primaryTint,
+          tonalElevation = 0.dp,
+          shadowElevation = 0.dp,
+        ) {
+          Text(
+            text = if (isCloudSynced) strings.syncCloudBadge else strings.syncLocalBadge,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = tokens.linkColor,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+          )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+          text = if (isCloudSynced) strings.syncCloudDesc else strings.syncLocalDesc,
+          style = MaterialTheme.typography.bodySmall,
+          color = tokens.body,
+        )
+        if (isCloudSynced && !userEmail.isNullOrBlank()) {
+          Spacer(modifier = Modifier.height(6.dp))
+          Text(
+            text = strings.settingsConnectedAs(userEmail),
+            style = MaterialTheme.typography.labelMedium,
+            color = tokens.inkDeep,
+          )
+        }
+        Spacer(modifier = Modifier.height(14.dp))
+        if (!isCloudSynced) {
+          MetaCobaltBuyButton(
+            text = strings.syncConnectGoogleBtn,
+            icon = Icons.Default.CloudSync,
+            onClick = onConnectGoogleSync,
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("settings_connect_google_btn"),
+          )
+        } else {
+          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SageSecondaryButton(
+              text = strings.syncPushLocalBtn,
+              icon = Icons.Default.CloudSync,
+              compact = true,
+              onClick = onPushLocalToCloud,
+              modifier = Modifier
+                .fillMaxWidth()
+                .testTag("settings_push_local_btn"),
+            )
+            InkTertiaryButton(
+              text = strings.signOutToLocal,
+              icon = Icons.AutoMirrored.Filled.Logout,
+              onClick = onSignOut,
+              modifier = Modifier
+                .fillMaxWidth()
+                .testTag("settings_disconnect_cloud_btn"),
+            )
+          }
+        }
+      }
+    }
+
     // 2. Language, Digits (0-9 / ٠-٩), Style « الأبيض الهادئ », Mode (تلقائي / فاتح / داكن) & Font Scale
     item {
       FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = 24.dp) {
@@ -367,7 +464,8 @@ fun SettingsScreen(
         HorizontalDivider(color = tokens.divider)
         Spacer(modifier = Modifier.height(12.dp))
 
-        // §0 : الإعدادات ← المظهر ← النمط : الأبيض الهادئ (airtable)
+        // Sélecteur de style : Meta, Coinbase ou MiniMax (stocké en base dans themeStyle)
+        val activeThemeFamily = resolveVisualThemeFamily(cfg.themeStyle)
         Text(
           text = strings.settingsStyleLabel,
           style = MaterialTheme.typography.labelLarge,
@@ -375,11 +473,28 @@ fun SettingsScreen(
           color = tokens.ink,
         )
         Spacer(modifier = Modifier.height(6.dp))
-        SyndicatFilterChip(
-          selected = true,
-          onClick = { onUpdateDisplayPrefs(null, "airtable", null, null) },
-          label = strings.settingsStyleAirtable,
-          modifier = Modifier.testTag("theme_style_airtable"),
+        FlowRow(
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          listOf(
+            "meta" to strings.themeChoiceMeta,
+            "coinbase" to strings.themeChoiceCoinbase,
+            "minimax" to strings.themeChoiceMinimax,
+          ).forEach { (styleId, label) ->
+            SyndicatFilterChip(
+              selected = activeThemeFamily == styleId,
+              onClick = { onUpdateDisplayPrefs(null, styleId, null, null) },
+              label = label,
+              modifier = Modifier.testTag("theme_style_$styleId"),
+            )
+          }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+          text = strings.themeChoiceSubtitle(activeThemeFamily),
+          style = MaterialTheme.typography.bodySmall,
+          color = tokens.body,
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -403,7 +518,7 @@ fun SettingsScreen(
           ).forEach { (mode, label) ->
             SyndicatFilterChip(
               selected = cfg.themeMode == mode,
-              onClick = { onUpdateDisplayPrefs(null, "airtable", mode, null) },
+              onClick = { onUpdateDisplayPrefs(null, null, mode, null) },
               label = label,
               modifier = Modifier.testTag("theme_mode_$mode"),
             )
@@ -1131,22 +1246,24 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxWidth().testTag("reset_c49_btn"),
           )
 
-          HorizontalDivider(color = tokens.divider)
+          if (isCloudSynced) {
+            HorizontalDivider(color = tokens.divider)
 
-          if (!userEmail.isNullOrBlank()) {
-            Text(
-              text = strings.settingsConnectedAs(userEmail),
-              style = MaterialTheme.typography.bodySmall,
-              color = tokens.body,
+            if (!userEmail.isNullOrBlank()) {
+              Text(
+                text = strings.settingsConnectedAs(userEmail),
+                style = MaterialTheme.typography.bodySmall,
+                color = tokens.body,
+              )
+            }
+
+            InkTertiaryButton(
+              text = strings.signOutToLocal,
+              icon = Icons.AutoMirrored.Filled.Logout,
+              onClick = onSignOut,
+              modifier = Modifier.fillMaxWidth().testTag("sign_out_button"),
             )
           }
-
-          InkTertiaryButton(
-            text = strings.signOut,
-            icon = Icons.AutoMirrored.Filled.Logout,
-            onClick = onSignOut,
-            modifier = Modifier.fillMaxWidth().testTag("sign_out_button"),
-          )
         }
       }
     }
