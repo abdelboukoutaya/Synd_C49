@@ -1,9 +1,14 @@
 <resources>
-    <string name="app_name">Syndicat C49</string>
+    <string name="app_name">SYNDICAT</string>
+    <string name="app_editor_name">DYNIC</string>
+    <string name="app_editor_label">الناشر: DYNIC</string>
+    <string name="app_version_label">الإصدار 2.0</string>
+    <string name="app_edition_year_label">سنة الإصدار: 2026</string>
+    <string name="app_version_edition_full">الناشر DYNIC · الإصدار 2.0 · طبعة 2026</string>
 
     <!-- Auth Screen -->
-    <string name="auth_badge">إدارة السانديك · عربي RTL</string>
-    <string name="auth_title">إدارة السانديك</string>
+    <string name="auth_badge">إدارة السانديك · الناشر DYNIC</string>
+    <string name="auth_title">SYNDICAT · إدارة السانديك</string>
     <string name="auth_subtitle">تدبير متكامل للمساهمات الشهرية، المتأخرات، المصاريف، الصندوق وتذكيرات الواتساب مع ملصقات PDF وصور جاهزة.</string>
     <string name="auth_sign_in_google">الدخول بواسطة Google</string>
     <string name="auth_security_note">حفظ تلقائي للبيانات ونسخة احتياطية JSON.</string>
@@ -19,4 +24,8 @@
     <string name="theme_style_wise">الأخضر الهادئ</string>
     <string name="export_variant_print">للطباعة</string>
     <string name="export_variant_screen">للشاشة</string>
+    <string name="export_mode_color">ألوان</string>
+    <string name="export_mode_monochrome">أبيض وأسود (N&amp;B)</string>
+    <string name="export_card_projects_title">وضعية ومشاريع العمارة</string>
+    <string name="export_card_projects_sub">تقرير رسمي للمشاريع قيد الإنجاز والمستقبلية والمنجزة مع الميزانيات وتغطية الصندوق.</string>
 </resources>

@@ -14,12 +14,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpRect
@@ -146,7 +148,13 @@ class ExampleRobolectricTest {
   fun readStringFromContext() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val appName = context.getString(R.string.app_name)
-    assertEquals("Syndicat C49", appName)
+    assertEquals("SYNDICAT", appName)
+    assertEquals("2.0", BuildConfig.VERSION_NAME)
+    assertEquals(2, BuildConfig.VERSION_CODE)
+    assertEquals("DYNIC", context.getString(R.string.app_editor_name))
+    assertNotNull("Custom SYNDICAT icon drawable must exist", context.getDrawable(R.drawable.img_syndicat_icon))
+    assertNotNull("Adaptive launcher icon must load", context.getDrawable(R.mipmap.ic_launcher))
+    assertNotNull("Round launcher icon must load", context.getDrawable(R.mipmap.ic_launcher_round))
   }
 
   @Test
@@ -1357,4 +1365,448 @@ class ExampleRobolectricTest {
     assertEquals(1, submittedCount)
     assertEquals("Sécurité", submittedCategory)
   }
+
+  @Test
+  @Config(sdk = [36], qualifiers = "w412dp-h1000dp")
+  fun appBrandingPublisherDynicVersion20Edition2026RendersCleanly() {
+    val frStrings = stringsForLanguage("fr")
+    val sampleData = SyndicatDashboardData(
+      config = SyndicatConfig(
+        language = "fr",
+        residenceName = "Résidence Atlas",
+        currency = "DH",
+        onboardingCompleted = true,
+        seeded = true,
+      ),
+      apartments = listOf(ApartmentRecord(id = "appt_01", number = 1L, floor = "RDC", ownerName = "Nadia")),
+      expenses = emptyList(),
+      projects = emptyList(),
+    )
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(
+        LocalStrings provides frStrings,
+        LocalLayoutDirection provides LayoutDirection.Ltr,
+      ) {
+        AppTheme(darkTheme = false, isArabic = false, themeStyle = "coinbase") {
+          SettingsScreen(
+            data = sampleData,
+            currentUserId = LOCAL_DEVICE_USER_ID,
+            userEmail = null,
+            currentLanguage = AppLanguage.FR,
+            isSaving = false,
+            onSelectLanguage = {},
+            onUpdateDisplayPrefs = { _, _, _, _ -> },
+            onOpenWizard = {},
+            onSaveConfig = { _, _ -> },
+            onRestoreBackup = {},
+            onImportCsvOwners = {},
+            onResetC49 = {},
+            onBackupExported = {},
+            onPinUpdated = {},
+            onSignOut = {},
+            onMessage = {},
+          )
+        }
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // Top brand bar in SettingsScreen immediately visible
+    composeTestRule.onNodeWithTag("settings_app_brand_bar").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("settings_app_brand_bar_version_pill").assertIsDisplayed()
+
+    // Scroll LazyColumn to the full About / Edition card at the bottom of SettingsScreen
+    composeTestRule.onNodeWithTag("settings_screen")
+      .performScrollToNode(hasTestTag("settings_about_card"))
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("settings_about_card").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("about_editor_badge").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("about_version_badge").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("about_edition_year_badge").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Version 2.0").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Année d'édition : 2026").assertIsDisplayed()
+  }
+
+  @Test
+  @Config(sdk = [36], qualifiers = "w412dp-h1000dp")
+  fun testExportMonochromeAndProjectsReport() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val frStrings = stringsForLanguage("fr")
+    val sampleData = SyndicatDashboardData(
+      config = SyndicatConfig(buildingTitle = "Résidence Test 2026", language = "fr"),
+      apartments = listOf(
+        ApartmentRecord(id = "appt_01", number = 1L, floor = "RDC", ownerName = "Hamid", jan = 50L, feb = 50L),
+        ApartmentRecord(id = "appt_02", number = 2L, floor = "1er", ownerName = "Aziz", jan = 0L),
+      ),
+      expenses = listOf(
+        ExpenseRecord(id = "exp_01", title = "Éclairage", category = "Électricité", amountDh = 200L),
+      ),
+      projects = listOf(
+        ProjectRecord(id = "proj_01", titleFr = "Peinture Façade", category = "Peinture", targetBudgetDh = 8000L, progressPercent = 50L, status = "in_progress"),
+      ),
+    )
+
+    // 1. Verify Official Poster Bitmap can be generated with monochromeMode = true
+    val cotMonoOpts = CotisationExportOptions(
+      showNames = true,
+      untilCutoffOnly = false,
+      inkSaver = false,
+      monochromeMode = true,
+    )
+    val monoPosterBitmap = PdfPosterExporter.generateOfficialPosterBitmap(context, sampleData, cotMonoOpts)
+    assertNotNull(monoPosterBitmap)
+    assertTrue(monoPosterBitmap.width > 0)
+    assertTrue(monoPosterBitmap.height > 0)
+
+    // 2. Verify Projects Report Bitmap generation in both color and monochrome modes
+    val projColorOpts = com.example.util.ProjectsExportOptions(inkSaver = false, monochromeMode = false)
+    val projColorBitmap = PdfPosterExporter.generateProjectsReportBitmap(context, sampleData, projColorOpts)
+    assertNotNull(projColorBitmap)
+    assertTrue(projColorBitmap.width > 0)
+    assertTrue(projColorBitmap.height > 0)
+
+    val projMonoOpts = com.example.util.ProjectsExportOptions(inkSaver = false, monochromeMode = true)
+    val projMonoBitmap = PdfPosterExporter.generateProjectsReportBitmap(context, sampleData, projMonoOpts)
+    assertNotNull(projMonoBitmap)
+    assertTrue(projMonoBitmap.width > 0)
+    assertTrue(projMonoBitmap.height > 0)
+
+    // 3. Verify PosterScreen displays Card 4 and the monochrome options
+    composeTestRule.setContent {
+      CompositionLocalProvider(
+        LocalStrings provides frStrings,
+        LocalLayoutDirection provides LayoutDirection.Ltr,
+      ) {
+        AppTheme(darkTheme = false, isArabic = false, themeStyle = "coinbase") {
+          com.example.ui.screens.PosterScreen(
+            data = sampleData,
+            onExportError = {},
+          )
+        }
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // Card 1 monochrome checkbox exists
+    composeTestRule.onNodeWithTag("cotisation_monochrome_checkbox").assertIsDisplayed()
+
+    // Scroll to Card 4
+    composeTestRule.onNodeWithTag("poster_screen")
+      .performScrollToNode(hasTestTag("export_card_projects"))
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("export_card_projects").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("projects_monochrome_checkbox").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("export_projects_pdf").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("export_projects_png").assertIsDisplayed()
+  }
+
+  @Test
+  @Config(sdk = [36], qualifiers = "w412dp-h1000dp")
+  fun uiDesignUpgrades_projectsTabsPosterZoomAndLargeFontComfortWorkCleanly() {
+    val frStrings = stringsForLanguage("fr")
+    val sampleData = SyndicatDashboardData(
+      config = SyndicatConfig(
+        buildingTitle = "Résidence C49",
+        language = "fr",
+        fontScale = "large",
+        year = 2026L,
+      ),
+      apartments = listOf(
+        ApartmentRecord(id = "appt_01", number = 1L, floor = "RDC", ownerName = "Hamid", jan = 50L),
+      ),
+      expenses = listOf(
+        ExpenseRecord(id = "exp_unpaid", title = "Caméra", category = "Sécurité", amountDh = 500L, paidAmountDh = 200L),
+      ),
+      projects = listOf(
+        ProjectRecord(id = "proj_01", titleFr = "Peinture", category = "Peinture", targetBudgetDh = 4000L, progressPercent = 40L, status = "in_progress"),
+      ),
+    )
+
+    val activePage = androidx.compose.runtime.mutableStateOf("projects")
+    composeTestRule.setContent {
+      CompositionLocalProvider(
+        LocalStrings provides frStrings,
+        LocalLayoutDirection provides LayoutDirection.Ltr,
+      ) {
+        AppTheme(darkTheme = false, isArabic = false, fontScale = "large", themeStyle = "coinbase") {
+          when (activePage.value) {
+            "projects" -> com.example.ui.screens.ProjectsScreen(
+              data = sampleData,
+              onAddProject = {},
+              onUpdateProject = { _, _ -> },
+              onDeleteProject = {},
+              onLoadStarterProjects = {},
+            )
+            "poster" -> com.example.ui.screens.PosterScreen(
+              data = sampleData,
+              onExportError = {},
+            )
+            "expenses" -> com.example.ui.screens.ExpensesScreen(
+              data = sampleData,
+              onAddExpense = { _, _, _, _, _, _, _ -> },
+              onUpdateExpense = {},
+              onDeleteExpense = {},
+              onExportError = {},
+              initialUnpaidOnly = true,
+            )
+            else -> com.example.ui.screens.SettingsScreen(
+              data = sampleData,
+              currentUserId = "local_device",
+              userEmail = null,
+              currentLanguage = AppLanguage.FR,
+              isSaving = false,
+              onSelectLanguage = {},
+              onUpdateDisplayPrefs = { _, _, _, _ -> },
+              onOpenWizard = {},
+              onSaveConfig = { _, _ -> },
+              onRestoreBackup = {},
+              onImportCsvOwners = {},
+              onResetC49 = {},
+              onBackupExported = {},
+              onPinUpdated = {},
+              onSignOut = {},
+              onMessage = {},
+            )
+          }
+        }
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // 1. ProjectsScreen segmented Works | Appels de fonds tabs
+    composeTestRule.onNodeWithTag("projects_tab_works").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("projects_tab_calls").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("special_calls_section").assertIsDisplayed()
+
+    // 2. PosterScreen Card 1 Aperçu A4 full-screen zoom dialog opens & closes
+    activePage.value = "poster"
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("poster_screen").performScrollToNode(hasTestTag("preview_poster_1"))
+    composeTestRule.onNodeWithTag("preview_poster_1").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("poster_preview_zoom_dialog").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("poster_preview_close_btn").performClick()
+    composeTestRule.waitForIdle()
+
+    // 3. ExpensesScreen initialUnpaidOnly chip renders cleanly
+    activePage.value = "expenses"
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("expense_filter_unpaid").assertIsDisplayed()
+
+    // 4. SettingsScreen large font comfort hint renders cleanly
+    activePage.value = "settings"
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("settings_screen").performScrollToNode(hasTestTag("font_scale_large_hint"))
+    composeTestRule.onNodeWithTag("font_scale_large_hint").assertIsDisplayed()
+  }
+
+  @Test
+  @Config(sdk = [36], qualifiers = "w412dp-h1000dp")
+  fun uiUxV22_privacySearchDonutSettleQuorumAndVisualThemesWorkCleanly() {
+    val frStrings = stringsForLanguage("fr")
+    val sampleData = SyndicatDashboardData(
+      config = SyndicatConfig(
+        buildingTitle = "Résidence C49",
+        language = "fr",
+        year = 2026L,
+      ),
+      apartments = listOf(
+        ApartmentRecord(id = "appt_01", number = 1L, floor = "RDC", ownerName = "Hamid", jan = 50L, feb = 0L),
+        ApartmentRecord(id = "appt_02", number = 2L, floor = "RDC", ownerName = "Aziz", jan = 50L, feb = 50L),
+      ),
+      expenses = listOf(
+        ExpenseRecord(id = "exp_unpaid", title = "Caméra Entrée", category = "Sécurité", amountDh = 500L, paidAmountDh = 200L),
+      ),
+      projects = listOf(
+        ProjectRecord(id = "proj_01", titleFr = "Peinture Façade", category = "Peinture", targetBudgetDh = 4000L, progressPercent = 40L, status = "in_progress"),
+      ),
+    )
+
+    val screenState = androidx.compose.runtime.mutableStateOf("dashboard")
+    val privacyState = androidx.compose.runtime.mutableStateOf(false)
+    var settledExpense: ExpenseRecord? = null
+    var lastSearchNavigatedTo: String? = null
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(
+        LocalStrings provides frStrings,
+        LocalLayoutDirection provides LayoutDirection.Ltr,
+        com.example.ui.components.LocalPrivacyMode provides privacyState.value,
+      ) {
+        AppTheme(darkTheme = false, isArabic = false, themeStyle = "coinbase") {
+          when (screenState.value) {
+            "dashboard" -> com.example.ui.screens.DashboardScreen(
+              data = sampleData,
+              isBackupOverdue = false,
+              onTriggerBackupJson = {},
+              onOpenWizard = {},
+              onMarkReminded = { _, _, _ -> },
+              onNavigateToPosters = {},
+              onNavigateToLateApartments = {},
+              isPrivacyMode = privacyState.value,
+              onTogglePrivacy = { privacyState.value = !privacyState.value },
+              onSearchSelectApartment = { apt -> lastSearchNavigatedTo = "apt_${apt.number}" },
+              onSearchSelectProject = { _ -> lastSearchNavigatedTo = "projects" },
+            )
+            "expenses" -> com.example.ui.screens.ExpensesScreen(
+              data = sampleData,
+              onAddExpense = { _, _, _, _, _, _, _ -> },
+              onUpdateExpense = { settledExpense = it },
+              onDeleteExpense = {},
+              onExportError = {},
+            )
+            "projects" -> com.example.ui.screens.ProjectsScreen(
+              data = sampleData,
+              onAddProject = {},
+              onUpdateProject = { _, _ -> },
+              onDeleteProject = {},
+              onLoadStarterProjects = {},
+            )
+            else -> com.example.ui.screens.ApartmentsScreen(
+              data = sampleData,
+              searchQuery = "",
+              selectedFloor = null,
+              statusFilter = com.example.ui.viewmodel.StatusFilter.ALL,
+              onSearchQueryChange = {},
+              onSelectFloor = {},
+              onSelectStatusFilter = {},
+              onSaveApartment = { _, _ -> },
+              onMarkReminded = { _, _, _ -> },
+              onRequestReceiptNo = { 1L },
+              onExportError = {},
+            )
+          }
+        }
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // 0. Home/Dashboard top bar shows search & privacy without app name or version header
+    composeTestRule.onNodeWithTag("dashboard_app_brand_bar_version_pill").assertDoesNotExist()
+    composeTestRule.onNodeWithText(frStrings.appBrandName).assertDoesNotExist()
+
+    // 1. Privacy toggle masks sensitive values in Dashboard, then restores them
+    composeTestRule.onNodeWithTag("dashboard_app_brand_bar_privacy_btn").performClick()
+    composeTestRule.waitForIdle()
+    assertTrue(privacyState.value)
+    composeTestRule.onNodeWithTag("cash_now_value").assertTextEquals("••••••")
+    composeTestRule.onNodeWithTag("dashboard_app_brand_bar_privacy_btn").performClick()
+    composeTestRule.waitForIdle()
+    assertFalse(privacyState.value)
+
+    // 2. Global search dialog opens, filters items, and navigates on click
+    composeTestRule.onNodeWithTag("dashboard_app_brand_bar_search_btn").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("global_search_dialog").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("global_search_input").performTextReplacement("Hamid")
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("gs_apt_1").performClick()
+    composeTestRule.waitForIdle()
+    assertEquals("apt_1", lastSearchNavigatedTo)
+
+    // 3. ExpensesScreen displays interactive donut, sort chips, and 1-tap settle button
+    screenState.value = "expenses"
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("expense_donut_chart").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("expenses_filter_row").performScrollToNode(hasTestTag("exp_sort_unpaid"))
+    composeTestRule.onNodeWithTag("exp_sort_unpaid").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("expenses_list").performScrollToNode(hasTestTag("exp_settle_btn_exp_unpaid"))
+    composeTestRule.onNodeWithTag("exp_settle_btn_exp_unpaid").performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(500L, settledExpense?.paidAmountDh)
+
+    // 4. ProjectsScreen opens AG Quorum & Vote dialog, counts votes cleanly, and resets
+    screenState.value = "projects"
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("ag_quorum_btn").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("ag_quorum_dialog").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("quorum_apt_1").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("ag_quorum_reset_btn").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("ag_quorum_close_btn").performClick()
+    composeTestRule.waitForIdle()
+
+    // 5. ApartmentsScreen exposes multi-criteria sort chips
+    screenState.value = "apartments"
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("apartments_filter_row").performScrollToNode(hasTestTag("appt_sort_default"))
+    composeTestRule.onNodeWithTag("appt_sort_default").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("apartments_filter_row").performScrollToNode(hasTestTag("appt_sort_late"))
+    composeTestRule.onNodeWithTag("appt_sort_late").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("apartments_filter_row").performScrollToNode(hasTestTag("appt_sort_paid"))
+    composeTestRule.onNodeWithTag("appt_sort_paid").assertIsDisplayed()
+  }
+
+  @Test
+  @Config(sdk = [36], qualifiers = "w360dp-h800dp")
+  fun floatingBottomNavDockAndNavigationRail_renderSleekCompactTargetsAndSwitchCleanly() {
+    val frStrings = stringsForLanguage("fr")
+    val activeDest = androidx.compose.runtime.mutableStateOf(AppDestination.DASHBOARD)
+    val showRail = androidx.compose.runtime.mutableStateOf(false)
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(
+        LocalStrings provides frStrings,
+        LocalLayoutDirection provides LayoutDirection.Ltr,
+      ) {
+        AppTheme(darkTheme = false, isArabic = false, themeStyle = "meta") {
+          val items = AppDestination.entries.map { dest ->
+            com.example.ui.components.SyndicatNavItemSpec(
+              route = dest.route,
+              label = dest.label(frStrings),
+              filledIcon = dest.filledIcon,
+              outlinedIcon = dest.outlinedIcon,
+              badgeCount = when (dest) {
+                AppDestination.APARTMENTS -> 5
+                AppDestination.EXPENSES -> 2
+                else -> 0
+              },
+              isSelected = activeDest.value == dest,
+              onClick = { activeDest.value = dest },
+            )
+          }
+          if (showRail.value) {
+            com.example.ui.components.SyndicatNavigationRailPane(items = items)
+          } else {
+            com.example.ui.components.SyndicatFloatingBottomDock(items = items)
+          }
+        }
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // Dock & all 6 items render icon-only (no text labels) within compact 360dp width with >= 48dp accessible touch targets
+    composeTestRule.onNodeWithTag("syndicat_bottom_nav_dock").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Accueil").assertDoesNotExist()
+    composeTestRule.onNodeWithText("Cotis.").assertDoesNotExist()
+    composeTestRule.onNodeWithText("Projets").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("nav_badge_apartments", useUnmergedTree = true).assertIsDisplayed()
+    composeTestRule.onNodeWithTag("nav_badge_expenses", useUnmergedTree = true).assertIsDisplayed()
+    AppDestination.entries.forEach { dest ->
+      val bounds = composeTestRule.onNodeWithTag("nav_${dest.route}")
+        .assertIsDisplayed()
+        .getUnclippedBoundsInRoot()
+      assertTrue("Item ${dest.route} width should be >= 48dp", bounds.width >= 48.dp)
+      assertTrue("Item ${dest.route} height should be >= 48dp", bounds.height >= 48.dp)
+    }
+
+    composeTestRule.onNodeWithTag("nav_projects").performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(AppDestination.PROJECTS, activeDest.value)
+
+    // Switch to tablet navigation rail mode cleanly
+    showRail.value = true
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("navigation_rail").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("nav_settings").performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(AppDestination.SETTINGS, activeDest.value)
+  }
 }
+

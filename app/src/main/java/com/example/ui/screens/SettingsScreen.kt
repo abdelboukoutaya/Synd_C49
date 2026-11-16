@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import android.Manifest
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -31,12 +33,16 @@ import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.TableView
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -63,6 +69,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.data.local.AuditLogEntry
+import com.example.data.local.SyndicatExtrasStore
 import com.example.data.model.MonthColumn
 import com.example.data.model.SyndicatConfig
 import com.example.data.model.buildFloorLabels
@@ -76,8 +84,11 @@ import com.example.ui.components.PinSetupDialog
 import com.example.ui.components.ResidenceHeroBanner
 import com.example.ui.components.RoundIconCircleButton
 import com.example.ui.components.SageSecondaryButton
+import com.example.ui.components.SyndicatAboutEditionCard
 import com.example.ui.components.SyndicatDialog
+import com.example.ui.components.SyndicatEmptyStateCard
 import com.example.ui.components.SyndicatFilterChip
+import com.example.ui.components.SyndicatTopBrandBar
 import com.example.ui.i18n.AppLanguage
 import com.example.ui.i18n.LanguagePreferences
 import com.example.ui.i18n.LocalStrings
@@ -88,6 +99,8 @@ import com.example.ui.theme.resolveVisualThemeFamily
 import com.example.ui.theme.sanitizeThemeStyle
 import com.example.ui.viewmodel.SyndicatDashboardData
 import com.example.util.BackupManager
+import com.example.util.BiometricHelper
+import com.example.util.MonthlyReminderScheduler
 import com.example.util.ParsedOwnerRow
 import com.example.util.ParsedSyndicatBackup
 import com.example.util.WhatsAppHelper
@@ -115,6 +128,7 @@ fun SettingsScreen(
   isCloudSynced: Boolean = !userEmail.isNullOrBlank(),
   onConnectGoogleSync: () -> Unit = {},
   onPushLocalToCloud: () -> Unit = {},
+  auditLogs: List<AuditLogEntry> = emptyList(),
   modifier: Modifier = Modifier,
 ) {
   val context = LocalContext.current
@@ -176,10 +190,33 @@ fun SettingsScreen(
   // Dialogs & Non-blocking 2-tap confirmations
   var showPinDialog by remember { mutableStateOf(false) }
   var hasPin by remember { mutableStateOf(LanguagePreferences.getPinCode(context).isNotBlank()) }
+  val bioAvailable = remember { BiometricHelper.isBiometricAvailable(context) }
+  var biometricEnabled by remember { mutableStateOf(LanguagePreferences.isBiometricUnlockEnabled(context)) }
+  var reminderEnabled by remember { mutableStateOf(LanguagePreferences.isMonthlyReminderEnabled(context)) }
+  var reminderDay by remember { mutableIntStateOf(LanguagePreferences.getMonthlyReminderDay(context)) }
+  var pendingTestReminder by remember { mutableStateOf(false) }
+  var showAuditDialog by remember { mutableStateOf(false) }
   var showCsvPasteDialog by remember { mutableStateOf(false) }
   var csvPasteText by remember { mutableStateOf("") }
   var armBlankReset by remember { mutableStateOf(false) }
   var armC49Reset by remember { mutableStateOf(false) }
+
+  val notifPermissionLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.RequestPermission(),
+  ) { granted ->
+    if (granted) {
+      if (pendingTestReminder) {
+        pendingTestReminder = false
+        MonthlyReminderScheduler.showReminderNotificationNow(context, data.lateApartments.size)
+      } else {
+        reminderEnabled = true
+        LanguagePreferences.setMonthlyReminderEnabled(context, true)
+        MonthlyReminderScheduler.scheduleMonthlyReminder(context, reminderDay, true)
+      }
+    } else {
+      pendingTestReminder = false
+    }
+  }
 
   // JSON Backup Restore File Picker (.json)
   val jsonImportLauncher = rememberLauncherForActivityResult(
@@ -275,21 +312,24 @@ fun SettingsScreen(
     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 36.dp),
     verticalArrangement = Arrangement.spacedBy(12.dp),
   ) {
-    // Title
+    // Title + Application Brand Bar (SYNDICAT · Éditeur DYNIC · Version 2.0 · 2026)
     item {
-      Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-          text = strings.settingsPageTitle,
-          style = MaterialTheme.typography.headlineLarge,
-          fontWeight = FontWeight.Medium,
-          color = tokens.inkDeep,
-        )
-        Text(
-          text = strings.settingsPageSubtitle,
-          style = MaterialTheme.typography.headlineMedium,
-          fontWeight = FontWeight.Light,
-          color = tokens.body,
-        )
+      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SyndicatTopBrandBar(tag = "settings_app_brand_bar")
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          Text(
+            text = strings.settingsPageTitle,
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Medium,
+            color = tokens.inkDeep,
+          )
+          Text(
+            text = strings.settingsPageSubtitle,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Light,
+            color = tokens.body,
+          )
+        }
       }
     }
 
@@ -472,25 +512,46 @@ fun SettingsScreen(
           fontWeight = FontWeight.Medium,
           color = tokens.ink,
         )
-        Spacer(modifier = Modifier.height(6.dp))
-        FlowRow(
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+          modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(8.dp),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-          listOf(
-            "meta" to strings.themeChoiceMeta,
-            "coinbase" to strings.themeChoiceCoinbase,
-            "minimax" to strings.themeChoiceMinimax,
-          ).forEach { (styleId, label) ->
-            SyndicatFilterChip(
-              selected = activeThemeFamily == styleId,
-              onClick = { onUpdateDisplayPrefs(null, styleId, null, null) },
-              label = label,
-              modifier = Modifier.testTag("theme_style_$styleId"),
-            )
-          }
+          com.example.ui.components.ThemePreviewMiniCard(
+            styleId = "meta",
+            label = strings.themeChoiceMeta,
+            selected = activeThemeFamily == "meta",
+            accentColor = Color(0xFF0064E0),
+            surfacePreviewColor = Color(0xFFFFFFFF),
+            headerBgColor = Color(0xFF1C2B33),
+            cornerRadiusDp = 12,
+            onClick = { onUpdateDisplayPrefs(null, "meta", null, null) },
+            modifier = Modifier.weight(1f),
+          )
+          com.example.ui.components.ThemePreviewMiniCard(
+            styleId = "coinbase",
+            label = strings.themeChoiceCoinbase,
+            selected = activeThemeFamily == "coinbase",
+            accentColor = Color(0xFF0052FF),
+            surfacePreviewColor = Color(0xFFF5F8FF),
+            headerBgColor = Color(0xFF0A0B0D),
+            cornerRadiusDp = 10,
+            onClick = { onUpdateDisplayPrefs(null, "coinbase", null, null) },
+            modifier = Modifier.weight(1f),
+          )
+          com.example.ui.components.ThemePreviewMiniCard(
+            styleId = "minimax",
+            label = strings.themeChoiceMinimax,
+            selected = activeThemeFamily == "minimax",
+            accentColor = Color(0xFF7C3AED),
+            surfacePreviewColor = Color(0xFF1A1826),
+            headerBgColor = Color(0xFFEDE9FE),
+            cornerRadiusDp = 14,
+            onClick = { onUpdateDisplayPrefs(null, "minimax", null, null) },
+            modifier = Modifier.weight(1f),
+          )
         }
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
           text = strings.themeChoiceSubtitle(activeThemeFamily),
           style = MaterialTheme.typography.bodySmall,
@@ -547,6 +608,25 @@ fun SettingsScreen(
               onClick = { onUpdateDisplayPrefs(null, null, null, scale) },
               label = label,
               modifier = Modifier.testTag("font_scale_$scale"),
+            )
+          }
+        }
+        if (cfg.fontScale == "large") {
+          Spacer(modifier = Modifier.height(8.dp))
+          Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = tokens.primaryTint,
+            border = BorderStroke(tokens.borderStrokeDp.dp, tokens.linkColor.copy(alpha = 0.25f)),
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("font_scale_large_hint"),
+          ) {
+            Text(
+              text = strings.settingsFontLargeHint,
+              style = MaterialTheme.typography.bodySmall,
+              fontWeight = FontWeight.Medium,
+              color = tokens.inkDeep,
+              modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             )
           }
         }
@@ -1142,7 +1222,13 @@ fun SettingsScreen(
             text = strings.settingsExportJsonBtn,
             icon = Icons.Default.Backup,
             onClick = {
-              BackupManager.exportAndShareJsonBackup(context, data) { err -> onMessage(err) }
+              val specialCalls = SyndicatExtrasStore.getInstance(context).specialCalls.value
+              BackupManager.exportAndShareJsonBackup(
+                context = context,
+                data = data,
+                onError = { err -> onMessage(err) },
+                specialCalls = specialCalls,
+              )
               onBackupExported()
             },
             modifier = Modifier.fillMaxWidth().testTag("export_json_backup_btn"),
@@ -1156,6 +1242,44 @@ fun SettingsScreen(
             },
             modifier = Modifier.fillMaxWidth().testTag("import_json_backup_btn"),
           )
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            SageSecondaryButton(
+              text = strings.exportPaymentsCsvBtn,
+              icon = Icons.Default.TableView,
+              compact = true,
+              onClick = {
+                val csv = BackupManager.generatePaymentsCsv(data)
+                BackupManager.shareCsvFile(
+                  context = context,
+                  filePrefix = "payments_${cfg.year}",
+                  csvContent = csv,
+                  chooserTitle = strings.exportPaymentsCsvBtn,
+                  onError = { err -> onMessage(err) },
+                )
+              },
+              modifier = Modifier.weight(1f).testTag("settings_export_payments_csv_btn"),
+            )
+            SageSecondaryButton(
+              text = strings.exportExpensesCsvBtn,
+              icon = Icons.Default.TableView,
+              compact = true,
+              onClick = {
+                val csv = BackupManager.generateExpensesCsv(data)
+                BackupManager.shareCsvFile(
+                  context = context,
+                  filePrefix = "expenses_${cfg.year}",
+                  csvContent = csv,
+                  chooserTitle = strings.exportExpensesCsvBtn,
+                  onError = { err -> onMessage(err) },
+                )
+              },
+              modifier = Modifier.weight(1f).testTag("settings_export_expenses_csv_btn"),
+            )
+          }
 
           Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1203,13 +1327,158 @@ fun SettingsScreen(
                 icon = Icons.Default.LockOpen,
                 onClick = {
                   LanguagePreferences.savePinCode(context, "")
+                  LanguagePreferences.setBiometricUnlockEnabled(context, false)
                   hasPin = false
+                  biometricEnabled = false
                   onPinUpdated("")
                 },
                 modifier = Modifier.weight(1f).testTag("disable_pin_btn"),
               )
             }
           }
+
+          // Biometric Unlock toggle (when available on device)
+          if (bioAvailable) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+              ) {
+                Icon(
+                  imageVector = Icons.Default.Fingerprint,
+                  contentDescription = null,
+                  tint = tokens.ink,
+                )
+                Column {
+                  Text(
+                    text = strings.settingsBiometricLabel,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = tokens.ink,
+                  )
+                  if (!hasPin) {
+                    Text(
+                      text = strings.settingsBiometricHint,
+                      style = MaterialTheme.typography.labelSmall,
+                      color = tokens.mute,
+                    )
+                  }
+                }
+              }
+              Switch(
+                checked = hasPin && biometricEnabled,
+                enabled = hasPin,
+                onCheckedChange = { enabled ->
+                  biometricEnabled = enabled
+                  LanguagePreferences.setBiometricUnlockEnabled(context, enabled)
+                },
+                modifier = Modifier.testTag("biometric_unlock_switch"),
+              )
+            }
+          }
+
+          HorizontalDivider(color = tokens.divider)
+
+          // Automatic Monthly Reminder Notification
+          Text(
+            text = strings.settingsReminderTitle,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Medium,
+            color = tokens.ink,
+          )
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Row(
+              modifier = Modifier.weight(1f),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              Icon(
+                imageVector = Icons.Default.NotificationsActive,
+                contentDescription = null,
+                tint = tokens.infoColor,
+              )
+              Text(
+                text = strings.settingsReminderEnableLabel,
+                style = MaterialTheme.typography.bodyMedium,
+                color = tokens.ink,
+              )
+            }
+            Switch(
+              checked = reminderEnabled,
+              onCheckedChange = { enable ->
+                if (enable) {
+                  if (MonthlyReminderScheduler.hasNotificationPermission(context)) {
+                    reminderEnabled = true
+                    LanguagePreferences.setMonthlyReminderEnabled(context, true)
+                    MonthlyReminderScheduler.scheduleMonthlyReminder(context, reminderDay, true)
+                  } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    pendingTestReminder = false
+                    notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                  }
+                } else {
+                  reminderEnabled = false
+                  LanguagePreferences.setMonthlyReminderEnabled(context, false)
+                  MonthlyReminderScheduler.scheduleMonthlyReminder(context, reminderDay, false)
+                }
+              },
+              modifier = Modifier.testTag("monthly_reminder_switch"),
+            )
+          }
+          Text(
+            text = strings.settingsReminderDayLabel,
+            style = MaterialTheme.typography.labelSmall,
+            color = tokens.body,
+          )
+          FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+          ) {
+            listOf(1, 5, 10, 15).forEach { dayOpt ->
+              SyndicatFilterChip(
+                selected = reminderDay == dayOpt,
+                onClick = {
+                  reminderDay = dayOpt
+                  LanguagePreferences.setMonthlyReminderDay(context, dayOpt)
+                  if (reminderEnabled) {
+                    MonthlyReminderScheduler.scheduleMonthlyReminder(context, dayOpt, true)
+                  }
+                },
+                label = localizeDigits(dayOpt.toString(), cfg.digitsAr),
+                modifier = Modifier.testTag("reminder_day_$dayOpt"),
+              )
+            }
+          }
+          SageSecondaryButton(
+            text = strings.settingsReminderTestBtn,
+            icon = Icons.Default.NotificationsActive,
+            compact = true,
+            onClick = {
+              if (MonthlyReminderScheduler.hasNotificationPermission(context)) {
+                MonthlyReminderScheduler.showReminderNotificationNow(context, data.lateApartments.size)
+              } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pendingTestReminder = true
+                notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+              }
+            },
+            modifier = Modifier.fillMaxWidth().testTag("test_monthly_reminder_btn"),
+          )
+
+          HorizontalDivider(color = tokens.divider)
+
+          SageSecondaryButton(
+            text = "${strings.settingsAuditOpenBtn} (${localizeDigits(auditLogs.size.toString(), cfg.digitsAr)})",
+            icon = Icons.Default.History,
+            onClick = { showAuditDialog = true },
+            modifier = Modifier.fillMaxWidth().testTag("open_audit_log_btn"),
+          )
         }
       }
     }
@@ -1266,6 +1535,11 @@ fun SettingsScreen(
           }
         }
       }
+    }
+
+    // 9. Official Application Edition & Publisher Card (SYNDICAT · Éditeur DYNIC · Version 2.0 · Édition 2026)
+    item {
+      SyndicatAboutEditionCard()
     }
   }
 
@@ -1337,6 +1611,100 @@ fun SettingsScreen(
           text = strings.apptCancel,
           compact = true,
           onClick = { showCsvPasteDialog = false },
+        )
+      },
+    )
+  }
+
+  if (showAuditDialog) {
+    SyndicatDialog(
+      onDismissRequest = { showAuditDialog = false },
+      title = {
+        Text(
+          text = strings.auditDialogTitle,
+          style = MaterialTheme.typography.titleLarge,
+          fontWeight = FontWeight.Normal,
+          color = tokens.ink,
+        )
+      },
+      text = {
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 380.dp)
+            .verticalScroll(rememberScrollState()),
+          verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          if (auditLogs.isEmpty()) {
+            SyndicatEmptyStateCard(
+              icon = Icons.Default.History,
+              title = strings.auditDialogTitle,
+              subtitle = strings.auditEmptyText,
+            )
+          } else {
+            auditLogs.take(120).forEach { entry ->
+              Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = tokens.surfaceSoft,
+                border = BorderStroke(1.dp, tokens.divider),
+                modifier = Modifier.fillMaxWidth(),
+              ) {
+                Column(
+                  modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                  verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                  Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                  ) {
+                    Text(
+                      text = entry.actionType.code.uppercase(),
+                      style = MaterialTheme.typography.labelSmall,
+                      fontWeight = FontWeight.Bold,
+                      color = tokens.infoColor,
+                    )
+                    Text(
+                      text = localizeDigits(entry.formattedDateTime(), cfg.digitsAr),
+                      style = MaterialTheme.typography.labelSmall,
+                      color = tokens.mute,
+                    )
+                  }
+                  Text(
+                    text = entry.displaySummary(isAr),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tokens.ink,
+                  )
+                }
+              }
+            }
+          }
+        }
+      },
+      confirmButton = {
+        if (auditLogs.isNotEmpty()) {
+          MetaCobaltBuyButton(
+            text = strings.auditExportCsvBtn,
+            icon = Icons.Default.TableView,
+            compact = true,
+            onClick = {
+              val csv = BackupManager.generateAuditLogCsv(auditLogs, isAr)
+              BackupManager.shareCsvFile(
+                context = context,
+                filePrefix = "audit_log_${cfg.year}",
+                csvContent = csv,
+                chooserTitle = strings.auditDialogTitle,
+                onError = { err -> onMessage(err) },
+              )
+            },
+            modifier = Modifier.testTag("audit_export_csv_btn"),
+          )
+        }
+      },
+      dismissButton = {
+        SageSecondaryButton(
+          text = strings.apptCancel,
+          compact = true,
+          onClick = { showAuditDialog = false },
         )
       },
     )

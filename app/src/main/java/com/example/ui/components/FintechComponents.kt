@@ -1,5 +1,13 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,8 +41,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.BasicAlertDialog
@@ -52,6 +62,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,11 +77,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -113,7 +128,7 @@ fun FintechWhiteCard(
     modifier = baseMod,
     shape = shape,
     color = tokens.cardBg,
-    border = BorderStroke(1.dp, tokens.cardBorder),
+    border = BorderStroke(tokens.borderStrokeDp.dp, tokens.cardBorder),
     tonalElevation = 0.dp,
     shadowElevation = if (elevatedCheckout) 2.dp else 0.dp,
   ) {
@@ -676,7 +691,7 @@ fun SyndicatFilterChip(
   val border = if (selected) {
     null
   } else {
-    BorderStroke(1.dp, if (enabled) tokens.hairline else tokens.divider)
+    BorderStroke(tokens.borderStrokeDp.dp, if (enabled) tokens.hairline else tokens.divider)
   }
 
   Surface(
@@ -1222,11 +1237,20 @@ fun FintechTextField(
 fun PinLockGateScreen(
   expectedPin: String,
   onUnlocked: () -> Unit,
+  biometricEnabled: Boolean = false,
+  onTriggerBiometric: (() -> Unit)? = null,
 ) {
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val haptic = LocalHapticFeedback.current
   var entered by remember { mutableStateOf("") }
   var hasError by remember { mutableStateOf(false) }
+
+  LaunchedEffect(biometricEnabled) {
+    if (biometricEnabled && onTriggerBiometric != null) {
+      onTriggerBiometric()
+    }
+  }
 
   Box(
     modifier = Modifier
@@ -1322,6 +1346,7 @@ fun PinLockGateScreen(
                     .clip(CircleShape)
                     .clickable {
                       hasError = false
+                      haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                       if (key == "⌫") {
                         if (entered.isNotEmpty()) entered = entered.dropLast(1)
                       } else if (entered.length < 4) {
@@ -1329,8 +1354,10 @@ fun PinLockGateScreen(
                         entered = next
                         if (next.length == 4) {
                           if (next == expectedPin) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onUnlocked()
                           } else {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             hasError = true
                             entered = ""
                           }
@@ -1360,6 +1387,19 @@ fun PinLockGateScreen(
               }
             }
           }
+        }
+
+        if (biometricEnabled && onTriggerBiometric != null) {
+          Spacer(modifier = Modifier.height(14.dp))
+          SageSecondaryButton(
+            text = strings.pinBiometricBtn,
+            icon = Icons.Default.Fingerprint,
+            onClick = onTriggerBiometric,
+            compact = true,
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("pin_biometric_btn"),
+          )
         }
       }
     }
@@ -1420,4 +1460,314 @@ fun PinSetupDialog(
       )
     },
   )
+}
+
+/**
+ * Interpole en douceur une valeur numérique Long pour animer les compteurs de trésorerie.
+ */
+@Composable
+fun rememberAnimatedLong(targetValue: Long, durationMillis: Int = 420): Long {
+  val animatedFloat by animateFloatAsState(
+    targetValue = targetValue.toFloat(),
+    animationSpec = tween(durationMillis = durationMillis, easing = FastOutSlowInEasing),
+    label = "rolling_number_long",
+  )
+  return kotlin.math.round(animatedFloat.toDouble()).toLong()
+}
+
+/**
+ * État vide illustré et actionnable (icône sur halo dégradé doux + titre + conseil + bouton CTA optionnel).
+ */
+@Composable
+fun SyndicatEmptyStateCard(
+  icon: ImageVector,
+  title: String,
+  subtitle: String,
+  modifier: Modifier = Modifier,
+  actionLabel: String? = null,
+  actionIcon: ImageVector? = null,
+  actionTag: String? = null,
+  onAction: (() -> Unit)? = null,
+) {
+  val tokens = LocalSyndicatTokens.current
+  FintechWhiteCard(
+    modifier = modifier.fillMaxWidth(),
+    padding = 26.dp,
+  ) {
+    Column(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+      Box(
+        modifier = Modifier
+          .size(72.dp)
+          .clip(CircleShape)
+          .background(
+            Brush.radialGradient(
+              colors = listOf(
+                tokens.primaryTint,
+                tokens.surfaceSoft,
+              ),
+            ),
+          )
+          .border(BorderStroke(tokens.borderStrokeDp.dp, tokens.divider), CircleShape),
+        contentAlignment = Alignment.Center,
+      ) {
+        Icon(
+          imageVector = icon,
+          contentDescription = null,
+          tint = tokens.linkColor,
+          modifier = Modifier.size(32.dp),
+        )
+      }
+      Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = tokens.inkDeep,
+        textAlign = TextAlign.Center,
+      )
+      Text(
+        text = subtitle,
+        style = MaterialTheme.typography.bodySmall,
+        color = tokens.body,
+        textAlign = TextAlign.Center,
+      )
+      if (!actionLabel.isNullOrBlank() && onAction != null) {
+        Spacer(modifier = Modifier.height(4.dp))
+        SageSecondaryButton(
+          text = actionLabel,
+          icon = actionIcon,
+          compact = true,
+          onClick = onAction,
+          modifier = if (actionTag != null) Modifier.testTag(actionTag) else Modifier,
+        )
+      }
+    }
+  }
+}
+
+/**
+ * Mode discrétion (confidentialité) pour masquer les soldes et noms devant un résident ou en AG.
+ */
+val LocalPrivacyMode = compositionLocalOf { false }
+
+fun maskSensitiveDh(formatted: String, isPrivate: Boolean): String =
+  if (isPrivate) "••••••" else formatted
+
+fun maskSensitiveName(name: String, isPrivate: Boolean): String =
+  if (isPrivate && name.isNotBlank()) "••••••••" else name
+
+/**
+ * Écran de chargement Skeleton Shimmer (remplace le spinner simple au démarrage).
+ */
+@Composable
+fun SyndicatShimmerLoadingScreen(
+  message: String,
+  modifier: Modifier = Modifier,
+  extraContent: @Composable ColumnScope.() -> Unit = {},
+) {
+  val tokens = LocalSyndicatTokens.current
+  val infiniteTransition = rememberInfiniteTransition(label = "syndicat_shimmer")
+  val shift by infiniteTransition.animateFloat(
+    initialValue = -300f,
+    targetValue = 900f,
+    animationSpec = infiniteRepeatable(
+      animation = tween(durationMillis = 1200, easing = LinearEasing),
+      repeatMode = RepeatMode.Restart,
+    ),
+    label = "shimmer_shift",
+  )
+  val shimmerBrush = Brush.linearGradient(
+    colors = listOf(
+      tokens.surfaceSoft,
+      tokens.surfaceStrong,
+      tokens.surfaceSoft,
+    ),
+    start = Offset(shift, 0f),
+    end = Offset(shift + 320f, 180f),
+  )
+
+  Column(
+    modifier = modifier
+      .fillMaxSize()
+      .background(tokens.screenBg)
+      .padding(horizontal = 20.dp, vertical = 24.dp)
+      .testTag("syndicat_shimmer_loading"),
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+  ) {
+    // Brand bar skeleton
+    Box(
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(62.dp)
+        .clip(RoundedCornerShape(tokens.contentCardRadiusDp.dp))
+        .background(shimmerBrush),
+    )
+    // Hero treasury card skeleton
+    Box(
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(176.dp)
+        .clip(RoundedCornerShape(tokens.featureCardRadiusDp.dp))
+        .background(shimmerBrush),
+    )
+    // 4 quick action circles skeleton
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+      repeat(4) {
+        Box(
+          modifier = Modifier
+            .size(56.dp)
+            .clip(CircleShape)
+            .background(shimmerBrush),
+        )
+      }
+    }
+    // 2x2 KPI cards skeleton
+    repeat(2) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        Box(
+          modifier = Modifier
+            .weight(1f)
+            .height(92.dp)
+            .clip(RoundedCornerShape(tokens.contentCardRadiusDp.dp))
+            .background(shimmerBrush),
+        )
+        Box(
+          modifier = Modifier
+            .weight(1f)
+            .height(92.dp)
+            .clip(RoundedCornerShape(tokens.contentCardRadiusDp.dp))
+            .background(shimmerBrush),
+        )
+      }
+    }
+    Spacer(modifier = Modifier.height(6.dp))
+    Column(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      Text(
+        text = message,
+        style = MaterialTheme.typography.bodyMedium,
+        color = tokens.body,
+      )
+      extraContent()
+    }
+  }
+}
+
+/**
+ * Carte miniature visuelle de prévisualisation de thème (Meta / Coinbase / MiniMax).
+ */
+@Composable
+fun ThemePreviewMiniCard(
+  styleId: String,
+  label: String,
+  selected: Boolean,
+  accentColor: Color,
+  surfacePreviewColor: Color,
+  headerBgColor: Color,
+  cornerRadiusDp: Int,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val tokens = LocalSyndicatTokens.current
+  val shape = RoundedCornerShape(16.dp)
+  val borderColor = if (selected) tokens.linkColor else tokens.divider
+  val borderWidth = if (selected) 2.dp else tokens.borderStrokeDp.dp
+
+  Surface(
+    shape = shape,
+    color = if (selected) tokens.primaryTint.copy(alpha = 0.45f) else tokens.surfaceSoft,
+    border = BorderStroke(borderWidth, borderColor),
+    tonalElevation = 0.dp,
+    shadowElevation = 0.dp,
+    modifier = modifier
+      .minimumInteractiveComponentSize()
+      .clip(shape)
+      .clickable(onClick = onClick)
+      .testTag("theme_style_$styleId"),
+  ) {
+    Column(
+      modifier = Modifier.padding(10.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      // Miniature mockup card
+      Surface(
+        shape = RoundedCornerShape(cornerRadiusDp.dp),
+        color = surfacePreviewColor,
+        border = BorderStroke(1.dp, tokens.divider),
+        modifier = Modifier
+          .fillMaxWidth()
+          .height(54.dp),
+      ) {
+        Column(
+          modifier = Modifier
+            .fillMaxSize()
+            .padding(7.dp),
+          verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Box(
+              modifier = Modifier
+                .width(34.dp)
+                .height(7.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(headerBgColor),
+            )
+            Box(
+              modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(accentColor),
+            )
+          }
+          Box(
+            modifier = Modifier
+              .fillMaxWidth(0.72f)
+              .height(14.dp)
+              .clip(RoundedCornerShape(100.dp))
+              .background(accentColor),
+          )
+        }
+      }
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+      ) {
+        Text(
+          text = label,
+          style = MaterialTheme.typography.labelMedium,
+          fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+          color = if (selected) tokens.linkColor else tokens.inkDeep,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.weight(1f),
+        )
+        if (selected) {
+          Icon(
+            imageVector = Icons.Default.CheckCircle,
+            contentDescription = null,
+            tint = tokens.linkColor,
+            modifier = Modifier.size(16.dp),
+          )
+        }
+      }
+    }
+  }
 }

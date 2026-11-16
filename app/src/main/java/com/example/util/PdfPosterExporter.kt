@@ -17,6 +17,8 @@ import com.example.data.model.ApartmentRecord
 import com.example.data.model.ExpenseRecord
 import com.example.data.model.MonthColumn
 import com.example.data.model.PaymentRecord
+import com.example.data.model.ProjectRecord
+import com.example.data.model.sortProjectsByPriority
 import com.example.ui.i18n.AppLanguage
 import com.example.ui.i18n.RLM
 import com.example.ui.i18n.bidiLtr
@@ -42,12 +44,20 @@ data class CotisationExportOptions(
   val showNames: Boolean = true,
   val untilCutoffOnly: Boolean = false,
   val inkSaver: Boolean = false,
+  val monochromeMode: Boolean = false,
   val variant: ExportVariant = ExportVariant.PRINT,
 )
 
 data class RelanceExportOptions(
   val anonymousMode: Boolean = false,
   val inkSaver: Boolean = false,
+  val monochromeMode: Boolean = false,
+  val variant: ExportVariant = ExportVariant.PRINT,
+)
+
+data class ProjectsExportOptions(
+  val inkSaver: Boolean = false,
+  val monochromeMode: Boolean = false,
   val variant: ExportVariant = ExportVariant.PRINT,
 )
 
@@ -70,6 +80,7 @@ private data class ExportPalette(
   val tfRegular: Typeface,
   val tfMedium: Typeface,
   val tfNumeric: Typeface,
+  val isMonochrome: Boolean = false,
 )
 
 object PdfPosterExporter {
@@ -104,6 +115,7 @@ object PdfPosterExporter {
   private fun buildPalette(
     context: Context,
     inkSaver: Boolean,
+    monochromeMode: Boolean = false,
   ): ExportPalette {
     val ibmPlexBase = try {
       ResourcesCompat.getFont(context, R.font.ibm_plex_sans_arabic) ?: Typeface.SANS_SERIF
@@ -116,26 +128,58 @@ object PdfPosterExporter {
       ibmPlexBase
     }
 
-    return ExportPalette(
-      pageBg = Color.WHITE,
-      cardBg = Color.WHITE,
-      headerBg = SURFACE_SOFT,
-      altRowBg = Color.parseColor("#FAFCFE"),
-      vacantRowBg = SURFACE_SOFT,
-      ink = INK_COLOR,
-      body = BODY_COLOR,
-      mute = MUTE_COLOR,
-      hairline = HAIRLINE_COLOR,
-      floorLine = INK_COLOR,
-      paidFg = SUCCESS_GREEN,
-      partialFg = INFO_BLUE,
-      lateFg = SIGNATURE_CORAL,
-      caisseBandBg = if (inkSaver) SURFACE_STRONG else INK_COLOR,
-      caisseBandFg = if (inkSaver) INK_COLOR else Color.WHITE,
-      tfRegular = TypefaceCompat.create(context, ibmPlexBase, 400, false),
-      tfMedium = TypefaceCompat.create(context, ibmPlexBase, 500, false),
-      tfNumeric = TypefaceCompat.create(context, interBase, 500, false),
-    )
+    val pureInk = Color.BLACK
+    val pureBody = Color.parseColor("#222222")
+    val pureMute = Color.parseColor("#555555")
+    val pureHairline = Color.parseColor("#D0D0D0")
+    val pureSoft = Color.parseColor("#F5F5F5")
+    val pureAlt = Color.parseColor("#FAFAFA")
+
+    return if (monochromeMode) {
+      ExportPalette(
+        pageBg = Color.WHITE,
+        cardBg = Color.WHITE,
+        headerBg = pureSoft,
+        altRowBg = pureAlt,
+        vacantRowBg = pureSoft,
+        ink = pureInk,
+        body = pureBody,
+        mute = pureMute,
+        hairline = pureHairline,
+        floorLine = pureInk,
+        paidFg = pureInk,
+        partialFg = pureBody,
+        lateFg = pureInk,
+        caisseBandBg = if (inkSaver) Color.WHITE else Color.BLACK,
+        caisseBandFg = if (inkSaver) Color.BLACK else Color.WHITE,
+        tfRegular = TypefaceCompat.create(context, ibmPlexBase, 400, false),
+        tfMedium = TypefaceCompat.create(context, ibmPlexBase, 500, false),
+        tfNumeric = TypefaceCompat.create(context, interBase, 500, false),
+        isMonochrome = true,
+      )
+    } else {
+      ExportPalette(
+        pageBg = Color.WHITE,
+        cardBg = Color.WHITE,
+        headerBg = SURFACE_SOFT,
+        altRowBg = Color.parseColor("#FAFCFE"),
+        vacantRowBg = SURFACE_SOFT,
+        ink = INK_COLOR,
+        body = BODY_COLOR,
+        mute = MUTE_COLOR,
+        hairline = HAIRLINE_COLOR,
+        floorLine = INK_COLOR,
+        paidFg = SUCCESS_GREEN,
+        partialFg = INFO_BLUE,
+        lateFg = SIGNATURE_CORAL,
+        caisseBandBg = if (inkSaver) SURFACE_STRONG else INK_COLOR,
+        caisseBandFg = if (inkSaver) INK_COLOR else Color.WHITE,
+        tfRegular = TypefaceCompat.create(context, ibmPlexBase, 400, false),
+        tfMedium = TypefaceCompat.create(context, ibmPlexBase, 500, false),
+        tfNumeric = TypefaceCompat.create(context, interBase, 500, false),
+        isMonochrome = false,
+      )
+    }
   }
 
   private fun rtlAware(text: String, isRtl: Boolean): String {
@@ -458,6 +502,7 @@ object PdfPosterExporter {
     inkSaver: Boolean = false,
     scale: Float = 2f,
     variant: ExportVariant = ExportVariant.PRINT,
+    monochromeMode: Boolean = false,
   ): Bitmap {
     val expCount = data.expenses.size.coerceAtLeast(1)
     val catRows = ((data.expenses.map { it.category }.distinct().size + 1) / 2).coerceAtLeast(1)
@@ -479,6 +524,7 @@ object PdfPosterExporter {
       showCategoryBreakdown = true,
       pageIndex = 0,
       pageCount = 1,
+      monochromeMode = monochromeMode,
     )
     return bitmap
   }
@@ -489,6 +535,7 @@ object PdfPosterExporter {
     inkSaver: Boolean = false,
     onError: (String) -> Unit,
     @Suppress("UNUSED_PARAMETER") variant: ExportVariant = ExportVariant.PRINT,
+    monochromeMode: Boolean = false,
   ) {
     try {
       val strings = stringsForLanguage(data.config.language)
@@ -524,6 +571,7 @@ object PdfPosterExporter {
           showCategoryBreakdown = index == pages.lastIndex,
           pageIndex = index,
           pageCount = pages.size,
+          monochromeMode = monochromeMode,
         )
         document.finishPage(page)
       }
@@ -546,10 +594,11 @@ object PdfPosterExporter {
     inkSaver: Boolean = false,
     onError: (String) -> Unit,
     variant: ExportVariant = ExportVariant.PRINT,
+    monochromeMode: Boolean = false,
   ) {
     try {
       val strings = stringsForLanguage(data.config.language)
-      val bitmap = generateCaisseReportBitmap(context, data, inkSaver, scale = 2.4f, variant = variant)
+      val bitmap = generateCaisseReportBitmap(context, data, inkSaver, scale = 2.4f, variant = variant, monochromeMode = monochromeMode)
       val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
       val dateStamp = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
       val outFile = File(exportDir, "Wadiyat_Sandouq_$dateStamp.png")
@@ -559,6 +608,557 @@ object PdfPosterExporter {
       shareFileUri(context, outFile, "image/png", strings.caisseDocTitle(data.config.residenceName, data.config.year))
     } catch (e: Exception) {
       onError(e.localizedMessage ?: "Caisse PNG error")
+    }
+  }
+
+  // =========================================================================
+  // 8.4 ÉTAT D'AVANCEMENT DES PROJETS — PORTRAIT A4 (595 × 842 pt)
+  // =========================================================================
+
+  private const val PROJECTS_MAX_ROWS_PER_A4_PAGE = 8
+
+  fun generateProjectsReportBitmap(
+    context: Context,
+    data: SyndicatDashboardData,
+    options: ProjectsExportOptions = ProjectsExportOptions(),
+    scale: Float = 2f,
+  ): Bitmap {
+    val allProjects = sortProjectsByPriority(data.projects)
+    val projCount = allProjects.size.coerceAtLeast(1)
+    val pageWidth = A4_PORTRAIT_WIDTH
+    val pageHeight = maxOf(A4_PORTRAIT_HEIGHT, 240 + projCount * 62 + 60)
+    val force1080 = options.variant == ExportVariant.SCREEN
+    val (bitmap, effScale) = createScaledBitmap(pageWidth, pageHeight, scale, force1080)
+    val canvas = Canvas(bitmap)
+    canvas.scale(effScale, effScale)
+    drawProjectsReportCanvas(
+      context = context,
+      canvas = canvas,
+      pageWidth = pageWidth,
+      pageHeight = pageHeight,
+      data = data,
+      projectsSlice = allProjects,
+      options = options,
+      pageIndex = 0,
+      pageCount = 1,
+      showSummaryHeader = true,
+      showSummaryFooter = true,
+    )
+    return bitmap
+  }
+
+  fun shareProjectsReportPdf(
+    context: Context,
+    data: SyndicatDashboardData,
+    options: ProjectsExportOptions = ProjectsExportOptions(),
+    onError: (String) -> Unit,
+  ) {
+    try {
+      val strings = stringsForLanguage(data.config.language)
+      val allProjects: List<ProjectRecord> = sortProjectsByPriority(data.projects)
+      val pages: List<List<ProjectRecord>> = allProjects
+        .chunked(PROJECTS_MAX_ROWS_PER_A4_PAGE)
+        .ifEmpty { listOf(emptyList<ProjectRecord>()) }
+
+      val document = PdfDocument()
+      pages.forEachIndexed { index, slice ->
+        val pageInfo = PdfDocument.PageInfo.Builder(
+          A4_PORTRAIT_WIDTH,
+          A4_PORTRAIT_HEIGHT,
+          index + 1,
+        ).create()
+        val page = document.startPage(pageInfo)
+        drawProjectsReportCanvas(
+          context = context,
+          canvas = page.canvas,
+          pageWidth = A4_PORTRAIT_WIDTH,
+          pageHeight = A4_PORTRAIT_HEIGHT,
+          data = data,
+          projectsSlice = slice,
+          options = options,
+          pageIndex = index,
+          pageCount = pages.size,
+          showSummaryHeader = index == 0,
+          showSummaryFooter = index == pages.lastIndex,
+        )
+        document.finishPage(page)
+      }
+
+      val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
+      val dateStamp = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+      val outFile = File(exportDir, "Mashari_AlImara_$dateStamp.pdf")
+      FileOutputStream(outFile).use { document.writeTo(it) }
+      document.close()
+
+      shareFileUri(context, outFile, "application/pdf", strings.projectsDocTitle(data.config.residenceName, data.config.year))
+    } catch (e: Exception) {
+      onError(e.localizedMessage ?: "Projects PDF error")
+    }
+  }
+
+  fun shareProjectsReportImage(
+    context: Context,
+    data: SyndicatDashboardData,
+    options: ProjectsExportOptions = ProjectsExportOptions(),
+    onError: (String) -> Unit,
+  ) {
+    try {
+      val strings = stringsForLanguage(data.config.language)
+      val bitmap = generateProjectsReportBitmap(context, data, options, scale = 2.4f)
+      val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
+      val dateStamp = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+      val outFile = File(exportDir, "Mashari_AlImara_$dateStamp.png")
+      FileOutputStream(outFile).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+      bitmap.recycle()
+
+      shareFileUri(context, outFile, "image/png", strings.projectsDocTitle(data.config.residenceName, data.config.year))
+    } catch (e: Exception) {
+      onError(e.localizedMessage ?: "Projects PNG error")
+    }
+  }
+
+  /**
+   * Génère le Pack « Bilan d'Assemblée Générale (AG) » en 1 PDF multi-pages :
+   * 1) Tableau des Cotisations
+   * 2) Situation de Caisse & Dépenses
+   * 3) État d'avancement des Projets
+   * 4) Liste des Relances / Impayés
+   */
+  fun shareAnnualAgPackPdf(
+    context: Context,
+    data: SyndicatDashboardData,
+    monochromeMode: Boolean = false,
+    inkSaver: Boolean = false,
+    onError: (String) -> Unit,
+  ) {
+    try {
+      val cfg = data.config
+      val activeCols = cfg.activeMonthColumns
+      val cotChunks = data.apartments
+        .chunked(COTISATION_MAX_ROWS_PER_A4_PAGE)
+        .ifEmpty { listOf(emptyList()) }
+
+      val allExpenses = data.expenses
+      val caisseChunks = mutableListOf<List<ExpenseRecord>>()
+      if (allExpenses.size <= CAISSE_FIRST_PAGE_MAX_EXPENSES) {
+        caisseChunks.add(allExpenses)
+      } else {
+        caisseChunks.add(allExpenses.take(CAISSE_FIRST_PAGE_MAX_EXPENSES))
+        allExpenses
+          .drop(CAISSE_FIRST_PAGE_MAX_EXPENSES)
+          .chunked(CAISSE_NEXT_PAGE_MAX_EXPENSES)
+          .forEach { caisseChunks.add(it) }
+      }
+
+      val allProjects = sortProjectsByPriority(data.projects)
+      val projectChunks = allProjects
+        .chunked(PROJECTS_MAX_ROWS_PER_A4_PAGE)
+        .ifEmpty { listOf(emptyList()) }
+
+      val sortedLate = data.lateApartments.sortedBy { it.number }
+      val relanceChunks = if (sortedLate.isNotEmpty()) {
+        sortedLate.chunked(RELANCE_MAX_ROWS_PER_A4_PAGE)
+      } else {
+        emptyList()
+      }
+
+      val cotOpts = CotisationExportOptions(
+        showNames = true,
+        untilCutoffOnly = false,
+        inkSaver = inkSaver,
+        monochromeMode = monochromeMode,
+        variant = ExportVariant.PRINT,
+      )
+      val projOpts = ProjectsExportOptions(
+        inkSaver = inkSaver,
+        monochromeMode = monochromeMode,
+        variant = ExportVariant.PRINT,
+      )
+      val relOpts = RelanceExportOptions(
+        anonymousMode = false,
+        inkSaver = inkSaver,
+        monochromeMode = monochromeMode,
+        variant = ExportVariant.PRINT,
+      )
+
+      val document = PdfDocument()
+      var pageNumber = 1
+
+      cotChunks.forEachIndexed { idx, slice ->
+        val page = document.startPage(
+          PdfDocument.PageInfo.Builder(A4_PORTRAIT_WIDTH, A4_PORTRAIT_HEIGHT, pageNumber++).create()
+        )
+        drawCotisationPosterCanvas(
+          context = context,
+          canvas = page.canvas,
+          pageWidth = A4_PORTRAIT_WIDTH,
+          pageHeight = A4_PORTRAIT_HEIGHT,
+          data = data,
+          apartmentsSlice = slice,
+          activeCols = activeCols,
+          options = cotOpts,
+          pageIndex = idx,
+          pageCount = cotChunks.size,
+          showGrandFooter = idx == cotChunks.lastIndex,
+        )
+        document.finishPage(page)
+      }
+
+      caisseChunks.forEachIndexed { idx, slice ->
+        val page = document.startPage(
+          PdfDocument.PageInfo.Builder(A4_PORTRAIT_WIDTH, A4_PORTRAIT_HEIGHT, pageNumber++).create()
+        )
+        drawCaisseReportCanvas(
+          context = context,
+          canvas = page.canvas,
+          pageWidth = A4_PORTRAIT_WIDTH,
+          pageHeight = A4_PORTRAIT_HEIGHT,
+          data = data,
+          expensesSlice = slice,
+          inkSaver = inkSaver,
+          showKpiHeader = idx == 0,
+          showCategoryBreakdown = idx == caisseChunks.lastIndex,
+          pageIndex = idx,
+          pageCount = caisseChunks.size,
+          monochromeMode = monochromeMode,
+        )
+        document.finishPage(page)
+      }
+
+      projectChunks.forEachIndexed { idx, slice ->
+        val page = document.startPage(
+          PdfDocument.PageInfo.Builder(A4_PORTRAIT_WIDTH, A4_PORTRAIT_HEIGHT, pageNumber++).create()
+        )
+        drawProjectsReportCanvas(
+          context = context,
+          canvas = page.canvas,
+          pageWidth = A4_PORTRAIT_WIDTH,
+          pageHeight = A4_PORTRAIT_HEIGHT,
+          data = data,
+          projectsSlice = slice,
+          options = projOpts,
+          pageIndex = idx,
+          pageCount = projectChunks.size,
+          showSummaryHeader = idx == 0,
+          showSummaryFooter = idx == projectChunks.lastIndex,
+        )
+        document.finishPage(page)
+      }
+
+      relanceChunks.forEachIndexed { idx, slice ->
+        val page = document.startPage(
+          PdfDocument.PageInfo.Builder(A4_PORTRAIT_WIDTH, A4_PORTRAIT_HEIGHT, pageNumber++).create()
+        )
+        drawRelanceCanvas(
+          context = context,
+          canvas = page.canvas,
+          pageWidth = A4_PORTRAIT_WIDTH,
+          pageHeight = A4_PORTRAIT_HEIGHT,
+          data = data,
+          lateSlice = slice,
+          options = relOpts,
+          pageIndex = idx,
+          pageCount = relanceChunks.size,
+          showTotalFooter = idx == relanceChunks.lastIndex,
+        )
+        document.finishPage(page)
+      }
+
+      val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
+      val dateStamp = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+      val outFile = File(exportDir, "Bilan_AG_${cfg.year}_$dateStamp.pdf")
+      FileOutputStream(outFile).use { document.writeTo(it) }
+      document.close()
+
+      val strings = stringsForLanguage(cfg.language)
+      shareFileUri(context, outFile, "application/pdf", "${strings.exportCardAgPackTitle} – ${cfg.residenceName}")
+    } catch (e: Exception) {
+      onError(e.localizedMessage ?: "AG Pack PDF error")
+    }
+  }
+
+  /**
+   * Génère l'aperçu haute netteté de la 1re feuille du Pack Bilan d'Assemblée Générale (AG).
+   */
+  fun generateAgPackPreviewBitmap(
+    context: Context,
+    data: SyndicatDashboardData,
+    monochromeMode: Boolean = false,
+    inkSaver: Boolean = false,
+    scale: Float = 2f,
+  ): Bitmap {
+    val firstSlice = data.apartments.take(COTISATION_MAX_ROWS_PER_A4_PAGE)
+    val pageCount = data.apartments.chunked(COTISATION_MAX_ROWS_PER_A4_PAGE).size.coerceAtLeast(1)
+    val pageWidth = A4_PORTRAIT_WIDTH
+    val pageHeight = A4_PORTRAIT_HEIGHT
+    val (bitmap, effScale) = createScaledBitmap(pageWidth, pageHeight, scale, forceScreen1080Px = false)
+    val canvas = Canvas(bitmap)
+    canvas.scale(effScale, effScale)
+    drawCotisationPosterCanvas(
+      context = context,
+      canvas = canvas,
+      pageWidth = pageWidth,
+      pageHeight = pageHeight,
+      data = data,
+      apartmentsSlice = firstSlice,
+      activeCols = data.config.activeMonthColumns,
+      options = CotisationExportOptions(
+        showNames = true,
+        untilCutoffOnly = false,
+        inkSaver = inkSaver,
+        monochromeMode = monochromeMode,
+        variant = ExportVariant.PRINT,
+      ),
+      pageIndex = 0,
+      pageCount = pageCount,
+      showGrandFooter = pageCount == 1,
+    )
+    return bitmap
+  }
+
+  private fun drawProjectsReportCanvas(
+    context: Context,
+    canvas: Canvas,
+    pageWidth: Int,
+    @Suppress("UNUSED_PARAMETER") pageHeight: Int,
+    data: SyndicatDashboardData,
+    projectsSlice: List<com.example.data.model.ProjectRecord>,
+    options: ProjectsExportOptions,
+    pageIndex: Int,
+    pageCount: Int,
+    showSummaryHeader: Boolean,
+    showSummaryFooter: Boolean,
+  ) {
+    val cfg = data.config
+    val strings = stringsForLanguage(cfg.language)
+    val isRtl = strings.language == AppLanguage.AR
+    val cur = cfg.currency
+    val pal = buildPalette(context, inkSaver = options.inkSaver, monochromeMode = options.monochromeMode)
+
+    canvas.drawColor(pal.pageBg)
+    val margin = 22f
+    val contentW = pageWidth - margin * 2
+    val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      style = Paint.Style.STROKE
+      strokeWidth = 1.0f
+      color = pal.hairline
+    }
+
+    // En-tête titre A4
+    val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = pal.ink
+      textSize = 17f
+      typeface = pal.tfRegular
+      textAlign = Paint.Align.CENTER
+    }
+    val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = pal.mute
+      textSize = 9.6f
+      typeface = pal.tfRegular
+      textAlign = Paint.Align.CENTER
+    }
+    val pageSuffix = if (pageCount > 1) " (${bidiLtr("${pageIndex + 1}/$pageCount")})" else ""
+    val titleStr = ellipsizeToWidth(strings.projectsDocTitle(cfg.residenceName, cfg.year) + pageSuffix, titlePaint, contentW)
+    canvas.drawText(rtlAware(titleStr, isRtl), pageWidth / 2f, 38f, titlePaint)
+
+    val today = localizeDigits(SimpleDateFormat("dd/MM/yyyy", Locale.FRANCE).format(Date()), cfg.digitsAr)
+    val subLine = ellipsizeToWidth(
+      buildList {
+        add("${strings.datePrefix} $today")
+        if (cfg.treasurerName.isNotBlank()) add(cfg.treasurerName)
+      }.joinToString("  ·  "),
+      subPaint,
+      contentW,
+    )
+    canvas.drawText(rtlAware(subLine, isRtl), pageWidth / 2f, 56f, subPaint)
+    canvas.drawLine(margin, 66f, pageWidth - margin, 66f, strokePaint)
+
+    var y = 76f
+
+    if (showSummaryHeader) {
+      // 3 KPI Tiles côte à côte : Caisse disponible / En cours / Prêts à démarrer
+      val tileCount = 3
+      val gap = 8f
+      val tileW = (contentW - gap * (tileCount - 1)) / tileCount
+
+      // Tile 0 : Caisse actuelle
+      val t0Left = if (isRtl) margin + (tileW + gap) * 2 else margin
+      val r0 = RectF(t0Left, y, t0Left + tileW, y + 46f)
+      fillPaint.color = if (options.monochromeMode || options.inkSaver) pal.cardBg else pal.caisseBandBg
+      canvas.drawRoundRect(r0, 8f, 8f, fillPaint)
+      canvas.drawRoundRect(r0, 8f, 8f, strokePaint)
+      val kpiP0 = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = if (options.monochromeMode || options.inkSaver) pal.body else Color.WHITE
+        textSize = 8.8f
+        typeface = pal.tfRegular
+        textAlign = Paint.Align.CENTER
+      }
+      val valP0 = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = if (options.monochromeMode || options.inkSaver) pal.ink else Color.WHITE
+        textSize = 13.5f
+        typeface = pal.tfNumeric
+        textAlign = Paint.Align.CENTER
+      }
+      canvas.drawText(rtlAware(strings.projectsKpiCaisseLabel, isRtl), r0.centerX(), y + 16f, kpiP0)
+      canvas.drawText(rtlAware(formatDh(data.cashNowDh, cur, cfg.digitsAr), isRtl), r0.centerX(), y + 36f, valP0)
+
+      // Tile 1 : En cours
+      val t1Left = margin + tileW + gap
+      val r1 = RectF(t1Left, y, t1Left + tileW, y + 46f)
+      fillPaint.color = if (options.monochromeMode || options.inkSaver) pal.cardBg else pal.headerBg
+      canvas.drawRoundRect(r1, 8f, 8f, fillPaint)
+      canvas.drawRoundRect(r1, 8f, 8f, strokePaint)
+      val kpiP1 = Paint(kpiP0).apply { color = pal.body }
+      val valP1 = Paint(valP0).apply { color = pal.ink }
+      canvas.drawText(rtlAware(strings.projectsKpiOngoingLabel, isRtl), r1.centerX(), y + 16f, kpiP1)
+      val ongoingCount = data.inProgressProjects.size
+      canvas.drawText(bidiLtr(formatNumber(ongoingCount.toLong(), cfg.digitsAr)), r1.centerX(), y + 36f, valP1)
+
+      // Tile 2 : Prêts
+      val t2Left = if (isRtl) margin else margin + (tileW + gap) * 2
+      val r2 = RectF(t2Left, y, t2Left + tileW, y + 46f)
+      fillPaint.color = if (options.monochromeMode || options.inkSaver) pal.cardBg else pal.headerBg
+      canvas.drawRoundRect(r2, 8f, 8f, fillPaint)
+      canvas.drawRoundRect(r2, 8f, 8f, strokePaint)
+      canvas.drawText(rtlAware(strings.projectsKpiReadyLabel, isRtl), r2.centerX(), y + 16f, kpiP1)
+      canvas.drawText(bidiLtr(formatNumber(data.readyToStartProjectsCount.toLong(), cfg.digitsAr)), r2.centerX(), y + 36f, valP1)
+
+      y += 56f
+    }
+
+    if (projectsSlice.isEmpty()) {
+      val emptyH = 40f
+      fillPaint.color = pal.cardBg
+      canvas.drawRect(margin, y, margin + contentW, y + emptyH, fillPaint)
+      canvas.drawRect(margin, y, margin + contentW, y + emptyH, strokePaint)
+      val emptyP = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = pal.mute
+        textSize = 10f
+        typeface = pal.tfRegular
+        textAlign = Paint.Align.CENTER
+      }
+      canvas.drawText(rtlAware(strings.projectsEmptyTitle, isRtl), pageWidth / 2f, y + 25f, emptyP)
+      y += emptyH
+    } else {
+      val cardH = 56f
+      val cardPad = 8f
+      val readinessMap = data.plannedReadinessList.associateBy { it.project.id }
+
+      projectsSlice.forEachIndexed { _, proj ->
+        val cardRect = RectF(margin, y, margin + contentW, y + cardH)
+        fillPaint.color = pal.cardBg
+        canvas.drawRoundRect(cardRect, 6f, 6f, fillPaint)
+        canvas.drawRoundRect(cardRect, 6f, 6f, strokePaint)
+
+        // Badge Statut & Priorité
+        val statusText = strings.projectStatusLabel(proj.parsedStatus)
+        val prioText = strings.projectPriorityShort(proj.parsedPriority)
+        val catText = strings.categoryLabel(proj.category)
+        val titleText = proj.displayTitle(isRtl)
+
+        val titleP = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+          color = pal.ink
+          textSize = 11.2f
+          typeface = pal.tfMedium
+          textAlign = if (isRtl) Paint.Align.RIGHT else Paint.Align.LEFT
+        }
+        val metaP = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+          color = pal.mute
+          textSize = 8.6f
+          typeface = pal.tfRegular
+          textAlign = if (isRtl) Paint.Align.RIGHT else Paint.Align.LEFT
+        }
+        val valNumP = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+          color = pal.ink
+          textSize = 10.5f
+          typeface = pal.tfNumeric
+          textAlign = if (isRtl) Paint.Align.LEFT else Paint.Align.RIGHT
+        }
+
+        val textStartX = if (isRtl) margin + contentW - 12f else margin + 12f
+        val numbersX = if (isRtl) margin + 12f else margin + contentW - 12f
+
+        // Ligne 1 : Titre du projet
+        val leftAvailW = contentW * 0.58f
+        val fittedTitle = ellipsizeToWidth(titleText, titleP, leftAvailW)
+        canvas.drawText(rtlAware(fittedTitle, isRtl), textStartX, y + 18f, titleP)
+
+        // Ligne 2 : Statut · Priorité · Catégorie
+        val metaCombined = "$statusText  ·  $prioText  ·  $catText"
+        val fittedMeta = ellipsizeToWidth(metaCombined, metaP, leftAvailW)
+        canvas.drawText(rtlAware(fittedMeta, isRtl), textStartX, y + 33f, metaP)
+
+        // Ligne 3 : Barre de progression (hauteur 3pt)
+        val barTop = y + 42f
+        val barW = leftAvailW
+        val barLeft = if (isRtl) textStartX - barW else textStartX
+        val barBgRect = RectF(barLeft, barTop, barLeft + barW, barTop + 4f)
+        fillPaint.color = pal.hairline
+        canvas.drawRoundRect(barBgRect, 2f, 2f, fillPaint)
+        val pct = proj.clampedProgressPercent.coerceIn(0, 100) / 100f
+        if (pct > 0f) {
+          val barFillRect = if (isRtl) {
+            RectF(barLeft + barW * (1f - pct), barTop, barLeft + barW, barTop + 4f)
+          } else {
+            RectF(barLeft, barTop, barLeft + barW * pct, barTop + 4f)
+          }
+          fillPaint.color = if (options.monochromeMode) pal.ink else pal.paidFg
+          canvas.drawRoundRect(barFillRect, 2f, 2f, fillPaint)
+        }
+
+        // Côté chiffres : Budget total et Avance / Reste
+        val budgetLabel = "${strings.projectTotalBudgetLabel}: ${formatDh(proj.targetBudgetDh, cur, cfg.digitsAr)}"
+        canvas.drawText(rtlAware(ellipsizeToWidth(budgetLabel, valNumP, contentW * 0.38f), isRtl), numbersX, y + 18f, valNumP)
+
+        val detailP = Paint(metaP).apply {
+          textAlign = if (isRtl) Paint.Align.LEFT else Paint.Align.RIGHT
+          color = if (proj.parsedStatus == com.example.data.model.ProjectStatus.COMPLETED) {
+            pal.paidFg
+          } else if (readinessMap[proj.id]?.canStartNowDirect == true) {
+            if (options.monochromeMode) pal.ink else pal.paidFg
+          } else {
+            pal.body
+          }
+        }
+        val detailLine = when (proj.parsedStatus) {
+          com.example.data.model.ProjectStatus.COMPLETED -> "${strings.projectProgressStateLabel}: 100% ✓"
+          com.example.data.model.ProjectStatus.IN_PROGRESS -> "${strings.projectProgressStateLabel}: ${proj.clampedProgressPercent}% · ${formatDh(proj.allocatedAmountDh, cur, cfg.digitsAr)}"
+          else -> {
+            val r = readinessMap[proj.id]
+            if (r != null && r.canStartNowDirect) {
+              strings.projectReadyDirectBadge
+            } else {
+              "${strings.projectRequiredAdvanceLabel}: ${formatDh(proj.effectiveMinCashToStartDh, cur, cfg.digitsAr)}"
+            }
+          }
+        }
+        canvas.drawText(rtlAware(ellipsizeToWidth(detailLine, detailP, contentW * 0.38f), isRtl), numbersX, y + 34f, detailP)
+
+        y += cardH + cardPad
+      }
+    }
+
+    if (showSummaryFooter) {
+      y += 6f
+      val footRect = RectF(margin, y, margin + contentW, y + 30f)
+      fillPaint.color = pal.headerBg
+      canvas.drawRoundRect(footRect, 8f, 8f, fillPaint)
+      canvas.drawRoundRect(footRect, 8f, 8f, strokePaint)
+
+      val footPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = pal.ink
+        textSize = 9.8f
+        typeface = pal.tfMedium
+        textAlign = Paint.Align.CENTER
+      }
+      val totalBudget = data.projects.sumOf { it.targetBudgetDh }
+      val footText = ellipsizeToWidth(
+        "${strings.projectsPageTitle} (${data.projects.size})   |   ${strings.projectTotalBudgetLabel} : ${formatDh(totalBudget, cur, cfg.digitsAr)}",
+        footPaint,
+        contentW - 16f,
+      )
+      canvas.drawText(rtlAware(footText, isRtl), pageWidth / 2f, y + 19f, footPaint)
     }
   }
 
@@ -574,6 +1174,7 @@ object PdfPosterExporter {
     scale: Float = 2.0f,
     variant: ExportVariant = ExportVariant.SCREEN,
     payment: PaymentRecord? = null,
+    monochromeMode: Boolean = false,
   ): Bitmap {
     val w = RECEIPT_PORTRAIT_WIDTH
     val h = RECEIPT_PORTRAIT_HEIGHT
@@ -581,7 +1182,7 @@ object PdfPosterExporter {
     val (bitmap, effScale) = createScaledBitmap(w, h, scale = scale, forceScreen1080Px = force1080)
     val canvas = Canvas(bitmap)
     canvas.scale(effScale, effScale)
-    drawPaymentReceiptCanvas(context, canvas, w, h, apartment, data, receiptNo, payment)
+    drawPaymentReceiptCanvas(context, canvas, w, h, apartment, data, receiptNo, payment, monochromeMode = monochromeMode)
     return bitmap
   }
 
@@ -593,6 +1194,7 @@ object PdfPosterExporter {
     onError: (String) -> Unit,
     variant: ExportVariant = ExportVariant.SCREEN,
     payment: PaymentRecord? = null,
+    monochromeMode: Boolean = false,
   ) {
     try {
       val strings = stringsForLanguage(data.config.language)
@@ -605,6 +1207,7 @@ object PdfPosterExporter {
         scale = 2.2f,
         variant = variant,
         payment = payment,
+        monochromeMode = monochromeMode,
       )
       val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
       val yearSuffix = payment?.year ?: data.config.year
@@ -615,6 +1218,89 @@ object PdfPosterExporter {
       shareFileUri(context, outFile, "image/png", "${strings.receiptDocTitle} #${"%03d".format(effReceiptNo)}")
     } catch (e: Exception) {
       onError(e.localizedMessage ?: "Receipt export error")
+    }
+  }
+
+  fun sharePaymentReceiptViaWhatsApp(
+    context: Context,
+    apartment: ApartmentRecord,
+    data: SyndicatDashboardData,
+    receiptNo: Long,
+    onError: (String) -> Unit,
+    variant: ExportVariant = ExportVariant.SCREEN,
+    payment: PaymentRecord? = null,
+    monochromeMode: Boolean = false,
+  ) {
+    try {
+      val cfg = data.config
+      val strings = stringsForLanguage(cfg.language)
+      val isAr = strings.language == AppLanguage.AR
+      val effReceiptNo = payment?.receiptNumber?.takeIf { it > 0L } ?: receiptNo
+      val bitmap = generatePaymentReceiptBitmap(
+        context = context,
+        apartment = apartment,
+        data = data,
+        receiptNo = effReceiptNo,
+        scale = 2.2f,
+        variant = variant,
+        payment = payment,
+        monochromeMode = monochromeMode,
+      )
+      val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
+      val yearSuffix = payment?.year ?: cfg.year
+      val outFile = File(exportDir, "Recu_WA_Appt_${apartment.displayNumber}_${yearSuffix}_No$effReceiptNo.png")
+      FileOutputStream(outFile).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+      bitmap.recycle()
+
+      val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", outFile)
+      val paidAmt = payment?.amountDh ?: apartment.totalForConfig(cfg)
+      val owner = apartment.displayOwner(isAr)
+      val caption = if (isAr) {
+        buildString {
+          appendLine("✅ ${strings.receiptDocTitle} #${"%03d".format(effReceiptNo)}")
+          appendLine("🏢 ${cfg.residenceName} · الشقة ${apartment.displayNumber}${if (owner.isNotBlank()) " ($owner)" else ""}")
+          append("💰 المبلغ المؤدى: ${formatDh(paidAmt, cfg.currency, cfg.digitsAr)}")
+        }
+      } else {
+        buildString {
+          appendLine("✅ ${strings.receiptDocTitle} #${"%03d".format(effReceiptNo)}")
+          appendLine("🏢 ${cfg.residenceName} · Appt ${apartment.displayNumber}${if (owner.isNotBlank()) " ($owner)" else ""}")
+          append("💰 Montant réglé : ${formatDh(paidAmt, cfg.currency, cfg.digitsAr)}")
+        }
+      }
+
+      val waPackages = listOf("com.whatsapp", "com.whatsapp.w4b")
+      var launched = false
+      for (pkg in waPackages) {
+        try {
+          val waIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            setPackage(pkg)
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_TEXT, caption)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+          }
+          context.startActivity(waIntent)
+          launched = true
+          break
+        } catch (_: Exception) {
+        }
+      }
+      if (!launched) {
+        val fallback = Intent(Intent.ACTION_SEND).apply {
+          type = "image/png"
+          putExtra(Intent.EXTRA_STREAM, uri)
+          putExtra(Intent.EXTRA_TEXT, caption)
+          addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = Intent.createChooser(fallback, "${strings.receiptDocTitle} #${"%03d".format(effReceiptNo)}").apply {
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(chooser)
+      }
+    } catch (e: Exception) {
+      onError(e.localizedMessage ?: "WhatsApp receipt error")
     }
   }
 
@@ -687,7 +1373,7 @@ object PdfPosterExporter {
     val strings = stringsForLanguage(cfg.language)
     val isRtl = strings.language == AppLanguage.AR
     val cur = cfg.currency
-    val pal = buildPalette(context, options.inkSaver)
+    val pal = buildPalette(context, inkSaver = options.inkSaver, monochromeMode = options.monochromeMode)
 
     canvas.drawColor(pal.pageBg)
     val margin = 20f
@@ -973,7 +1659,7 @@ object PdfPosterExporter {
     val strings = stringsForLanguage(cfg.language)
     val isRtl = strings.language == AppLanguage.AR
     val cur = cfg.currency
-    val pal = buildPalette(context, options.inkSaver)
+    val pal = buildPalette(context, inkSaver = options.inkSaver, monochromeMode = options.monochromeMode)
 
     canvas.drawColor(pal.pageBg)
     val margin = 22f
@@ -1227,12 +1913,13 @@ object PdfPosterExporter {
     showCategoryBreakdown: Boolean,
     pageIndex: Int,
     pageCount: Int,
+    monochromeMode: Boolean = false,
   ) {
     val cfg = data.config
     val strings = stringsForLanguage(cfg.language)
     val isRtl = strings.language == AppLanguage.AR
     val cur = cfg.currency
-    val pal = buildPalette(context, inkSaver)
+    val pal = buildPalette(context, inkSaver = inkSaver, monochromeMode = monochromeMode)
 
     canvas.drawColor(pal.pageBg)
     val margin = 22f
@@ -1277,20 +1964,21 @@ object PdfPosterExporter {
     var y = 76f
 
     if (showKpiHeader) {
-      // 1. Carte Forêt (#0A2E0E) en haut pour la caisse — ou carte blanche à contour si inkSaver = true (§7)
+      val usePlainCard = inkSaver || monochromeMode
+      // 1. Carte Forêt (#0A2E0E) en haut pour la caisse — ou carte blanche à contour si inkSaver / N&B (§7)
       val forestRect = RectF(margin, y, margin + contentW, y + 56f)
-      fillPaint.color = if (inkSaver) Color.WHITE else SIGNATURE_FOREST
+      fillPaint.color = if (usePlainCard) Color.WHITE else SIGNATURE_FOREST
       canvas.drawRoundRect(forestRect, 10f, 10f, fillPaint)
-      if (inkSaver) canvas.drawRoundRect(forestRect, 10f, 10f, inkBorderPaint)
+      if (usePlainCard) canvas.drawRoundRect(forestRect, 10f, 10f, inkBorderPaint)
 
       val forestLblPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = if (inkSaver) BODY_COLOR else Color.WHITE
+        color = if (usePlainCard) pal.body else Color.WHITE
         textSize = 10.2f
         typeface = pal.tfRegular
         textAlign = Paint.Align.CENTER
       }
       val forestValPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = if (inkSaver) INK_COLOR else Color.WHITE
+        color = if (usePlainCard) pal.ink else Color.WHITE
         textSize = 17.5f
         typeface = pal.tfNumeric
         textAlign = Paint.Align.CENTER
@@ -1304,29 +1992,29 @@ object PdfPosterExporter {
       canvas.drawText(rtlAware(cashStr, isRtl), forestRect.centerX(), y + 43f, forestValPaint)
       y += 64f
 
-      // 2. Cartes Menthe (#A8D8C4, Recettes) & Pêche (#FCAB79, Dépenses) côte à côte
+      // 2. Cartes Menthe (#A8D8C4, Recettes) & Pêche (#FCAB79, Dépenses) côte à côte (ou blanc bordé en N&B)
       val halfW = (contentW - 10f) / 2f
       val mintLeft = if (isRtl) margin + halfW + 10f else margin
       val peachLeft = if (isRtl) margin else margin + halfW + 10f
 
       val mintRect = RectF(mintLeft, y, mintLeft + halfW, y + 48f)
-      fillPaint.color = if (inkSaver) Color.WHITE else SIGNATURE_MINT
+      fillPaint.color = if (usePlainCard) Color.WHITE else SIGNATURE_MINT
       canvas.drawRoundRect(mintRect, 10f, 10f, fillPaint)
-      if (inkSaver) canvas.drawRoundRect(mintRect, 10f, 10f, strokePaint)
+      if (usePlainCard) canvas.drawRoundRect(mintRect, 10f, 10f, strokePaint)
 
       val peachRect = RectF(peachLeft, y, peachLeft + halfW, y + 48f)
-      fillPaint.color = if (inkSaver) Color.WHITE else SIGNATURE_PEACH
+      fillPaint.color = if (usePlainCard) Color.WHITE else SIGNATURE_PEACH
       canvas.drawRoundRect(peachRect, 10f, 10f, fillPaint)
-      if (inkSaver) canvas.drawRoundRect(peachRect, 10f, 10f, strokePaint)
+      if (usePlainCard) canvas.drawRoundRect(peachRect, 10f, 10f, strokePaint)
 
       val kpiLblP = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = BODY_COLOR
+        color = pal.body
         textSize = 9.2f
         typeface = pal.tfRegular
         textAlign = Paint.Align.CENTER
       }
       val kpiValP = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = INK_COLOR
+        color = pal.ink
         textSize = 13.0f
         typeface = pal.tfNumeric
         textAlign = Paint.Align.CENTER
@@ -1357,10 +2045,10 @@ object PdfPosterExporter {
         fillPaint.color = Color.WHITE
         canvas.drawRoundRect(r, 8f, 8f, fillPaint)
         canvas.drawRoundRect(r, 8f, 8f, strokePaint)
-        val slP = Paint(kpiLblP).apply { textSize = 8.2f; color = MUTE_COLOR }
+        val slP = Paint(kpiLblP).apply { textSize = 8.2f; color = pal.mute }
         val svP = Paint(kpiValP).apply {
           textSize = 10.2f
-          color = if (idx == 1 && data.unpaidExpensesDh > 0L) SIGNATURE_CORAL else INK_COLOR
+          color = if (idx == 1 && data.unpaidExpensesDh > 0L) pal.lateFg else pal.ink
         }
         canvas.drawText(rtlAware(ellipsizeToWidth(lbl, slP, boxW - 8f), isRtl), r.centerX(), y + 14.5f, slP)
         canvas.drawText(rtlAware(ellipsizeToWidth(vStr, svP, boxW - 8f), isRtl), r.centerX(), y + 30.5f, svP)
@@ -1554,11 +2242,12 @@ object PdfPosterExporter {
     data: SyndicatDashboardData,
     receiptNo: Long,
     payment: PaymentRecord? = null,
+    monochromeMode: Boolean = false,
   ) {
     val cfg = data.config
     val strings = stringsForLanguage(cfg.language)
     val isRtl = strings.language == AppLanguage.AR
-    val pal = buildPalette(context, inkSaver = false)
+    val pal = buildPalette(context, inkSaver = false, monochromeMode = monochromeMode)
     val cornerR = 12f
     val outerPad = 20f
     val effectivePayment = payment ?: data.paymentsForApartment(apartment.number, cfg.year).firstOrNull()
@@ -1608,10 +2297,13 @@ object PdfPosterExporter {
       subP,
     )
 
-    // Encart montant réglé en Menthe signature (#A8D8C4) bien lisible sur mobile
+    // Encart montant réglé (Menthe signature ou gris doux en N&B)
     val paidBox = RectF(38f, 134f, width - 38f, 214f)
-    fill.color = SIGNATURE_MINT
+    fill.color = if (monochromeMode) pal.headerBg else SIGNATURE_MINT
     canvas.drawRoundRect(paidBox, 10f, 10f, fill)
+    if (monochromeMode) {
+      canvas.drawRoundRect(paidBox, 10f, 10f, stroke)
+    }
     val paidLblP = Paint(Paint.ANTI_ALIAS_FLAG).apply {
       color = BODY_COLOR
       textSize = 11f
@@ -1668,21 +2360,21 @@ object PdfPosterExporter {
       "✓ ${formatDh(0L, cfg.currency, cfg.digitsAr)}"
     }
 
-    var ry = 250f
+    var ry = 236f
     fun drawReceiptRow(label: String, value: String, valuePaint: Paint, allowWrap: Boolean = false) {
       canvas.drawText(rtlAware(label, isRtl), startX, ry, labelP)
       if (allowWrap) {
-        val lines = wrapTextLines(value, valuePaint, valueMaxW, maxLines = 3)
+        val lines = wrapTextLines(value, valuePaint, valueMaxW, maxLines = 2)
         lines.forEachIndexed { i, ln ->
-          canvas.drawText(rtlAware(ln, isRtl), endX, ry + i * 17f, valuePaint)
+          canvas.drawText(rtlAware(ln, isRtl), endX, ry + i * 15f, valuePaint)
         }
-        ry += 20f + (lines.size - 1) * 17f
+        ry += 16f + (lines.size - 1) * 15f
       } else {
         canvas.drawText(rtlAware(ellipsizeToWidth(value, valuePaint, valueMaxW), isRtl), endX, ry, valuePaint)
-        ry += 20f
+        ry += 16f
       }
-      canvas.drawLine(40f, ry - 7f, width - 40f, ry - 7f, stroke)
-      ry += 21f
+      canvas.drawLine(40f, ry - 5f, width - 40f, ry - 5f, stroke)
+      ry += 16f
     }
 
     drawReceiptRow(
@@ -1708,14 +2400,80 @@ object PdfPosterExporter {
       valP,
     )
     val remRowPaint = Paint(valNumP).apply {
-      color = if (remDh > 0L) SIGNATURE_CORAL else SUCCESS_GREEN
+      color = if (remDh > 0L) pal.lateFg else pal.paidFg
     }
     drawReceiptRow(strings.colRemaining, remFormatted, remRowPaint)
     drawReceiptRow(strings.datePrefix, formattedDate, valNumP)
 
-    // Cachet inférieur éditorial en surfaceDark (#181D26) texte blanc
+    // Bloc QR Code vérifiable au-dessus du cachet inférieur (de y ≈ 495 à 585)
+    val verifyCode = "SYN-A${apartment.number}-R${"%03d".format(receiptNo)}-$receiptYear-${paidAmountDh}DH"
+    val qrPayload = "SYNDICAT|${cfg.residenceName.take(18)}|APT=${apartment.number}|NO=$receiptNo|AMT=$paidAmountDh|DATE=$rawDate"
+    val qrBoxTop = maxOf(ry - 2f, height - 178f)
+    val qrBoxBottom = height - 88f
+    val qrBoxRect = RectF(38f, qrBoxTop, width - 38f, qrBoxBottom)
+    fill.color = pal.headerBg
+    canvas.drawRoundRect(qrBoxRect, 8f, 8f, fill)
+    canvas.drawRoundRect(qrBoxRect, 8f, 8f, stroke)
+
+    val qrMatrix = QrCodeGenerator.encode(qrPayload)
+    val qrModules = qrMatrix.size
+    val qrDrawSize = (qrBoxBottom - qrBoxTop - 12f).coerceIn(58f, 76f)
+    val qrStartX = if (isRtl) qrBoxRect.left + 10f else qrBoxRect.right - qrDrawSize - 10f
+    val qrStartY = qrBoxRect.centerY() - qrDrawSize / 2f
+    val quietBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; style = Paint.Style.FILL }
+    canvas.drawRect(qrStartX - 3f, qrStartY - 3f, qrStartX + qrDrawSize + 3f, qrStartY + qrDrawSize + 3f, quietBg)
+    val modSize = qrDrawSize / qrModules.toFloat()
+    val qrDarkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = if (monochromeMode) Color.BLACK else INK_COLOR
+      style = Paint.Style.FILL
+    }
+    for (r in 0 until qrModules) {
+      for (c in 0 until qrModules) {
+        if (qrMatrix[r][c]) {
+          val left = qrStartX + c * modSize
+          val top = qrStartY + r * modSize
+          canvas.drawRect(left, top, left + modSize + 0.35f, top + modSize + 0.35f, qrDarkPaint)
+        }
+      }
+    }
+
+    val qrTextAlign = if (isRtl) Paint.Align.RIGHT else Paint.Align.LEFT
+    val qrTextX = if (isRtl) qrBoxRect.right - 12f else qrBoxRect.left + 12f
+    val qrAvailTextW = (qrBoxRect.width() - qrDrawSize - 32f).coerceAtLeast(100f)
+    val qrLblP = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = pal.ink
+      textSize = 10.2f
+      typeface = pal.tfMedium
+      textAlign = qrTextAlign
+    }
+    val qrCodeP = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = pal.mute
+      textSize = 8.8f
+      typeface = pal.tfNumeric
+      textAlign = qrTextAlign
+    }
+    canvas.drawText(
+      rtlAware(ellipsizeToWidth(strings.receiptQrVerifyLabel, qrLblP, qrAvailTextW), isRtl),
+      qrTextX,
+      qrBoxRect.centerY() - 10f,
+      qrLblP,
+    )
+    canvas.drawText(
+      bidiLtr(ellipsizeToWidth(verifyCode, qrCodeP, qrAvailTextW)),
+      qrTextX,
+      qrBoxRect.centerY() + 8f,
+      qrCodeP,
+    )
+    canvas.drawText(
+      rtlAware(ellipsizeToWidth("${strings.appBrandName} · ${strings.appPublisherShort}", qrCodeP, qrAvailTextW), isRtl),
+      qrTextX,
+      qrBoxRect.centerY() + 23f,
+      qrCodeP,
+    )
+
+    // Cachet inférieur éditorial en surfaceDark (#181D26) texte blanc (ou noir pur en N&B)
     val badgeRect = RectF(38f, height - 78f, width - 38f, height - 38f)
-    fill.color = INK_COLOR
+    fill.color = if (monochromeMode) Color.BLACK else INK_COLOR
     canvas.drawRoundRect(badgeRect, 8f, 8f, fill)
     val stampP = Paint(Paint.ANTI_ALIAS_FLAG).apply {
       color = Color.WHITE

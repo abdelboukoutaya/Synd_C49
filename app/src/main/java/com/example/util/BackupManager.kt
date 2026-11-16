@@ -14,7 +14,11 @@ import com.example.data.model.ProjectRecord
 import com.example.data.model.SyndicatConfig
 import com.example.data.model.canonicalApartmentDocId
 import com.example.data.model.normalizeSyndicatCategory
+import com.example.data.local.AuditLogEntry
+import com.example.data.local.SpecialCallRecord
+import com.example.data.local.SyndicatExtrasCodec
 import com.example.ui.i18n.LanguagePreferences
+import com.example.ui.i18n.stringsForLanguage
 import com.example.ui.viewmodel.SyndicatDashboardData
 import java.io.File
 import java.text.SimpleDateFormat
@@ -29,6 +33,7 @@ data class ParsedSyndicatBackup(
   val expenses: List<ExpenseRecord>,
   val projects: List<ProjectRecord> = emptyList(),
   val payments: List<PaymentRecord> = emptyList(),
+  val specialCalls: List<SpecialCallRecord> = emptyList(),
 )
 
 data class ParsedOwnerRow(
@@ -40,9 +45,12 @@ data class ParsedOwnerRow(
 
 object BackupManager {
 
-  fun serializeBackupJson(data: SyndicatDashboardData): String {
+  fun serializeBackupJson(
+    data: SyndicatDashboardData,
+    specialCalls: List<SpecialCallRecord> = emptyList(),
+  ): String {
     val root = JSONObject()
-    root.put("formatVersion", 1)
+    root.put("formatVersion", 2)
     root.put("exportedAtEpochMs", System.currentTimeMillis())
 
     val cfg = data.config
@@ -185,6 +193,7 @@ object BackupManager {
       )
     }
     root.put("projects", projArr)
+    root.put("specialCalls", SyndicatExtrasCodec.specialCallsToJsonArray(specialCalls))
 
     return root.toString(2)
   }
@@ -386,20 +395,27 @@ object BackupManager {
       }
     }
 
+    val specialCalls = SyndicatExtrasCodec.parseSpecialCallsJsonArray(root.optJSONArray("specialCalls"))
+
     return ParsedSyndicatBackup(
       config = config,
       apartments = appts,
       expenses = expenses,
       projects = projects,
       payments = payments,
+      specialCalls = specialCalls,
     )
   }
 
-  fun saveAutoLocalSnapshot(context: Context, data: SyndicatDashboardData) {
+  fun saveAutoLocalSnapshot(
+    context: Context,
+    data: SyndicatDashboardData,
+    specialCalls: List<SpecialCallRecord> = emptyList(),
+  ) {
     try {
       val dir = File(context.filesDir, "backups").apply { mkdirs() }
       val file = File(dir, "syndicat_auto_weekly.json")
-      file.writeText(serializeBackupJson(data), Charsets.UTF_8)
+      file.writeText(serializeBackupJson(data, specialCalls), Charsets.UTF_8)
     } catch (_: Exception) {
     }
   }
@@ -408,16 +424,17 @@ object BackupManager {
     context: Context,
     data: SyndicatDashboardData,
     onError: (String) -> Unit,
+    specialCalls: List<SpecialCallRecord> = emptyList(),
   ) {
     try {
-      val json = serializeBackupJson(data)
+      val json = serializeBackupJson(data, specialCalls)
       val dateStamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
       val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
       val file = File(exportDir, "Syndicat_Backup_$dateStamp.json")
       file.writeText(json, Charsets.UTF_8)
 
       LanguagePreferences.recordBackupNow(context)
-      saveAutoLocalSnapshot(context, data)
+      saveAutoLocalSnapshot(context, data, specialCalls)
 
       val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
       val intent = Intent(Intent.ACTION_SEND).apply {
@@ -432,6 +449,108 @@ object BackupManager {
       context.startActivity(chooser)
     } catch (e: Exception) {
       onError(e.localizedMessage ?: "Échec de l'export JSON")
+    }
+  }
+
+  private fun csvCell(raw: String): String {
+    val clean = raw.replace("\r", " ").replace("\n", " ")
+    val needsQuotes = clean.contains(';') || clean.contains(',') || clean.contains('"')
+    return if (needsQuotes) "\"${clean.replace("\"", "\"\"")}\"" else clean
+  }
+
+  fun generatePaymentsCsv(data: SyndicatDashboardData): String {
+    val cfg = data.config
+    val strings = stringsForLanguage(cfg.language)
+    val aptLookup = data.apartments.associateBy { it.number }
+    return buildString {
+      append('\uFEFF')
+      appendLine("ReceiptNo;Apartment;Floor;Owner;Year;Months;Amount(${cfg.currency});Method;Date;Notes")
+      data.payments.sortedByDescending { it.receiptNumber }.forEach { pay ->
+        val apt = aptLookup[pay.apartmentNumber]
+        val owner = apt?.displayOwner(cfg.language != "fr") ?: ""
+        val floor = apt?.floor ?: ""
+        val months = pay.effectiveMonthsCovered.joinToString(" ") { strings.monthShort(it) }
+        val row = listOf(
+          "#%03d".format(pay.receiptNumber),
+          pay.apartmentNumber.toString(),
+          floor,
+          owner,
+          pay.year.toString(),
+          months,
+          pay.amountDh.toString(),
+          strings.paymentMethodLabel(pay.paymentMethod),
+          pay.paymentDate,
+          pay.notes,
+        ).joinToString(";") { csvCell(it) }
+        appendLine(row)
+      }
+    }
+  }
+
+  fun generateExpensesCsv(data: SyndicatDashboardData): String {
+    val cfg = data.config
+    val strings = stringsForLanguage(cfg.language)
+    return buildString {
+      append('\uFEFF')
+      appendLine("Title;Category;Supplier;Amount(${cfg.currency});Paid(${cfg.currency});Remaining(${cfg.currency});Date;Notes")
+      data.expenses.forEach { exp ->
+        val row = listOf(
+          exp.title,
+          strings.categoryLabel(exp.category),
+          exp.supplier,
+          exp.amountDh.toString(),
+          exp.effectivePaidDh.toString(),
+          exp.remainingToPayDh.toString(),
+          exp.dateLabel,
+          exp.notes,
+        ).joinToString(";") { csvCell(it) }
+        appendLine(row)
+      }
+    }
+  }
+
+  fun generateAuditLogCsv(entries: List<AuditLogEntry>, isAr: Boolean): String {
+    return buildString {
+      append('\uFEFF')
+      appendLine("DateTime;Action;Summary;AmountDelta")
+      entries.forEach { entry ->
+        val row = listOf(
+          entry.formattedDateTime(),
+          entry.actionType.code,
+          entry.displaySummary(isAr),
+          entry.amountDeltaDh.toString(),
+        ).joinToString(";") { csvCell(it) }
+        appendLine(row)
+      }
+    }
+  }
+
+  fun shareCsvFile(
+    context: Context,
+    filePrefix: String,
+    csvContent: String,
+    chooserTitle: String,
+    onError: (String) -> Unit,
+  ) {
+    try {
+      val dateStamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
+      val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
+      val file = File(exportDir, "${filePrefix}_$dateStamp.csv")
+      file.writeText(csvContent, Charsets.UTF_8)
+
+      val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+      val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/csv"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        putExtra(Intent.EXTRA_SUBJECT, file.name)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      }
+      val chooser = Intent.createChooser(intent, chooserTitle).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+      context.startActivity(chooser)
+    } catch (e: Exception) {
+      onError(e.localizedMessage ?: "CSV export error")
     }
   }
 

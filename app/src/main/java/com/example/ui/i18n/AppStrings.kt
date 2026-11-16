@@ -85,6 +85,9 @@ object LanguagePreferences {
   }
 
   private const val KEY_HAS_GOOGLE_SESSION = "has_previous_google_session"
+  private const val KEY_BIOMETRIC_UNLOCK = "biometric_unlock_enabled"
+  private const val KEY_MONTHLY_REMINDER_ENABLED = "monthly_reminder_enabled"
+  private const val KEY_MONTHLY_REMINDER_DAY = "monthly_reminder_day"
 
   fun isBackupOverdue(context: Context): Boolean {
     val last = getLastBackupMs(context)
@@ -100,6 +103,36 @@ object LanguagePreferences {
   fun setHasPreviousGoogleSession(context: Context, active: Boolean) {
     val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     prefs.edit().putBoolean(KEY_HAS_GOOGLE_SESSION, active).apply()
+  }
+
+  fun isBiometricUnlockEnabled(context: Context): Boolean {
+    val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    return prefs.getBoolean(KEY_BIOMETRIC_UNLOCK, false)
+  }
+
+  fun setBiometricUnlockEnabled(context: Context, enabled: Boolean) {
+    val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    prefs.edit().putBoolean(KEY_BIOMETRIC_UNLOCK, enabled).apply()
+  }
+
+  fun isMonthlyReminderEnabled(context: Context): Boolean {
+    val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    return prefs.getBoolean(KEY_MONTHLY_REMINDER_ENABLED, false)
+  }
+
+  fun setMonthlyReminderEnabled(context: Context, enabled: Boolean) {
+    val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    prefs.edit().putBoolean(KEY_MONTHLY_REMINDER_ENABLED, enabled).apply()
+  }
+
+  fun getMonthlyReminderDay(context: Context): Int {
+    val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    return prefs.getInt(KEY_MONTHLY_REMINDER_DAY, 5).coerceIn(1, 28)
+  }
+
+  fun setMonthlyReminderDay(context: Context, day: Int) {
+    val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    prefs.edit().putInt(KEY_MONTHLY_REMINDER_DAY, day.coerceIn(1, 28)).apply()
   }
 }
 
@@ -983,6 +1016,353 @@ class SyndicatStrings(
     get() = if (language == AppLanguage.AR) "حذف هذه الدفعة" else "Supprimer ce paiement"
   val receiptMethodRowLabel: String
     get() = if (language == AppLanguage.AR) "طريقة الأداء" else "Mode de règlement"
+
+  // Official Application Identity: SYNDICAT · Éditeur DYNIC · Version 2.0 · Édition 2026
+  val appBrandName: String
+    get() = "SYNDICAT"
+  val appPublisherName: String
+    get() = "DYNIC"
+  val appVersionNumber: String
+    get() = "2.0"
+  val appEditionYear: String
+    get() = "2026"
+  val appPublisherLabel: String
+    get() = if (language == AppLanguage.AR) "الناشر: DYNIC" else "Éditeur : DYNIC"
+  val appPublisherShort: String
+    get() = if (language == AppLanguage.AR) "الناشر DYNIC" else "Éditeur DYNIC"
+  val appVersionBadge: String
+    get() = if (language == AppLanguage.AR) "الإصدار ${bidiLtr("2.0")}" else "Version 2.0"
+  val appEditionBadge: String
+    get() = if (language == AppLanguage.AR) "طبعة ${bidiLtr("2026")}" else "Édition 2026"
+  val appEditionYearFull: String
+    get() = if (language == AppLanguage.AR) "سنة الإصدار: ${bidiLtr("2026")}" else "Année d'édition : 2026"
+  val appVersionCompactPill: String
+    get() = if (language == AppLanguage.AR) "الإصدار ${bidiLtr("2.0")} · ${bidiLtr("2026")}" else "v2.0 · 2026"
+  val appFullEditionLine: String
+    get() = if (language == AppLanguage.AR) {
+      "الناشر DYNIC · الإصدار ${bidiLtr("2.0")} · طبعة ${bidiLtr("2026")}"
+    } else {
+      "Éditeur DYNIC · Version 2.0 · Édition 2026"
+    }
+  val appAboutCardTitle: String
+    get() = if (language == AppLanguage.AR) "حول التطبيق · البطاقة التقنية" else "À propos de l'application"
+  val appAboutCardSubtitle: String
+    get() = if (language == AppLanguage.AR) {
+      "تطبيق تدبير الإقامات والسانديك الموحد متعدد السنوات"
+    } else {
+      "Application de gestion de copropriété & syndic multi-exercices"
+    }
+
+  // Export Mode Blanc et Noir (B&W) & État des Projets
+  val exportModeColor: String
+    get() = if (language == AppLanguage.AR) "ألوان" else "Couleur"
+  val exportModeMonochrome: String
+    get() = if (language == AppLanguage.AR) "أبيض وأسود" else "Noir & Blanc"
+  val exportOptMonochromeMode: String
+    get() = if (language == AppLanguage.AR) {
+      "طباعة بالأبيض والأسود (بدون ألوان / حبر اقتصادي خالص)"
+    } else {
+      "Mode Noir & Blanc (sans couleurs / impression N&B optimale)"
+    }
+  val exportCardProjectsTitle: String
+    get() = if (language == AppLanguage.AR) "4. ملصق ووضعية مشاريع العمارة" else "4. État d'avancement des projets"
+  val exportCardProjectsSub: String
+    get() = if (language == AppLanguage.AR) {
+      "تقرير مالي وفني للمشاريع قيد الإنجاز، المستقبلية والمنجزة مع الميزانيات وتغطية الصندوق."
+    } else {
+      "Rapport officiel des chantiers en cours, projets futurs et terminés avec budgets et couverture caisse."
+    }
+  val projectsDocTitle: (String, Long) -> String
+    get() = { res, year ->
+      if (language == AppLanguage.AR) {
+        "وضعية ومشاريع إقامة $res – سنة ${bidiLtr(year.toString())}"
+      } else {
+        "État d'avancement des projets $year – $res"
+      }
+    }
+
+  // --- Recommandations v2.0 (Pack AG, CSV, Justificatifs photo, Appels exceptionnels, QR/WhatsApp reçu, Journal d'audit, Rappels, Biométrie) ---
+  val exportGlobalModeLabel: String
+    get() = if (language == AppLanguage.AR) "نمط التصدير لجميع الوثائق" else "Mode global de tous les documents"
+  val exportCardAgPackTitle: String
+    get() = if (language == AppLanguage.AR) "5. ملف الجمع العام السنوي الكامل" else "5. Pack Bilan Assemblée Générale"
+  val exportCardAgPackSub: String
+    get() = if (language == AppLanguage.AR) {
+      "ملف PDF واحد متعدد الصفحات يضم المساهمات + الصندوق والمصاريف + المشاريع + المتأخرات."
+    } else {
+      "PDF unique multi-pages regroupant : Cotisations + Caisse & Dépenses + Projets + Relances impayés."
+    }
+  val exportAgPackBtn: String
+    get() = if (language == AppLanguage.AR) "توليد ملف الجمع العام (PDF)" else "Générer Bilan AG (1 PDF)"
+  val exportCsvSectionTitle: String
+    get() = if (language == AppLanguage.AR) "تصدير الجداول لبرنامج Excel (.csv)" else "Exports Excel / Comptables (.csv)"
+  val exportPaymentsCsvBtn: String
+    get() = if (language == AppLanguage.AR) "تصدير سجل الأداءات (CSV)" else "Exporter Paiements (.csv)"
+  val exportExpensesCsvBtn: String
+    get() = if (language == AppLanguage.AR) "تصدير سجل المصاريف (CSV)" else "Exporter Dépenses (.csv)"
+  val exportProjectsDialogTitle: String
+    get() = if (language == AppLanguage.AR) "خيارات تصدير وضعية المشاريع" else "Exporter l'état des projets"
+  val exportFormatLabel: String
+    get() = if (language == AppLanguage.AR) "صيغة الملف" else "Format du document"
+
+  // Expense Photo Proof (Justificatif)
+  val expPhotoAttachBtn: String
+    get() = if (language == AppLanguage.AR) "إرفاق صورة فاتورة / وصل" else "Joindre photo justificative"
+  val expPhotoChangeBtn: String
+    get() = if (language == AppLanguage.AR) "تغيير الصورة" else "Changer la photo"
+  val expPhotoRemoveBtn: String
+    get() = if (language == AppLanguage.AR) "حذف الصورة" else "Supprimer"
+  val expPhotoBadgeLabel: String
+    get() = if (language == AppLanguage.AR) "صورة الفاتورة" else "Justificatif"
+  val expPhotoPreviewTitle: String
+    get() = if (language == AppLanguage.AR) "معاينة صورة الفاتورة" else "Justificatif de la dépense"
+
+  // Special Calls (Appels de fonds exceptionnels / Travaux)
+  val specialCallsSectionTitle: String
+    get() = if (language == AppLanguage.AR) "نداءات المساهمات الاستثنائية (الأشغال)" else "Appels de fonds exceptionnels (Travaux)"
+  val specialCallsSectionSub: String
+    get() = if (language == AppLanguage.AR) {
+      "مساهمات استثنائية مرتبطة بمشاريع كبرى (صباغة، كاميرات، عزل...) مع تتبع أداء كل شقة."
+    } else {
+      "Cotisations exceptionnelles liées aux grands travaux avec suivi individuel par appartement."
+    }
+  val specialCallsNewBtn: String
+    get() = if (language == AppLanguage.AR) "نداء مساهمة جديد" else "Nouvel appel de fonds"
+  val specialCallsEmptyText: String
+    get() = if (language == AppLanguage.AR) {
+      "لا توجد مساهمات استثنائية مبرمجة حالياً."
+    } else {
+      "Aucun appel de fonds exceptionnel enregistré."
+    }
+  val specialCallDialogAddTitle: String
+    get() = if (language == AppLanguage.AR) "إنشاء نداء مساهمة استثنائي" else "Nouvel appel de fonds"
+  val specialCallTitleFrLabel: String
+    get() = if (language == AppLanguage.AR) "العنوان بالفرنسية" else "Intitulé (Français)"
+  val specialCallTitleArLabel: String
+    get() = if (language == AppLanguage.AR) "العنوان بالعربية" else "Intitulé (Arabe)"
+  val specialCallAmountPerAptLabel: (String) -> String
+    get() = { cur -> if (language == AppLanguage.AR) "المبلغ لكل شقة ($cur)" else "Montant par appartement ($cur)" }
+  val specialCallLinkedProjectLabel: String
+    get() = if (language == AppLanguage.AR) "المشروع المرتبط (اختياري)" else "Projet associé (optionnel)"
+  val specialCallNoProject: String
+    get() = if (language == AppLanguage.AR) "بدون مشروع" else "Aucun projet"
+  val specialCallTrackBtn: String
+    get() = if (language == AppLanguage.AR) "متابعة الشقق" else "Suivi par appt"
+  val specialCallCollectedSummary: (String, String, Int, Int) -> String
+    get() = { col, exp, paidCount, totalCount ->
+      if (language == AppLanguage.AR) {
+        "المحصّل: $col / $exp (${formatNumber(paidCount.toLong())}/${formatNumber(totalCount.toLong())} شقة)"
+      } else {
+        "Collecté : $col / $exp ($paidCount/$totalCount appts)"
+      }
+    }
+
+  // WhatsApp Receipt & QR Code
+  val receiptWhatsappBtn: String
+    get() = if (language == AppLanguage.AR) "وصل عبر واتساب" else "Envoyer sur WhatsApp"
+  val receiptPostPaymentTitle: String
+    get() = if (language == AppLanguage.AR) "تم تسجيل الأداء بنجاح" else "Paiement enregistré avec succès"
+  val receiptPostPaymentSub: String
+    get() = if (language == AppLanguage.AR) {
+      "هل ترغب في إرسال وصل الأداء المختوم برمز QR فوراً إلى المالك؟"
+    } else {
+      "Souhaitez-vous envoyer immédiatement le reçu avec QR code au copropriétaire ?"
+    }
+  val receiptQrVerifyLabel: String
+    get() = if (language == AppLanguage.AR) "رمز التحقق QR" else "Vérification QR"
+
+  // Biometric Unlock, Monthly Reminder & Audit Log
+  val settingsBiometricLabel: String
+    get() = if (language == AppLanguage.AR) "فتح القفل بالبصمة / الوجه (البيومترية)" else "Déverrouillage biométrique (Empreinte / Visage)"
+  val settingsBiometricHint: String
+    get() = if (language == AppLanguage.AR) {
+      "يتطلب تفعيل رمز PIN أولاً لاستخدام البصمة أو الوجه."
+    } else {
+      "Définissez d'abord un code PIN à 4 chiffres pour activer la biométrie."
+    }
+  val pinBiometricBtn: String
+    get() = if (language == AppLanguage.AR) "الفتح بالبصمة" else "Empreinte / Visage"
+  val biometricPromptTitle: String
+    get() = if (language == AppLanguage.AR) "فتح تطبيق SYNDICAT" else "Déverrouiller SYNDICAT"
+  val biometricPromptSubtitle: String
+    get() = if (language == AppLanguage.AR) "تأكيد الهوية عبر البصمة أو الوجه" else "Authentification biométrique du syndic"
+  val settingsReminderTitle: String
+    get() = if (language == AppLanguage.AR) "التذكير الشهري التلقائي" else "Rappel mensuel automatique"
+  val settingsReminderEnableLabel: String
+    get() = if (language == AppLanguage.AR) "إشعار شهري لتذكير السكان بالأداء" else "Notification mensuelle de relance"
+  val settingsReminderDayLabel: String
+    get() = if (language == AppLanguage.AR) "يوم التذكير من كل شهر:" else "Jour du rappel chaque mois :"
+  val settingsReminderTestBtn: String
+    get() = if (language == AppLanguage.AR) "تجربة الإشعار الآن" else "Tester l'alerte"
+  val settingsAuditOpenBtn: String
+    get() = if (language == AppLanguage.AR) "سجل العمليات والتدقيق" else "Journal d'audit des opérations"
+  val auditDialogTitle: String
+    get() = if (language == AppLanguage.AR) "سجل التدقيق والعمليات" else "Journal d'audit"
+  val auditEmptyText: String
+    get() = if (language == AppLanguage.AR) "لا توجد عمليات مسجلة في السجل بعد." else "Aucune opération enregistrée pour le moment."
+  val auditExportCsvBtn: String
+    get() = if (language == AppLanguage.AR) "تصدير السجل (CSV)" else "Exporter (.csv)"
+
+  // --- UI/UX Polish v2.1 (Navigation, Quick Sheet, N vs N-1, Aperçu A4, Confort Lecture) ---
+  val navQuickPayFab: String
+    get() = if (language == AppLanguage.AR) "تحصيل سريع" else "Encaisser"
+  val quickPayPickerTitle: String
+    get() = if (language == AppLanguage.AR) "اختر الشقة للتحصيل السريع" else "Encaissement rapide par appartement"
+  val syncStatusLocalPill: String
+    get() = if (language == AppLanguage.AR) "محلي" else "Local"
+  val syncStatusCloudPill: String
+    get() = if (language == AppLanguage.AR) "سحابي" else "Cloud"
+  val syncStatusBackupDuePill: String
+    get() = if (language == AppLanguage.AR) "نسخة مطلوبة" else "Sauvegarde"
+
+  val dashUpcomingTitle: String
+    get() = if (language == AppLanguage.AR) "أولويات وتنبيهات" else "Échéances & Priorités"
+  val dashUnpaidExpensesCardTitle: String
+    get() = if (language == AppLanguage.AR) "فواتير المزودين" else "Factures prestataires"
+  val dashSpecialCallsCardTitle: String
+    get() = if (language == AppLanguage.AR) "نداءات استثنائية" else "Appels de fonds"
+  val dashPreviousYearLegend: (Long) -> String
+    get() = { prevYr ->
+      if (language == AppLanguage.AR) "السنة السابقة (${bidiLtr(prevYr.toString())})" else "N-1 ($prevYr)"
+    }
+  val dashStickyTreasuryBtn: String
+    get() = if (language == AppLanguage.AR) "تحصيل" else "Encaisser"
+
+  val expFilterUnpaidOnly: (Int) -> String
+    get() = { count ->
+      if (language == AppLanguage.AR) "غير مؤداة (${formatNumber(count.toLong())})" else "Reste à payer ($count)"
+    }
+  val expEmptyActionBtn: String
+    get() = if (language == AppLanguage.AR) "إضافة أول مصروف" else "Ajouter la première dépense"
+
+  val apptEmptyFilterTitle: String
+    get() = if (language == AppLanguage.AR) "لا توجد شقق مطابقة" else "Aucun appartement trouvé"
+  val apptEmptyFilterSub: String
+    get() = if (language == AppLanguage.AR) {
+      "جرّب تغيير كلمات البحث أو إزالة فلاتر الطابق والحالة."
+    } else {
+      "Modifiez votre recherche ou réinitialisez les filtres actifs."
+    }
+  val apptResetFiltersBtn: String
+    get() = if (language == AppLanguage.AR) "إعادة ضبط الفلاتر" else "Réinitialiser les filtres"
+
+  val quickPayRangeLabel: String
+    get() = if (language == AppLanguage.AR) "اختيار سريع للمدة" else "Sélection rapide de période"
+  val quickPayRange1Month: String
+    get() = if (language == AppLanguage.AR) "شهر واحد" else "1 mois"
+  val quickPayRange3Months: String
+    get() = if (language == AppLanguage.AR) "3 أشهر" else "Trimestre (3)"
+  val quickPayRange6Months: String
+    get() = if (language == AppLanguage.AR) "6 أشهر" else "Semestre (6)"
+  val quickPayRangeFullYear: String
+    get() = if (language == AppLanguage.AR) "كل السنة" else "Année complète"
+  val quickPayPreviewTotal: (Int, String) -> String
+    get() = { count, totalText ->
+      if (language == AppLanguage.AR) {
+        "المبلغ المقدر (${formatNumber(count.toLong())} أشهر): $totalText"
+      } else {
+        "Total estimé ($count mois) : $totalText"
+      }
+    }
+  val quickPayConfirmBtn: (String) -> String
+    get() = { totalText ->
+      if (language == AppLanguage.AR) "تحصيل $totalText" else "Encaisser $totalText"
+    }
+  val tabletDetailPromptTitle: String
+    get() = if (language == AppLanguage.AR) "اختر شقة من القائمة" else "Sélectionnez un appartement"
+  val tabletDetailPromptSub: String
+    get() = if (language == AppLanguage.AR) {
+      "تظهر هنا تفاصيل الدفع والأشهر وسجل الوصولات مباشرة."
+    } else {
+      "Consultez les cotisations, le calendrier 12 mois et l'historique ici."
+    }
+
+  val projectsViewWorksTab: String
+    get() = if (language == AppLanguage.AR) "الأوراش والمشاريع" else "Travaux & Projets"
+  val projectsViewCallsTab: String
+    get() = if (language == AppLanguage.AR) "النداءات الاستثنائية" else "Appels de fonds"
+
+  val posterPreviewBtn: String
+    get() = if (language == AppLanguage.AR) "معاينة A4" else "Aperçu A4"
+  val posterPreviewTitle: String
+    get() = if (language == AppLanguage.AR) "معاينة الصفحة (اسحب للتكبير)" else "Aperçu A4 (pincez pour zoomer)"
+  val posterPreviewClose: String
+    get() = if (language == AppLanguage.AR) "إغلاق" else "Fermer"
+
+  val settingsFontLargeHint: String
+    get() = if (language == AppLanguage.AR) {
+      "وضع راحة القراءة مفعّل: نص أكبر وحدود أكثر وضوحاً وتباين أعلى."
+    } else {
+      "Mode confort lecture activé : texte agrandi, bordures renforcées et contraste élevé."
+    }
+
+  // --- UI/UX Polish v2.2 (Confidentialité, Recherche globale, Anneau dépenses, Tri, Quorum AG, Thèmes visuels) ---
+  val privacyToggleHideDesc: String
+    get() = if (language == AppLanguage.AR) "إخفاء المبالغ والأسماء" else "Mode discrétion : masquer les montants"
+  val privacyToggleShowDesc: String
+    get() = if (language == AppLanguage.AR) "إظهار المبالغ والأسماء" else "Afficher les montants"
+  val privacyModeActiveBanner: String
+    get() = if (language == AppLanguage.AR) "وضع الخصوصية مفعّل (المبالغ والأسماء مخفية)" else "Mode discrétion actif (montants & noms masqués)"
+
+  val globalSearchTitle: String
+    get() = if (language == AppLanguage.AR) "بحث شامل" else "Recherche globale"
+  val globalSearchHint: String
+    get() = if (language == AppLanguage.AR) "ابحث عن شقة، مالك، مصروف أو مشروع…" else "Appartement, propriétaire, dépense, projet…"
+  val globalSearchEmpty: String
+    get() = if (language == AppLanguage.AR) "لا توجد نتائج مطابقة لهذا البحث." else "Aucun résultat correspondant."
+  val globalSearchSecApts: String
+    get() = if (language == AppLanguage.AR) "الشقق" else "Appartements"
+  val globalSearchSecExpenses: String
+    get() = if (language == AppLanguage.AR) "المصاريف" else "Dépenses"
+  val globalSearchSecProjects: String
+    get() = if (language == AppLanguage.AR) "المشاريع" else "Projets"
+
+  val expChartTitle: String
+    get() = if (language == AppLanguage.AR) "توزيع المصاريف حسب الفئة" else "Répartition par catégorie"
+  val expChartAllLabel: String
+    get() = if (language == AppLanguage.AR) "الإجمالي" else "Total"
+  val expSettleRemainingBtn: String
+    get() = if (language == AppLanguage.AR) "أداء الباقي الآن" else "Solder le reste"
+  val expSortRecent: String
+    get() = if (language == AppLanguage.AR) "الأحدث" else "Récentes"
+  val expSortUnpaidDesc: String
+    get() = if (language == AppLanguage.AR) "أكبر باقي" else "Reste dû"
+  val expSortAmountDesc: String
+    get() = if (language == AppLanguage.AR) "أكبر مبلغ" else "Montant"
+
+  val apptSortDefault: String
+    get() = if (language == AppLanguage.AR) "الترتيب الافتراضي" else "Par N°"
+  val apptSortLateDesc: String
+    get() = if (language == AppLanguage.AR) "الأكثر تأخراً" else "Plus gros retard"
+  val apptSortPaidDesc: String
+    get() = if (language == AppLanguage.AR) "الأكثر أداءً" else "Plus payé"
+
+  val agQuorumOpenBtn: String
+    get() = if (language == AppLanguage.AR) "النصاب وتصويت الجمع العام" else "Quorum & Vote AG"
+  val agQuorumCardTitle: String
+    get() = if (language == AppLanguage.AR) "تتبع النصاب القانوني للجمع العام" else "Quorum de l'Assemblée Générale"
+  val agQuorumCardSub: String
+    get() = if (language == AppLanguage.AR) "حدّد الشقق الحاضرة أو الموكلة لحساب النصاب مباشرة." else "Cochez les lots présents ou représentés pour calculer le quorum."
+  val agQuorumPresentCount: (Int, Int) -> String
+    get() = { present, total ->
+      if (language == AppLanguage.AR) {
+        "${formatNumber(present.toLong())} من أصل ${formatNumber(total.toLong())} شقة حاضرة"
+      } else {
+        "$present / $total lots présents"
+      }
+    }
+  val agQuorumReachedBadge: String
+    get() = if (language == AppLanguage.AR) "✓ النصاب القانوني مكتمل (≥ 50%)" else "✓ Quorum atteint (≥ 50%)"
+  val agQuorumMissingBadge: (Int) -> String
+    get() = { missing ->
+      if (language == AppLanguage.AR) {
+        "ينقص ${formatNumber(missing.toLong())} شقة لبلوغ الأغلبية"
+      } else {
+        "$missing lot(s) manquant(s) pour la majorité"
+      }
+    }
+  val agQuorumResetBtn: String
+    get() = if (language == AppLanguage.AR) "تصفير الحضور" else "Réinitialiser"
 }
 
 val ArabicStrings = SyndicatStrings(
@@ -994,8 +1374,8 @@ val ArabicStrings = SyndicatStrings(
   navSettings = "الإعدادات",
   loadingSync = "جاري تحميل بيانات السانديك…",
   undoAction = "تراجع",
-  authBadge = "إدارة السانديك · عربي RTL",
-  authTitle = "إدارة السانديك",
+  authBadge = "إدارة السانديك · الناشر DYNIC",
+  authTitle = "SYNDICAT",
   authSubtitle = "سجّل الدخول بحساب Google للوصول إلى صندوق الإقامة والمساهمات والمشاريع.",
   authFeat1Title = "تخصيص سريع لأي عمارة",
   authFeat1Sub = "مساعد إعداد من 6 مراحل للطوابق، الشقق، الملاك، المساهمات والأشهر المخصصة.",
@@ -1237,8 +1617,8 @@ val FrenchStrings = SyndicatStrings(
   navSettings = "Réglages",
   loadingSync = "Synchronisation du syndicat…",
   undoAction = "Annuler",
-  authBadge = "GESTION DU SYNDIC · AR / FR",
-  authTitle = "Gestion du Syndic",
+  authBadge = "GESTION DE COPROPRIÉTÉ · ÉDITEUR DYNIC",
+  authTitle = "SYNDICAT",
   authSubtitle = "Connectez-vous avec Google pour accéder à la caisse, aux cotisations et aux projets.",
   authFeat1Title = "Assistant d'installation en 6 étapes",
   authFeat1Sub = "Configurez n'importe quel immeuble (étages uniformes ou variables, propriétaires, tarifs).",

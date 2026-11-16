@@ -1,6 +1,10 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,9 +31,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
@@ -41,15 +49,24 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -59,14 +76,19 @@ import com.example.data.model.EXPENSE_CATEGORIES
 import com.example.data.model.ExpenseRecord
 import com.example.ui.components.AirtableSignatureCard
 import com.example.ui.components.AirtableSoftCard
+import com.example.ui.components.ExpenseCategoriesBreakdownCard
 import com.example.ui.components.FintechTextField
 import com.example.ui.components.FintechWhiteCard
+import com.example.ui.components.LocalPrivacyMode
 import com.example.ui.components.MetaCobaltBuyButton
 import com.example.ui.components.MetaSegmentedPillRow
 import com.example.ui.components.SageSecondaryButton
 import com.example.ui.components.SyndicatDialog
+import com.example.ui.components.SyndicatEmptyStateCard
 import com.example.ui.components.SyndicatFilterChip
 import com.example.ui.components.SyndicatProgressBar
+import com.example.ui.components.maskSensitiveDh
+import com.example.ui.i18n.AppLanguage
 import com.example.ui.i18n.LocalStrings
 import com.example.ui.i18n.bidiLtr
 import com.example.ui.i18n.formatNumber
@@ -74,11 +96,21 @@ import com.example.ui.i18n.localizeDigits
 import com.example.ui.theme.LocalSyndicatTokens
 import com.example.ui.viewmodel.SyndicatDashboardData
 import com.example.ui.viewmodel.formatDh
+import com.example.util.BackupManager
+import com.example.util.ExpensePhotoManager
 import com.example.util.ExportVariant
 import com.example.util.PdfPosterExporter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
+import kotlinx.coroutines.launch
+
+private enum class ExpenseSortMode {
+  RECENT,
+  UNPAID_DESC,
+  AMOUNT_DESC,
+}
 
 @Composable
 fun ExpensesScreen(
@@ -95,25 +127,56 @@ fun ExpensesScreen(
   onUpdateExpense: (ExpenseRecord) -> Unit,
   onDeleteExpense: (ExpenseRecord) -> Unit,
   onExportError: (String) -> Unit,
+  onAddExpenseWithId: ((
+    title: String,
+    category: String,
+    amountDh: Long,
+    paidAmountDh: Long,
+    supplier: String,
+    dateLabel: String,
+    notes: String,
+    explicitId: String?,
+  ) -> Unit)? = null,
   modifier: Modifier = Modifier,
+  initialUnpaidOnly: Boolean = false,
 ) {
   val context = LocalContext.current
+  val haptics = LocalHapticFeedback.current
+  val scope = rememberCoroutineScope()
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val isPrivacy = LocalPrivacyMode.current
   val cfg = data.config
   val cur = cfg.currency
   val dig = cfg.digitsAr
+  val isAr = strings.language == AppLanguage.AR
   val numericFont = tokens.numericFontFamily ?: tokens.monoFontFamily
 
   var isCaisseMode by remember { mutableStateOf(false) }
   var selectedCategory by remember { mutableStateOf<String?>(null) }
+  var unpaidOnlyFilter by rememberSaveable(initialUnpaidOnly) { mutableStateOf(initialUnpaidOnly) }
+  var sortMode by rememberSaveable { mutableStateOf(ExpenseSortMode.RECENT) }
   var showAddModal by remember { mutableStateOf(false) }
   var editingExpense by remember { mutableStateOf<ExpenseRecord?>(null) }
   var armedDeleteId by remember { mutableStateOf<String?>(null) }
+  var photoRevision by remember { mutableIntStateOf(0) }
+  var previewPhotoExpense by remember { mutableStateOf<ExpenseRecord?>(null) }
 
-  val filteredExpenses = remember(data.expenses, selectedCategory) {
-    if (selectedCategory == null) data.expenses
-    else data.expenses.filter { it.category == selectedCategory }
+  LaunchedEffect(initialUnpaidOnly) {
+    if (initialUnpaidOnly) unpaidOnlyFilter = true
+  }
+
+  val filteredExpenses = remember(data.expenses, selectedCategory, unpaidOnlyFilter, sortMode) {
+    val base = data.expenses.filter { exp ->
+      val catOk = selectedCategory == null || exp.category == selectedCategory
+      val unpaidOk = !unpaidOnlyFilter || !exp.isFullyPaid
+      catOk && unpaidOk
+    }
+    when (sortMode) {
+      ExpenseSortMode.RECENT -> base
+      ExpenseSortMode.UNPAID_DESC -> base.sortedByDescending { it.remainingToPayDh }
+      ExpenseSortMode.AMOUNT_DESC -> base.sortedByDescending { it.amountDh }
+    }
   }
 
   Box(
@@ -123,7 +186,7 @@ fun ExpensesScreen(
       .testTag("expenses_screen"),
   ) {
     Column(modifier = Modifier.fillMaxSize()) {
-      // Header + Meta Segmented Pill Switcher (المصاريف | الصندوق — {rounded.full} 100dp pills)
+      // Header + CSV shortcut + Meta Segmented Pill Switcher (المصاريف | الصندوق)
       Row(
         modifier = Modifier
           .fillMaxWidth()
@@ -140,7 +203,29 @@ fun ExpensesScreen(
           overflow = TextOverflow.Ellipsis,
           modifier = Modifier.weight(1f),
         )
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+
+        IconButton(
+          onClick = {
+            val csv = BackupManager.generateExpensesCsv(data)
+            BackupManager.shareCsvFile(
+              context = context,
+              filePrefix = "expenses_${cfg.year}",
+              csvContent = csv,
+              chooserTitle = strings.exportExpensesCsvBtn,
+              onError = onExportError,
+            )
+          },
+          modifier = Modifier
+            .size(48.dp)
+            .testTag("export_expenses_csv_top_btn"),
+        ) {
+          Icon(
+            imageVector = Icons.Default.FileDownload,
+            contentDescription = strings.exportExpensesCsvBtn,
+            tint = tokens.inkDeep,
+          )
+        }
 
         MetaSegmentedPillRow(
           firstLabel = strings.tabExpensesMode,
@@ -158,14 +243,50 @@ fun ExpensesScreen(
         // MODE المصاريف (§6 : cartes de contenu 10dp bordées, montant Inter 500, barre 4dp ink sur surfaceStrong, 1 seul bouton primaire noir 12dp)
         // =========================================================================
         LazyRow(
+          modifier = Modifier.testTag("expenses_filter_row"),
           contentPadding = PaddingValues(horizontal = 16.dp),
           horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
           item {
             SyndicatFilterChip(
-              selected = selectedCategory == null,
-              onClick = { selectedCategory = null },
+              selected = selectedCategory == null && !unpaidOnlyFilter,
+              onClick = {
+                selectedCategory = null
+                unpaidOnlyFilter = false
+              },
               label = strings.expFilterAll(data.expenses.size),
+            )
+          }
+          item {
+            SyndicatFilterChip(
+              selected = unpaidOnlyFilter,
+              onClick = { unpaidOnlyFilter = !unpaidOnlyFilter },
+              label = strings.expFilterUnpaidOnly(data.unpaidExpensesCount),
+              modifier = Modifier.testTag("expense_filter_unpaid"),
+            )
+          }
+          item {
+            SyndicatFilterChip(
+              selected = sortMode == ExpenseSortMode.RECENT,
+              onClick = { sortMode = ExpenseSortMode.RECENT },
+              label = strings.expSortRecent,
+              modifier = Modifier.testTag("exp_sort_recent"),
+            )
+          }
+          item {
+            SyndicatFilterChip(
+              selected = sortMode == ExpenseSortMode.UNPAID_DESC,
+              onClick = { sortMode = ExpenseSortMode.UNPAID_DESC },
+              label = strings.expSortUnpaidDesc,
+              modifier = Modifier.testTag("exp_sort_unpaid"),
+            )
+          }
+          item {
+            SyndicatFilterChip(
+              selected = sortMode == ExpenseSortMode.AMOUNT_DESC,
+              onClick = { sortMode = ExpenseSortMode.AMOUNT_DESC },
+              label = strings.expSortAmountDesc,
+              modifier = Modifier.testTag("exp_sort_amount"),
             )
           }
           items(EXPENSE_CATEGORIES) { cat ->
@@ -181,41 +302,35 @@ fun ExpensesScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         LazyColumn(
-          modifier = Modifier.fillMaxSize(),
+          modifier = Modifier
+            .fillMaxSize()
+            .testTag("expenses_list"),
           contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 96.dp),
           verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+          if (data.expenses.isNotEmpty()) {
+            item(key = "expense_categories_donut") {
+              ExpenseCategoriesBreakdownCard(
+                expenses = data.expenses,
+                currency = cur,
+                digitsAr = dig,
+                selectedCategory = selectedCategory,
+                onSelectCategory = { selectedCategory = it },
+              )
+            }
+          }
+
           if (filteredExpenses.isEmpty()) {
             item {
-              FintechWhiteCard(
-                modifier = Modifier.fillMaxWidth(),
-                padding = 28.dp,
-              ) {
-                Column(
-                  modifier = Modifier.fillMaxWidth(),
-                  horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                  Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
-                    contentDescription = null,
-                    tint = tokens.mute,
-                    modifier = Modifier.size(44.dp),
-                  )
-                  Spacer(modifier = Modifier.height(10.dp))
-                  Text(
-                    text = strings.expEmptyTitle,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Normal,
-                    color = tokens.ink,
-                  )
-                  Spacer(modifier = Modifier.height(4.dp))
-                  Text(
-                    text = strings.expEmptyTip,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = tokens.body,
-                  )
-                }
-              }
+              SyndicatEmptyStateCard(
+                icon = Icons.AutoMirrored.Filled.ReceiptLong,
+                title = strings.expEmptyTitle,
+                subtitle = strings.expEmptyTip,
+                actionLabel = strings.expEmptyActionBtn,
+                actionIcon = Icons.Default.Add,
+                actionTag = "expenses_empty_add_btn",
+                onAction = { showAddModal = true },
+              )
             }
           } else {
             items(
@@ -231,6 +346,18 @@ fun ExpensesScreen(
               }
               val isDeleteArmed = armedDeleteId == exp.id
 
+              val thumbBitmap by produceState<ImageBitmap?>(
+                initialValue = null,
+                exp.id,
+                photoRevision,
+              ) {
+                value = if (ExpensePhotoManager.hasPhoto(context, exp.id)) {
+                  ExpensePhotoManager.loadBitmap(context, exp.id)
+                } else {
+                  null
+                }
+              }
+
               FintechWhiteCard(
                 modifier = Modifier
                   .fillMaxWidth()
@@ -243,6 +370,20 @@ fun ExpensesScreen(
                   horizontalArrangement = Arrangement.SpaceBetween,
                   verticalAlignment = Alignment.Top,
                 ) {
+                  if (thumbBitmap != null) {
+                    Image(
+                      bitmap = thumbBitmap!!,
+                      contentDescription = strings.expPhotoPreviewTitle,
+                      contentScale = ContentScale.Crop,
+                      modifier = Modifier
+                        .size(54.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { previewPhotoExpense = exp }
+                        .testTag("expense_thumb_${exp.id}"),
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                  }
+
                   Column(modifier = Modifier.weight(1f)) {
                     Text(
                       text = exp.title,
@@ -263,8 +404,10 @@ fun ExpensesScreen(
                     )
                   }
 
+                  Spacer(modifier = Modifier.width(8.dp))
+
                   Text(
-                    text = formatDh(exp.amountDh, cur, dig),
+                    text = maskSensitiveDh(formatDh(exp.amountDh, cur, dig), isPrivacy),
                     style = MaterialTheme.typography.titleLarge,
                     fontFamily = numericFont ?: MaterialTheme.typography.titleLarge.fontFamily,
                     fontWeight = FontWeight.Medium,
@@ -290,15 +433,15 @@ fun ExpensesScreen(
                     val paidPrefix = if (rem > 0L) "◐ " else "✓ "
                     Text(
                       text = "$paidPrefix${strings.expPaidProgressLabel(
-                        formatDh(paid, cur, dig),
-                        formatDh(exp.amountDh, cur, dig),
+                        maskSensitiveDh(formatDh(paid, cur, dig), isPrivacy),
+                        maskSensitiveDh(formatDh(exp.amountDh, cur, dig), isPrivacy),
                       )}",
                       style = MaterialTheme.typography.labelSmall,
                       color = tokens.body,
                     )
                     if (rem > 0L) {
                       Text(
-                        text = "! ${strings.expSupplierRemaining(formatDh(rem, cur, dig))}",
+                        text = "! ${strings.expSupplierRemaining(maskSensitiveDh(formatDh(rem, cur, dig), isPrivacy))}",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Medium,
                         color = tokens.negativeDeep,
@@ -310,6 +453,43 @@ fun ExpensesScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                   ) {
+                    val hasPhoto = remember(exp.id, photoRevision) {
+                      ExpensePhotoManager.hasPhoto(context, exp.id)
+                    }
+                    if (hasPhoto) {
+                      Surface(
+                        shape = RoundedCornerShape(100.dp),
+                        color = tokens.surfaceSoft,
+                        border = BorderStroke(1.dp, tokens.divider),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
+                        modifier = Modifier
+                          .minimumInteractiveComponentSize()
+                          .heightIn(min = 48.dp)
+                          .clip(RoundedCornerShape(100.dp))
+                          .clickable { previewPhotoExpense = exp }
+                          .testTag("expense_photo_badge_${exp.id}"),
+                      ) {
+                        Row(
+                          verticalAlignment = Alignment.CenterVertically,
+                          horizontalArrangement = Arrangement.spacedBy(4.dp),
+                          modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        ) {
+                          Icon(
+                            imageVector = Icons.Default.PhotoCamera,
+                            contentDescription = strings.expPhotoBadgeLabel,
+                            tint = tokens.infoColor,
+                            modifier = Modifier.size(16.dp),
+                          )
+                          Text(
+                            text = strings.expPhotoBadgeLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = tokens.infoColor,
+                          )
+                        }
+                      }
+                    }
                     IconButton(
                       onClick = { editingExpense = exp },
                       modifier = Modifier.size(48.dp),
@@ -334,6 +514,8 @@ fun ExpensesScreen(
                           .clip(confirmShape)
                           .clickable {
                             armedDeleteId = null
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            scope.launch { ExpensePhotoManager.deletePhoto(context, exp.id) }
                             onDeleteExpense(exp)
                           }
                           .testTag("confirm_delete_expense_${exp.id}"),
@@ -365,6 +547,21 @@ fun ExpensesScreen(
                       }
                     }
                   }
+                }
+                if (rem > 0L) {
+                  Spacer(modifier = Modifier.height(8.dp))
+                  SageSecondaryButton(
+                    text = "${strings.expSettleRemainingBtn} (${maskSensitiveDh(formatDh(rem, cur, dig), isPrivacy)})",
+                    icon = Icons.Default.DoneAll,
+                    compact = true,
+                    onClick = {
+                      haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                      onUpdateExpense(exp.copy(paidAmountDh = exp.amountDh))
+                    },
+                    modifier = Modifier
+                      .fillMaxWidth()
+                      .testTag("exp_settle_btn_${exp.id}"),
+                  )
                 }
               }
             }
@@ -398,7 +595,7 @@ fun ExpensesScreen(
                 formatDh(data.cashNowDh, cur, dig)
               }
               Text(
-                text = cashDisp,
+                text = maskSensitiveDh(cashDisp, isPrivacy),
                 style = MaterialTheme.typography.displayLarge.copy(
                   fontFamily = numericFont ?: MaterialTheme.typography.displayLarge.fontFamily,
                   fontFeatureSettings = "tnum",
@@ -414,22 +611,22 @@ fun ExpensesScreen(
               modifier = Modifier.fillMaxWidth(),
               padding = 24.dp,
             ) {
-              CaisseLedgerLine(strings.caisseOpeningBalance, formatDh(cfg.openingBalanceDh, cur, dig), tokens.ink)
+              CaisseLedgerLine(strings.caisseOpeningBalance, maskSensitiveDh(formatDh(cfg.openingBalanceDh, cur, dig), isPrivacy), tokens.ink)
               CaisseLedgerLine(
                 strings.caisseTotalReceipts,
-                formatDh(data.totalCaisseDh, cur, dig, explicitPlus = true),
+                maskSensitiveDh(formatDh(data.totalCaisseDh, cur, dig, explicitPlus = true), isPrivacy),
                 tokens.positiveDeep,
               )
               CaisseLedgerLine(
                 strings.caissePaidToSuppliers,
-                "${if (data.totalExpensesPaidDh > 0L) "▼ " else ""}${formatDh(-data.totalExpensesPaidDh, cur, dig)}",
+                "${if (data.totalExpensesPaidDh > 0L) "▼ " else ""}${maskSensitiveDh(formatDh(-data.totalExpensesPaidDh, cur, dig), isPrivacy)}",
                 tokens.negativeDeep,
               )
               HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = tokens.divider)
-              CaisseLedgerLine(strings.caisseTotalExpenses, formatDh(data.totalExpensesDh, cur, dig), tokens.body)
+              CaisseLedgerLine(strings.caisseTotalExpenses, maskSensitiveDh(formatDh(data.totalExpensesDh, cur, dig), isPrivacy), tokens.body)
               CaisseLedgerLine(
                 strings.caisseUnpaidSuppliers,
-                "${if (data.unpaidExpensesDh > 0L) "◐ " else ""}${formatDh(data.unpaidExpensesDh, cur, dig)}",
+                "${if (data.unpaidExpensesDh > 0L) "◐ " else ""}${maskSensitiveDh(formatDh(data.unpaidExpensesDh, cur, dig), isPrivacy)}",
                 tokens.ink,
               )
               val balText = if (data.balanceDh < 0L) {
@@ -439,7 +636,7 @@ fun ExpensesScreen(
               }
               CaisseLedgerLine(
                 strings.caisseAccountingBalance,
-                balText,
+                maskSensitiveDh(balText, isPrivacy),
                 if (data.balanceDh >= 0L) tokens.positiveDeep else tokens.negativeDeep,
               )
 
@@ -555,9 +752,16 @@ fun ExpensesScreen(
     ExpenseEditorModal(
       initial = null,
       currency = cur,
+      onPhotoChanged = { photoRevision++ },
       onDismiss = { showAddModal = false },
-      onConfirm = { title, cat, amount, paid, supplier, date, notes ->
-        onAddExpense(title, cat, amount, paid, supplier, date, notes)
+      onConfirm = { title, cat, amount, paid, supplier, date, notes, expenseId ->
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        if (onAddExpenseWithId != null) {
+          onAddExpenseWithId(title, cat, amount, paid, supplier, date, notes, expenseId)
+        } else {
+          onAddExpense(title, cat, amount, paid, supplier, date, notes)
+        }
+        photoRevision++
         showAddModal = false
       },
     )
@@ -567,8 +771,10 @@ fun ExpensesScreen(
     ExpenseEditorModal(
       initial = exp,
       currency = cur,
+      onPhotoChanged = { photoRevision++ },
       onDismiss = { editingExpense = null },
-      onConfirm = { title, cat, amount, paid, supplier, date, notes ->
+      onConfirm = { title, cat, amount, paid, supplier, date, notes, _ ->
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         onUpdateExpense(
           exp.copy(
             title = title,
@@ -580,8 +786,16 @@ fun ExpensesScreen(
             notes = notes,
           )
         )
+        photoRevision++
         editingExpense = null
       },
+    )
+  }
+
+  previewPhotoExpense?.let { targetExp ->
+    ExpensePhotoPreviewDialog(
+      expense = targetExp,
+      onDismiss = { previewPhotoExpense = null },
     )
   }
 }
@@ -622,6 +836,7 @@ private fun CaisseLedgerLine(
 private fun ExpenseEditorModal(
   initial: ExpenseRecord?,
   currency: String,
+  onPhotoChanged: () -> Unit,
   onDismiss: () -> Unit,
   onConfirm: (
     title: String,
@@ -631,11 +846,17 @@ private fun ExpenseEditorModal(
     supplier: String,
     dateLabel: String,
     notes: String,
+    expenseId: String,
   ) -> Unit,
 ) {
+  val context = LocalContext.current
+  val scope = rememberCoroutineScope()
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
   val today = remember { SimpleDateFormat("dd/MM/yyyy", Locale.US).format(Date()) }
+  val targetExpenseId = remember(initial) {
+    initial?.id?.takeIf { it.isNotBlank() } ?: "exp_${UUID.randomUUID().toString().take(8)}"
+  }
 
   var title by remember(initial) { mutableStateOf(initial?.title.orEmpty()) }
   var category by remember(initial) { mutableStateOf(initial?.category ?: EXPENSE_CATEGORIES.first()) }
@@ -650,9 +871,34 @@ private fun ExpenseEditorModal(
   var dateLabel by remember(initial) { mutableStateOf(initial?.dateLabel?.ifBlank { today } ?: today) }
   var notes by remember(initial) { mutableStateOf(initial?.notes.orEmpty()) }
   var errorMsg by remember { mutableStateOf<String?>(null) }
+  var photoBitmap by remember(targetExpenseId) { mutableStateOf<ImageBitmap?>(null) }
+
+  LaunchedEffect(targetExpenseId) {
+    photoBitmap = ExpensePhotoManager.loadBitmap(context, targetExpenseId)
+  }
+
+  val photoPicker = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.PickVisualMedia(),
+  ) { uri ->
+    if (uri != null) {
+      scope.launch {
+        if (ExpensePhotoManager.savePhotoFromUri(context, targetExpenseId, uri)) {
+          photoBitmap = ExpensePhotoManager.loadBitmap(context, targetExpenseId)
+          onPhotoChanged()
+        }
+      }
+    }
+  }
+
+  val handleDismiss: () -> Unit = {
+    if (initial == null && photoBitmap != null) {
+      scope.launch { ExpensePhotoManager.deletePhoto(context, targetExpenseId) }
+    }
+    onDismiss()
+  }
 
   SyndicatDialog(
-    onDismissRequest = onDismiss,
+    onDismissRequest = handleDismiss,
     title = {
       Text(
         text = if (initial == null) strings.expDialogAdd else strings.expDialogEdit,
@@ -753,6 +999,59 @@ private fun ExpenseEditorModal(
           }
         }
 
+        // Justificatif photo (Android Photo Picker sans permission)
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          val bmp = photoBitmap
+          if (bmp != null) {
+            Image(
+              bitmap = bmp,
+              contentDescription = strings.expPhotoPreviewTitle,
+              contentScale = ContentScale.Crop,
+              modifier = Modifier
+                .fillMaxWidth()
+                .height(140.dp)
+                .clip(RoundedCornerShape(12.dp)),
+            )
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              SageSecondaryButton(
+                text = strings.expPhotoChangeBtn,
+                icon = Icons.Default.AddAPhoto,
+                compact = true,
+                onClick = {
+                  photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                },
+                modifier = Modifier.weight(1f).testTag("change_expense_photo_btn"),
+              )
+              SageSecondaryButton(
+                text = strings.expPhotoRemoveBtn,
+                icon = Icons.Default.DeleteOutline,
+                compact = true,
+                onClick = {
+                  scope.launch {
+                    ExpensePhotoManager.deletePhoto(context, targetExpenseId)
+                    photoBitmap = null
+                    onPhotoChanged()
+                  }
+                },
+                modifier = Modifier.testTag("remove_expense_photo_btn"),
+              )
+            }
+          } else {
+            SageSecondaryButton(
+              text = strings.expPhotoAttachBtn,
+              icon = Icons.Default.AddAPhoto,
+              compact = true,
+              onClick = {
+                photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+              },
+              modifier = Modifier.fillMaxWidth().testTag("attach_expense_photo_btn"),
+            )
+          }
+        }
+
         FintechTextField(
           value = notes,
           onValueChange = { notes = it.take(280) },
@@ -776,13 +1075,74 @@ private fun ExpenseEditorModal(
             amt <= 0L -> errorMsg = strings.expErrAmount
             rawPaid > amt -> errorMsg = strings.expErrPaidExceedsAmount
             dateLabel.isBlank() -> errorMsg = strings.expErrDate
-            else -> onConfirm(title.trim(), category, amt, rawPaid, supplier.trim(), dateLabel.trim(), notes.trim())
+            else -> onConfirm(title.trim(), category, amt, rawPaid, supplier.trim(), dateLabel.trim(), notes.trim(), targetExpenseId)
           }
         },
         modifier = Modifier.testTag("save_expense_button"),
       )
     },
     dismissButton = {
+      SageSecondaryButton(
+        text = strings.apptCancel,
+        compact = true,
+        onClick = handleDismiss,
+      )
+    },
+  )
+}
+
+@Composable
+private fun ExpensePhotoPreviewDialog(
+  expense: ExpenseRecord,
+  onDismiss: () -> Unit,
+) {
+  val context = LocalContext.current
+  val strings = LocalStrings.current
+  val tokens = LocalSyndicatTokens.current
+  var bmp by remember(expense.id) { mutableStateOf<ImageBitmap?>(null) }
+
+  LaunchedEffect(expense.id) {
+    bmp = ExpensePhotoManager.loadBitmap(context, expense.id)
+  }
+
+  SyndicatDialog(
+    onDismissRequest = onDismiss,
+    title = {
+      Column {
+        Text(
+          text = strings.expPhotoPreviewTitle,
+          style = MaterialTheme.typography.titleLarge,
+          fontWeight = FontWeight.Normal,
+          color = tokens.ink,
+        )
+        Text(
+          text = expense.title,
+          style = MaterialTheme.typography.bodySmall,
+          color = tokens.body,
+        )
+      }
+    },
+    text = {
+      val image = bmp
+      if (image != null) {
+        Image(
+          bitmap = image,
+          contentDescription = expense.title,
+          contentScale = ContentScale.Fit,
+          modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 380.dp)
+            .clip(RoundedCornerShape(12.dp)),
+        )
+      } else {
+        Text(
+          text = "—",
+          style = MaterialTheme.typography.bodyMedium,
+          color = tokens.mute,
+        )
+      }
+    },
+    confirmButton = {
       SageSecondaryButton(
         text = strings.apptCancel,
         compact = true,

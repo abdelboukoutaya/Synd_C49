@@ -338,6 +338,8 @@ data class SyndicatDesignTokens(
   val statusPaidText: Color = positiveDeep,
   val statusLateText: Color = negativeDeep,
   val statusPartialDot: Color = warning,
+  val borderStrokeDp: Float = 1f,
+  val highContrastReading: Boolean = false,
 ) {
   val themeStyle: String
     get() = id
@@ -754,11 +756,39 @@ val MetaDarkTokens = MetaThemeDarkTokens
 val AirtableLightTokens = CoinbaseLightTokens
 val AirtableDarkTokens = CoinbaseDarkTokens
 
-fun tokensForThemeStyle(themeStyle: String?, darkTheme: Boolean): SyndicatDesignTokens {
-  return when (resolveVisualThemeFamily(themeStyle)) {
+fun tokensForThemeStyle(
+  themeStyle: String?,
+  darkTheme: Boolean,
+  highContrast: Boolean = false,
+): SyndicatDesignTokens {
+  val base = when (resolveVisualThemeFamily(themeStyle)) {
     "meta" -> if (darkTheme) MetaThemeDarkTokens else MetaThemeLightTokens
     "minimax" -> if (darkTheme) MiniMaxDarkTokens else MiniMaxLightTokens
     else -> if (darkTheme) CoinbaseDarkTokens else CoinbaseLightTokens
+  }
+  if (!highContrast) return base
+  return if (darkTheme) {
+    base.copy(
+      body = base.ink,
+      mute = base.body,
+      cardBorder = Color(0xFF5D6C7B),
+      divider = Color(0xFF475569),
+      hairline = Color(0xFF5D6C7B),
+      fieldBorder = Color(0xFF8A9BA8),
+      borderStrokeDp = 1.5f,
+      highContrastReading = true,
+    )
+  } else {
+    base.copy(
+      body = base.inkDeep,
+      mute = base.body,
+      cardBorder = Color(0xFF8E9AA6),
+      divider = Color(0xFFA8B3BE),
+      hairline = Color(0xFF8E9AA6),
+      fieldBorder = Color(0xFF4A5568),
+      borderStrokeDp = 1.5f,
+      highContrastReading = true,
+    )
   }
 }
 

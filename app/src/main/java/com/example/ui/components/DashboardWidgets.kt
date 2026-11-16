@@ -1,5 +1,8 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -9,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,16 +22,25 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Apartment
+import androidx.compose.material.icons.filled.Construction
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +58,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.data.model.ApartmentRecord
+import com.example.data.model.ExpenseRecord
+import com.example.data.model.ProjectRecord
+import com.example.ui.i18n.AppLanguage
 import com.example.ui.i18n.LocalStrings
 import com.example.ui.i18n.bidiLtr
 import com.example.ui.i18n.formatNumber
@@ -55,6 +72,11 @@ import com.example.ui.theme.CoinbaseSemanticUp
 import com.example.ui.theme.CoinbaseSurfaceDark
 import com.example.ui.theme.CoinbaseSurfaceDarkElevated
 import com.example.ui.theme.LocalSyndicatTokens
+import com.example.ui.theme.MetaAttention
+import com.example.ui.theme.MetaOculusPurple
+import com.example.ui.theme.MetaPrimaryCobalt
+import com.example.ui.theme.MetaSuccess
+import com.example.ui.theme.MetaWarning
 import com.example.ui.theme.cotisationColorForAmount
 import com.example.ui.viewmodel.SyndicatDashboardData
 import com.example.ui.viewmodel.formatDh
@@ -69,18 +91,26 @@ import com.example.ui.viewmodel.formatDh
 fun TreasuryPortfolioHeroCard(
   data: SyndicatDashboardData,
   numericFont: FontFamily,
+  onUnpaidExpensesClick: (() -> Unit)? = null,
 ) {
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val isPrivacy = LocalPrivacyMode.current
   val cfg = data.config
   val cur = cfg.currency
   val dig = cfg.digitsAr
 
-  val cashDisplay = if (data.cashNowDh < 0L) {
-    "▼ ${formatDh(data.cashNowDh, cur, dig)}"
+  val animCashNow = rememberAnimatedLong(data.cashNowDh)
+  val animCollected = rememberAnimatedLong(data.totalCaisseDh)
+  val animPaidOut = rememberAnimatedLong(data.totalExpensesPaidDh)
+  val animBalance = rememberAnimatedLong(data.balanceDh)
+
+  val rawCashDisplay = if (animCashNow < 0L) {
+    "▼ ${formatDh(animCashNow, cur, dig)}"
   } else {
-    formatDh(data.cashNowDh, cur, dig)
+    formatDh(animCashNow, cur, dig)
   }
+  val cashDisplay = maskSensitiveDh(rawCashDisplay, isPrivacy)
 
   Surface(
     shape = RoundedCornerShape(tokens.featureCardRadiusDp.dp),
@@ -175,7 +205,7 @@ fun TreasuryPortfolioHeroCard(
         ) {
           TreasuryMiniStatColumn(
             label = strings.dashCollectedLabel,
-            value = formatDh(data.totalCaisseDh, cur, dig, explicitPlus = true),
+            value = maskSensitiveDh(formatDh(animCollected, cur, dig, explicitPlus = true), isPrivacy),
             valueColor = CoinbaseSemanticUp,
             numericFont = numericFont,
             modifier = Modifier.weight(1f),
@@ -188,7 +218,7 @@ fun TreasuryPortfolioHeroCard(
           )
           TreasuryMiniStatColumn(
             label = strings.dashPaidOutLabel,
-            value = formatDh(data.totalExpensesPaidDh, cur, dig),
+            value = maskSensitiveDh(formatDh(animPaidOut, cur, dig), isPrivacy),
             valueColor = Color.White,
             numericFont = numericFont,
             alignCenter = true,
@@ -202,8 +232,8 @@ fun TreasuryPortfolioHeroCard(
           )
           TreasuryMiniStatColumn(
             label = strings.dashNetBalanceLabel,
-            value = formatDh(data.balanceDh, cur, dig),
-            valueColor = if (data.balanceDh >= 0L) Color.White else Color(0xFFFF6B78),
+            value = maskSensitiveDh(formatDh(animBalance, cur, dig), isPrivacy),
+            valueColor = if (animBalance >= 0L) Color.White else Color(0xFFFF6B78),
             numericFont = numericFont,
             alignEnd = true,
             modifier = Modifier.weight(1f),
@@ -222,7 +252,7 @@ fun TreasuryPortfolioHeroCard(
               color = Color.White.copy(alpha = 0.10f),
             ) {
               Text(
-                text = strings.dashOpeningBalanceNote(formatDh(cfg.openingBalanceDh, cur, dig)),
+                text = strings.dashOpeningBalanceNote(maskSensitiveDh(formatDh(cfg.openingBalanceDh, cur, dig), isPrivacy)),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Medium,
                 color = Color.White.copy(alpha = 0.90f),
@@ -231,13 +261,22 @@ fun TreasuryPortfolioHeroCard(
             }
           }
           if (data.unpaidExpensesDh > 0L) {
+            val pillShape = RoundedCornerShape(100.dp)
             Surface(
-              shape = RoundedCornerShape(100.dp),
+              shape = pillShape,
               color = Color(0xFF3B1219),
               border = BorderStroke(1.dp, Color(0xFFFF6B78).copy(alpha = 0.35f)),
+              modifier = if (onUnpaidExpensesClick != null) {
+                Modifier
+                  .clip(pillShape)
+                  .clickable(onClick = onUnpaidExpensesClick)
+                  .testTag("hero_unpaid_expenses_pill")
+              } else {
+                Modifier
+              },
             ) {
               Text(
-                text = "◐ ${strings.expSupplierRemaining(formatDh(data.unpaidExpensesDh, cur, dig))}",
+                text = "◐ ${strings.expSupplierRemaining(maskSensitiveDh(formatDh(data.unpaidExpensesDh, cur, dig), isPrivacy))}",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = Color(0xFFFF8A94),
@@ -485,6 +524,12 @@ fun CollectionRateRingCard(
   val tokens = LocalSyndicatTokens.current
   val shape = RoundedCornerShape(20.dp)
   val clamped = ratePercent.coerceIn(0, 100)
+  val animatedSweepFraction = androidx.compose.runtime.remember(clamped) { clamped / 100f }
+  val animatedFraction by animateFloatAsState(
+    targetValue = animatedSweepFraction,
+    animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing),
+    label = "ring_rate_anim",
+  )
   val ringColor = when {
     clamped >= 80 -> tokens.positive
     clamped >= 50 -> tokens.linkColor
@@ -495,7 +540,7 @@ fun CollectionRateRingCard(
   Surface(
     shape = shape,
     color = tokens.cardBg,
-    border = BorderStroke(1.dp, tokens.cardBorder),
+    border = BorderStroke(tokens.borderStrokeDp.dp, tokens.cardBorder),
     tonalElevation = 0.dp,
     shadowElevation = 0.dp,
     modifier = modifier
@@ -534,7 +579,7 @@ fun CollectionRateRingCard(
             drawArc(
               color = ringColor,
               startAngle = -90f,
-              sweepAngle = 360f * (clamped / 100f),
+              sweepAngle = 360f * animatedFraction,
               useCenter = false,
               topLeft = Offset(inset, inset),
               size = arcSize,
@@ -622,7 +667,7 @@ fun MonthlyCollectionsChartCard(
           color = tokens.inkDeep,
         )
         Spacer(modifier = Modifier.height(4.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
           Text(
             text = "● ${if (isAr) "عادي:" else "Standard :"} ${formatDh(cfg.defaultMonthlyFee, cur, dig)}",
             style = MaterialTheme.typography.labelSmall,
@@ -635,6 +680,14 @@ fun MonthlyCollectionsChartCard(
             fontWeight = FontWeight.Medium,
             color = cotisationColorForAmount(cfg.defaultMonthlyFee + 50L, cfg.defaultMonthlyFee),
           )
+          if (data.hasPreviousYearChartData) {
+            Text(
+              text = "◐ ${strings.dashPreviousYearLegend((cfg.year - 1L).coerceAtLeast(2020L))}",
+              style = MaterialTheme.typography.labelSmall,
+              fontWeight = FontWeight.Medium,
+              color = tokens.mute,
+            )
+          }
         }
       }
     }
@@ -645,7 +698,7 @@ fun MonthlyCollectionsChartCard(
       Surface(
         shape = RoundedCornerShape(14.dp),
         color = tokens.surfaceSoft,
-        border = BorderStroke(1.dp, tokens.divider),
+        border = BorderStroke(tokens.borderStrokeDp.dp, tokens.divider),
         modifier = Modifier.fillMaxWidth(),
       ) {
         Row(
@@ -658,13 +711,24 @@ fun MonthlyCollectionsChartCard(
           activeMonths.forEach { month ->
             val monthFee = cfg.feeForMonth(month)
             val collected = data.apartments.sumOf { it.amountFor(month) }
+            val prevCollected = data.previousYearMonthlyTotals[month] ?: 0L
             val ratio = (collected.toFloat() / maxExpected.toFloat()).coerceIn(0f, 1f)
+            val prevRatio = (prevCollected.toFloat() / maxExpected.toFloat()).coerceIn(0f, 1f)
             val barColor = if (collected <= 0L) {
               tokens.divider
             } else {
               cotisationColorForAmount(monthFee, cfg.defaultMonthlyFee)
             }
-            val barFillFraction = if (collected > 0L) ratio.coerceAtLeast(0.10f) else 0.06f
+            val barFillFraction by animateFloatAsState(
+              targetValue = if (collected > 0L) ratio.coerceAtLeast(0.10f) else 0.06f,
+              animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
+              label = "chart_bar_${month.key}",
+            )
+            val prevFillFraction by animateFloatAsState(
+              targetValue = if (prevCollected > 0L) prevRatio.coerceAtLeast(0.08f) else 0f,
+              animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
+              label = "chart_prev_bar_${month.key}",
+            )
 
             Column(
               modifier = Modifier.weight(1f),
@@ -682,19 +746,34 @@ fun MonthlyCollectionsChartCard(
               )
               Box(
                 modifier = Modifier
-                  .fillMaxWidth(0.68f)
+                  .fillMaxWidth(0.76f)
                   .height(76.dp)
                   .clip(RoundedCornerShape(6.dp))
                   .background(tokens.trackBg),
                 contentAlignment = Alignment.BottomCenter,
               ) {
-                Box(
-                  modifier = Modifier
-                    .fillMaxWidth()
-                    .height((76f * barFillFraction).dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(barColor),
-                )
+                Row(
+                  modifier = Modifier.fillMaxSize(),
+                  horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally),
+                  verticalAlignment = Alignment.Bottom,
+                ) {
+                  if (data.hasPreviousYearChartData && prevFillFraction > 0f) {
+                    Box(
+                      modifier = Modifier
+                        .weight(0.42f)
+                        .height((76f * prevFillFraction).dp)
+                        .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                        .background(tokens.mute.copy(alpha = 0.35f)),
+                    )
+                  }
+                  Box(
+                    modifier = Modifier
+                      .weight(if (data.hasPreviousYearChartData && prevFillFraction > 0f) 0.58f else 1f)
+                      .height((76f * barFillFraction).dp)
+                      .clip(RoundedCornerShape(6.dp))
+                      .background(barColor),
+                  )
+                }
               }
               Text(
                 text = strings.monthShort(month).take(4),
@@ -708,6 +787,383 @@ fun MonthlyCollectionsChartCard(
           }
         }
       }
+    }
+  }
+}
+
+/**
+ * Anneau interactif des dépenses par catégorie : toucher une catégorie filtre la liste.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ExpenseCategoriesBreakdownCard(
+  expenses: List<ExpenseRecord>,
+  currency: String,
+  digitsAr: Boolean,
+  selectedCategory: String?,
+  onSelectCategory: (String?) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val strings = LocalStrings.current
+  val tokens = LocalSyndicatTokens.current
+  val isPrivacy = LocalPrivacyMode.current
+  val palette = remember(tokens) {
+    listOf(
+      MetaPrimaryCobalt,
+      MetaSuccess,
+      MetaAttention,
+      MetaOculusPurple,
+      MetaWarning,
+      tokens.linkColor,
+      tokens.negativeDeep,
+    )
+  }
+
+  val grouped = remember(expenses) {
+    expenses
+      .groupBy { it.category }
+      .mapValues { (_, list) -> list.sumOf { it.amountDh } }
+      .entries
+      .filter { it.value > 0L }
+      .sortedByDescending { it.value }
+  }
+  val total = remember(grouped) { grouped.sumOf { it.value }.coerceAtLeast(1L) }
+  if (grouped.isEmpty()) return
+
+  FintechWhiteCard(
+    modifier = modifier
+      .fillMaxWidth()
+      .testTag("expense_donut_chart"),
+    padding = 16.dp,
+  ) {
+    Text(
+      text = strings.expChartTitle,
+      style = MaterialTheme.typography.titleSmall,
+      fontWeight = FontWeight.SemiBold,
+      color = tokens.inkDeep,
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+      Box(
+        modifier = Modifier.size(86.dp),
+        contentAlignment = Alignment.Center,
+      ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+          val strokeW = 12.dp.toPx()
+          val arcSize = Size(size.width - strokeW, size.height - strokeW)
+          val topLeft = Offset(strokeW / 2f, strokeW / 2f)
+          var startAngle = -90f
+          grouped.forEachIndexed { idx, entry ->
+            val sweep = (entry.value.toFloat() / total.toFloat()) * 360f
+            val baseColor = palette[idx % palette.size]
+            val dimmed = selectedCategory != null && selectedCategory != entry.key
+            drawArc(
+              color = if (dimmed) baseColor.copy(alpha = 0.25f) else baseColor,
+              startAngle = startAngle,
+              sweepAngle = (sweep - 2f).coerceAtLeast(1f),
+              useCenter = false,
+              topLeft = topLeft,
+              size = arcSize,
+              style = Stroke(width = strokeW, cap = StrokeCap.Round),
+            )
+            startAngle += sweep
+          }
+        }
+        val centerAmt = if (selectedCategory != null) {
+          grouped.firstOrNull { it.key == selectedCategory }?.value ?: total
+        } else {
+          total
+        }
+        Text(
+          text = maskSensitiveDh(formatNumber(centerAmt, digitsAr), isPrivacy),
+          style = MaterialTheme.typography.labelMedium,
+          fontWeight = FontWeight.Bold,
+          color = tokens.inkDeep,
+          maxLines = 1,
+        )
+      }
+
+      FlowRow(
+        modifier = Modifier.weight(1f),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+      ) {
+        grouped.take(5).forEachIndexed { idx, entry ->
+          val color = palette[idx % palette.size]
+          val isSelected = selectedCategory == entry.key
+          val pct = ((entry.value.toFloat() / total.toFloat()) * 100f).toInt()
+          val chipShape = RoundedCornerShape(100.dp)
+          Surface(
+            shape = chipShape,
+            color = if (isSelected) color.copy(alpha = 0.18f) else tokens.surfaceSoft,
+            border = BorderStroke(1.dp, if (isSelected) color else tokens.divider),
+            modifier = Modifier
+              .clip(chipShape)
+              .clickable {
+                onSelectCategory(if (isSelected) null else entry.key)
+              }
+              .testTag("exp_chart_cat_${entry.key}"),
+          ) {
+            Row(
+              modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+              Box(
+                modifier = Modifier
+                  .size(8.dp)
+                  .clip(CircleShape)
+                  .background(color),
+              )
+              Text(
+                text = "${strings.categoryLabel(entry.key)} ${localizeDigits("$pct%", digitsAr)}",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = tokens.inkDeep,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+              )
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Dialogue de recherche globale unifiée (Appartements, Dépenses, Projets).
+ */
+@Composable
+fun GlobalSearchDialog(
+  data: SyndicatDashboardData,
+  isAr: Boolean,
+  onDismiss: () -> Unit,
+  onSelectApartment: (ApartmentRecord) -> Unit,
+  onSelectExpense: (ExpenseRecord) -> Unit,
+  onSelectProject: (ProjectRecord) -> Unit,
+) {
+  val strings = LocalStrings.current
+  val tokens = LocalSyndicatTokens.current
+  val cfg = data.config
+  val cur = cfg.currency
+  val dig = cfg.digitsAr
+  val isPrivacy = LocalPrivacyMode.current
+
+  var query by remember { mutableStateOf("") }
+  val cleanQ = query.trim().lowercase()
+
+  val matchingApts = remember(cleanQ, data.apartments) {
+    if (cleanQ.isEmpty()) {
+      data.apartments.take(4)
+    } else {
+      data.apartments.filter { apt ->
+        apt.number.toString().contains(cleanQ) ||
+          apt.displayNumber.lowercase().contains(cleanQ) ||
+          apt.ownerName.lowercase().contains(cleanQ) ||
+          apt.ownerNameAr.lowercase().contains(cleanQ) ||
+          apt.phone.contains(cleanQ)
+      }.take(6)
+    }
+  }
+  val matchingExps = remember(cleanQ, data.expenses) {
+    if (cleanQ.isEmpty()) {
+      data.expenses.take(3)
+    } else {
+      data.expenses.filter { exp ->
+        exp.title.lowercase().contains(cleanQ) ||
+          exp.supplier.lowercase().contains(cleanQ) ||
+          exp.category.lowercase().contains(cleanQ)
+      }.take(5)
+    }
+  }
+  val matchingProjs = remember(cleanQ, data.projects) {
+    if (cleanQ.isEmpty()) {
+      data.projects.take(3)
+    } else {
+      data.projects.filter { p ->
+        p.titleFr.lowercase().contains(cleanQ) ||
+          p.titleAr.lowercase().contains(cleanQ) ||
+          p.contractor.lowercase().contains(cleanQ) ||
+          p.category.lowercase().contains(cleanQ)
+      }.take(5)
+    }
+  }
+
+  SyndicatDialog(
+    onDismissRequest = onDismiss,
+    title = {
+      Text(
+        text = strings.globalSearchTitle,
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.SemiBold,
+        color = tokens.inkDeep,
+      )
+    },
+    text = {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .testTag("global_search_dialog"),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+      ) {
+        MetaSearchPill(
+          value = query,
+          onValueChange = { query = it },
+          placeholder = strings.globalSearchHint,
+          clearDescription = strings.apptClearSearch,
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("global_search_input"),
+        )
+
+        if (matchingApts.isEmpty() && matchingExps.isEmpty() && matchingProjs.isEmpty()) {
+          Text(
+            text = strings.globalSearchEmpty,
+            style = MaterialTheme.typography.bodySmall,
+            color = tokens.mute,
+            modifier = Modifier.padding(vertical = 12.dp),
+          )
+        } else {
+          LazyColumn(
+            modifier = Modifier
+              .fillMaxWidth()
+              .heightIn(max = 320.dp)
+              .testTag("global_search_results"),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            contentPadding = PaddingValues(vertical = 2.dp),
+          ) {
+            if (matchingApts.isNotEmpty()) {
+              item {
+                Text(
+                  text = strings.globalSearchSecApts,
+                  style = MaterialTheme.typography.labelMedium,
+                  fontWeight = FontWeight.Bold,
+                  color = tokens.mute,
+                )
+              }
+              items(matchingApts, key = { "gs_apt_${it.number}" }) { apt ->
+                val ownerLabel = maskSensitiveName(
+                  apt.displayOwner(isAr).ifBlank { "—" },
+                  isPrivacy,
+                )
+                GlobalSearchResultRow(
+                  icon = Icons.Filled.Apartment,
+                  title = "${strings.colAppt} ${localizeDigits(apt.displayNumber, dig)} · $ownerLabel",
+                  trailing = maskSensitiveDh(formatDh(apt.remainingDh(cfg), cur, dig), isPrivacy),
+                  onClick = { onSelectApartment(apt) },
+                  testTag = "gs_apt_${apt.number}",
+                )
+              }
+            }
+            if (matchingExps.isNotEmpty()) {
+              item {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                  text = strings.globalSearchSecExpenses,
+                  style = MaterialTheme.typography.labelMedium,
+                  fontWeight = FontWeight.Bold,
+                  color = tokens.mute,
+                )
+              }
+              items(matchingExps, key = { "gs_exp_${it.id}" }) { exp ->
+                GlobalSearchResultRow(
+                  icon = Icons.AutoMirrored.Filled.ReceiptLong,
+                  title = exp.title,
+                  trailing = maskSensitiveDh(formatDh(exp.amountDh, cur, dig), isPrivacy),
+                  onClick = { onSelectExpense(exp) },
+                  testTag = "gs_exp_${exp.id}",
+                )
+              }
+            }
+            if (matchingProjs.isNotEmpty()) {
+              item {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                  text = strings.globalSearchSecProjects,
+                  style = MaterialTheme.typography.labelMedium,
+                  fontWeight = FontWeight.Bold,
+                  color = tokens.mute,
+                )
+              }
+              items(matchingProjs, key = { "gs_proj_${it.id}" }) { proj ->
+                GlobalSearchResultRow(
+                  icon = Icons.Filled.Construction,
+                  title = proj.displayTitle(isAr),
+                  trailing = "${localizeDigits(proj.clampedProgressPercent.toString(), dig)}%",
+                  onClick = { onSelectProject(proj) },
+                  testTag = "gs_proj_${proj.id}",
+                )
+              }
+            }
+          }
+        }
+      }
+    },
+    confirmButton = {},
+    dismissButton = {
+      SageSecondaryButton(
+        text = strings.apptCancel,
+        compact = true,
+        onClick = onDismiss,
+      )
+    },
+  )
+}
+
+@Composable
+private fun GlobalSearchResultRow(
+  icon: ImageVector,
+  title: String,
+  trailing: String,
+  onClick: () -> Unit,
+  testTag: String,
+) {
+  val tokens = LocalSyndicatTokens.current
+  val shape = RoundedCornerShape(12.dp)
+  Surface(
+    shape = shape,
+    color = tokens.surfaceSoft,
+    border = BorderStroke(1.dp, tokens.divider),
+    modifier = Modifier
+      .fillMaxWidth()
+      .minimumInteractiveComponentSize()
+      .clip(shape)
+      .clickable(onClick = onClick)
+      .testTag(testTag),
+  ) {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 12.dp, vertical = 10.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+      Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = tokens.linkColor,
+        modifier = Modifier.size(18.dp),
+      )
+      Text(
+        text = title,
+        style = MaterialTheme.typography.bodySmall,
+        fontWeight = FontWeight.Medium,
+        color = tokens.inkDeep,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.weight(1f),
+      )
+      Text(
+        text = trailing,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = tokens.body,
+      )
     }
   }
 }

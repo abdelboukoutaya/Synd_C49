@@ -5,42 +5,39 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Apartment
-import androidx.compose.material.icons.filled.Construction
-import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.PictureAsPdf
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.outlined.AccountBalanceWallet
-import androidx.compose.material.icons.outlined.Apartment
-import androidx.compose.material.icons.outlined.Construction
-import androidx.compose.material.icons.outlined.Dashboard
-import androidx.compose.material.icons.outlined.PictureAsPdf
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -49,6 +46,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -77,15 +75,31 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.auth.signOutUser
 import com.example.data.local.LocalSyndicatRepository
+import com.example.data.local.SyndicatExtrasStore
+import com.example.data.model.ApartmentRecord
+import com.example.data.model.PaymentBadgeStatus
 import com.example.data.repository.LOCAL_DEVICE_USER_ID
 import com.example.data.repository.SyndicatDataSource
 import com.example.data.repository.SyndicatRepository
 import com.example.ui.components.LimePrimaryButton
+import com.example.ui.components.LocalPrivacyMode
 import com.example.ui.components.PinLockGateScreen
+import com.example.ui.components.SageSecondaryButton
+import com.example.ui.components.StatusPillBadge
+import com.example.ui.components.SyndicatDialog
+import com.example.ui.components.SyndicatFloatingBottomDock
+import com.example.ui.components.SyndicatNavIcons
+import com.example.ui.components.SyndicatNavItemSpec
+import com.example.ui.components.SyndicatNavigationRailPane
+import com.example.ui.components.SyndicatShimmerLoadingScreen
+import com.example.ui.components.maskSensitiveDh
+import com.example.ui.components.maskSensitiveName
 import com.example.ui.i18n.AppLanguage
 import com.example.ui.i18n.LanguagePreferences
 import com.example.ui.i18n.LocalStrings
 import com.example.ui.i18n.SyndicatStrings
+import com.example.ui.i18n.formatNumber
+import com.example.ui.i18n.localizeDigits
 import com.example.ui.i18n.stringsForLanguage
 import androidx.compose.ui.text.style.TextOverflow
 import com.example.ui.screens.ApartmentsScreen
@@ -102,9 +116,12 @@ import com.example.ui.theme.MetaCanvas
 import com.example.ui.theme.MetaInkDeep
 import com.example.ui.theme.sanitizeThemeStyle
 import com.example.ui.viewmodel.StatusFilter
+import com.example.ui.viewmodel.SyndicatDashboardData
 import com.example.ui.viewmodel.SyndicatViewModel
 import com.example.ui.viewmodel.UiState
+import com.example.ui.viewmodel.formatDh
 import com.example.util.BackupManager
+import com.example.util.BiometricHelper
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
@@ -115,12 +132,12 @@ enum class AppDestination(
   val filledIcon: ImageVector,
   val outlinedIcon: ImageVector,
 ) {
-  DASHBOARD("dashboard", Icons.Filled.Dashboard, Icons.Outlined.Dashboard),
-  APARTMENTS("apartments", Icons.Filled.Apartment, Icons.Outlined.Apartment),
-  EXPENSES("expenses", Icons.Filled.AccountBalanceWallet, Icons.Outlined.AccountBalanceWallet),
-  PROJECTS("projects", Icons.Filled.Construction, Icons.Outlined.Construction),
-  POSTER("poster", Icons.Filled.PictureAsPdf, Icons.Outlined.PictureAsPdf),
-  SETTINGS("settings", Icons.Filled.Settings, Icons.Outlined.Settings);
+  DASHBOARD("dashboard", SyndicatNavIcons.DashboardFilled, SyndicatNavIcons.DashboardOutlined),
+  APARTMENTS("apartments", SyndicatNavIcons.ApartmentsFilled, SyndicatNavIcons.ApartmentsOutlined),
+  EXPENSES("expenses", SyndicatNavIcons.ExpensesFilled, SyndicatNavIcons.ExpensesOutlined),
+  PROJECTS("projects", SyndicatNavIcons.ProjectsFilled, SyndicatNavIcons.ProjectsOutlined),
+  POSTER("poster", SyndicatNavIcons.PosterFilled, SyndicatNavIcons.PosterOutlined),
+  SETTINGS("settings", SyndicatNavIcons.SettingsFilled, SyndicatNavIcons.SettingsOutlined);
 
   fun label(strings: SyndicatStrings): String = when (this) {
     DASHBOARD -> strings.navBarDashboard
@@ -154,6 +171,8 @@ fun SyndicatRootApp() {
   var themeMode by remember { mutableStateOf("system") }
   var fontScale by remember { mutableStateOf("normal") }
   var savedPin by remember { mutableStateOf(LanguagePreferences.getPinCode(context)) }
+  var biometricEnabled by remember { mutableStateOf(LanguagePreferences.isBiometricUnlockEnabled(context)) }
+  val biometricAvailable = remember { BiometricHelper.isBiometricAvailable(context) }
   var pinUnlocked by rememberSaveable { mutableStateOf(false) }
   var showOptionalAuthScreen by rememberSaveable { mutableStateOf(false) }
 
@@ -193,6 +212,16 @@ fun SyndicatRootApp() {
         PinLockGateScreen(
           expectedPin = savedPin,
           onUnlocked = { pinUnlocked = true },
+          biometricEnabled = biometricEnabled && biometricAvailable,
+          onTriggerBiometric = {
+            BiometricHelper.promptUnlock(
+              context = context,
+              title = activeStrings.biometricPromptTitle,
+              subtitle = activeStrings.biometricPromptSubtitle,
+              negativeButtonText = activeStrings.apptCancel,
+              onSucceeded = { pinUnlocked = true },
+            )
+          },
         )
       } else if (showOptionalAuthScreen && user == null) {
         BackHandler {
@@ -239,6 +268,7 @@ fun SyndicatRootApp() {
           },
           onPinUpdated = { newPin ->
             savedPin = newPin
+            biometricEnabled = LanguagePreferences.isBiometricUnlockEnabled(context) && newPin.isNotBlank()
             pinUnlocked = true
           },
           onRequestGoogleSync = {
@@ -274,6 +304,9 @@ private fun AuthenticatedSyndicatApp(
   val scope = rememberCoroutineScope()
   val credentialManager = remember(context) { CredentialManager.create(context) }
   val localRepo = remember(context) { LocalSyndicatRepository.getInstance(context) }
+  val extrasStore = remember(context) { SyndicatExtrasStore.getInstance(context) }
+  val specialCalls by extrasStore.specialCalls.collectAsStateWithLifecycle()
+  val auditLogs by extrasStore.auditLogs.collectAsStateWithLifecycle()
 
   val viewModelKey = if (isCloudSynced) "syndicat_vm_cloud_$currentUserId" else "syndicat_vm_local"
   val viewModel: SyndicatViewModel = viewModel(
@@ -289,6 +322,7 @@ private fun AuthenticatedSyndicatApp(
         return SyndicatViewModel(
           repository = dataSource,
           currentUserId = currentUserId,
+          extrasStore = extrasStore,
         ) as T
       }
     },
@@ -303,7 +337,18 @@ private fun AuthenticatedSyndicatApp(
   var currentDestination by rememberSaveable { mutableStateOf(AppDestination.DASHBOARD) }
   var showOnboardingWizard by rememberSaveable { mutableStateOf(false) }
   var isBackupOverdue by remember { mutableStateOf(LanguagePreferences.isBackupOverdue(context)) }
+  var expensesInitialUnpaidOnly by rememberSaveable { mutableStateOf(false) }
+  var projectsInitialCallsOnly by rememberSaveable { mutableStateOf(false) }
+  var quickPayTargetAptNumber by remember { mutableStateOf<Long?>(null) }
+  var showQuickPayPickerDialog by remember { mutableStateOf(false) }
+  var isPrivacyMode by rememberSaveable { mutableStateOf(false) }
   val snackbarHostState = remember { SnackbarHostState() }
+
+  val selectDestination: (AppDestination) -> Unit = { dest ->
+    if (dest != AppDestination.EXPENSES) expensesInitialUnpaidOnly = false
+    if (dest != AppDestination.PROJECTS) projectsInitialCallsOnly = false
+    currentDestination = dest
+  }
 
   // When signing in with Google for the first time on an empty cloud profile, migrate local phone data automatically
   LaunchedEffect(isCloudSynced, currentUserId) {
@@ -323,7 +368,7 @@ private fun AuthenticatedSyndicatApp(
   }
 
   // Sync language, themeStyle, themeMode, fontScale & mirror cloud state to phone local storage
-  LaunchedEffect(uiState, isCloudSynced) {
+  LaunchedEffect(uiState, isCloudSynced, specialCalls) {
     val state = uiState
     if (state is UiState.Success) {
       val cfg = state.data.config
@@ -333,7 +378,7 @@ private fun AuthenticatedSyndicatApp(
         if (!cfg.onboardingCompleted) {
           showOnboardingWizard = true
         }
-        BackupManager.saveAutoLocalSnapshot(context, state.data)
+        BackupManager.saveAutoLocalSnapshot(context, state.data, specialCalls)
         if (isCloudSynced) {
           localRepo.mirrorFromCloud(state.data)
         }
@@ -391,94 +436,131 @@ private fun AuthenticatedSyndicatApp(
     return
   }
 
-  Scaffold(
-    containerColor = tokens.screenBg,
-    contentWindowInsets = WindowInsets.safeDrawing,
-    snackbarHost = {
-      SnackbarHost(
-        hostState = snackbarHostState,
-        snackbar = { snackData ->
-          Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = tokens.cardBg,
-            border = BorderStroke(1.dp, tokens.divider),
-            tonalElevation = 0.dp,
-            shadowElevation = 2.dp,
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(horizontal = 16.dp, vertical = 8.dp),
-          ) {
-            androidx.compose.foundation.layout.Row(
-              modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-              Text(
-                text = snackData.visuals.message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = tokens.inkDeep,
-                modifier = Modifier.weight(1f),
-              )
-              val actLabel = snackData.visuals.actionLabel
-              if (!actLabel.isNullOrBlank()) {
-                TextButton(onClick = { snackData.performAction() }) {
+  val successData = (uiState as? UiState.Success)?.data
+  val lateBadgeCount = successData?.lateApartments?.size ?: 0
+  val unpaidBadgeCount = successData?.unpaidExpensesCount ?: 0
+
+  if (showQuickPayPickerDialog && successData != null) {
+    QuickPayApartmentPickerDialog(
+      data = successData,
+      onDismiss = { showQuickPayPickerDialog = false },
+      onSelectApartment = { apt ->
+        showQuickPayPickerDialog = false
+        quickPayTargetAptNumber = apt.number
+        selectDestination(AppDestination.APARTMENTS)
+      },
+    )
+  }
+
+  CompositionLocalProvider(LocalPrivacyMode provides isPrivacyMode) {
+  BoxWithConstraints(
+    modifier = Modifier
+      .fillMaxSize()
+      .background(tokens.screenBg),
+  ) {
+    val useRail = maxWidth >= 720.dp
+    val navItems = AppDestination.entries.map { dest ->
+      val badge = when (dest) {
+        AppDestination.APARTMENTS -> lateBadgeCount
+        AppDestination.EXPENSES -> unpaidBadgeCount
+        else -> 0
+      }
+      SyndicatNavItemSpec(
+        route = dest.route,
+        label = dest.label(strings),
+        filledIcon = dest.filledIcon,
+        outlinedIcon = dest.outlinedIcon,
+        badgeCount = badge,
+        isSelected = currentDestination == dest,
+        onClick = { selectDestination(dest) },
+      )
+    }
+
+    Row(modifier = Modifier.fillMaxSize()) {
+      if (useRail) {
+        SyndicatNavigationRailPane(items = navItems)
+      }
+
+      Scaffold(
+        modifier = Modifier
+          .weight(1f)
+          .fillMaxHeight(),
+        containerColor = tokens.screenBg,
+        contentWindowInsets = WindowInsets.safeDrawing,
+        snackbarHost = {
+          SnackbarHost(
+            hostState = snackbarHostState,
+            snackbar = { snackData ->
+              Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = tokens.cardBg,
+                border = BorderStroke(1.dp, tokens.divider),
+                tonalElevation = 0.dp,
+                shadowElevation = 2.dp,
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(horizontal = 16.dp, vertical = 8.dp),
+              ) {
+                Row(
+                  modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
                   Text(
-                    text = actLabel,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = tokens.linkColor,
+                    text = snackData.visuals.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = tokens.inkDeep,
+                    modifier = Modifier.weight(1f),
                   )
+                  val actLabel = snackData.visuals.actionLabel
+                  if (!actLabel.isNullOrBlank()) {
+                    TextButton(onClick = { snackData.performAction() }) {
+                      Text(
+                        text = actLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = tokens.linkColor,
+                      )
+                    }
+                  }
                 }
               }
-            }
-          }
+            },
+          )
         },
-      )
-    },
-    bottomBar = {
-      Column(modifier = Modifier.fillMaxWidth()) {
-        HorizontalDivider(thickness = 1.dp, color = tokens.divider)
-        NavigationBar(
-          containerColor = tokens.navBg,
-          tonalElevation = 0.dp,
-          windowInsets = WindowInsets.navigationBars,
-        ) {
-          AppDestination.entries.forEach { dest ->
-            val selected = currentDestination == dest
-            val label = dest.label(strings)
-            NavigationBarItem(
-              selected = selected,
-              onClick = { currentDestination = dest },
+        floatingActionButton = {
+          if (successData != null && (currentDestination == AppDestination.DASHBOARD || currentDestination == AppDestination.APARTMENTS)) {
+            ExtendedFloatingActionButton(
+              onClick = { showQuickPayPickerDialog = true },
+              shape = CircleShape,
               icon = {
                 Icon(
-                  imageVector = if (selected) dest.filledIcon else dest.outlinedIcon,
-                  contentDescription = label,
+                  imageVector = Icons.Default.Payments,
+                  contentDescription = strings.navQuickPayFab,
                 )
               },
-              label = {
+              text = {
                 Text(
-                  text = label,
-                  style = MaterialTheme.typography.labelSmall,
-                  fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                  maxLines = 1,
-                  softWrap = false,
-                  overflow = TextOverflow.Ellipsis,
+                  text = strings.navQuickPayFab,
+                  fontWeight = FontWeight.SemiBold,
                 )
               },
-              colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = tokens.linkColor,
-                selectedTextColor = tokens.inkDeep,
-                indicatorColor = tokens.primaryTint,
-                unselectedIconColor = tokens.mute,
-                unselectedTextColor = tokens.mute,
+              containerColor = MaterialTheme.colorScheme.primary,
+              contentColor = MaterialTheme.colorScheme.onPrimary,
+              elevation = FloatingActionButtonDefaults.elevation(
+                defaultElevation = 4.dp,
+                pressedElevation = 8.dp,
               ),
-              modifier = Modifier.testTag("nav_${dest.route}"),
+              modifier = Modifier.testTag("global_quick_pay_fab"),
             )
           }
-        }
-      }
-    },
-  ) { innerPadding ->
+        },
+        bottomBar = {
+          if (!useRail) {
+            SyndicatFloatingBottomDock(items = navItems)
+          }
+        },
+      ) { innerPadding ->
     when (val state = uiState) {
       is UiState.Loading -> {
         var showSlowSyncEscape by remember { mutableStateOf(false) }
@@ -486,34 +568,19 @@ private fun AuthenticatedSyndicatApp(
           kotlinx.coroutines.delay(10_000L)
           showSlowSyncEscape = true
         }
-        Box(
-          modifier = Modifier
-            .fillMaxSize()
-            .background(tokens.screenBg)
-            .padding(innerPadding)
-            .padding(horizontal = 24.dp),
-          contentAlignment = Alignment.Center,
+        SyndicatShimmerLoadingScreen(
+          message = strings.loadingSync,
+          modifier = Modifier.padding(innerPadding),
         ) {
-          Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-          ) {
-            CircularProgressIndicator(color = tokens.ink)
-            Text(
-              text = strings.loadingSync,
-              style = MaterialTheme.typography.bodyMedium,
-              color = tokens.body,
+          if (showSlowSyncEscape) {
+            Spacer(modifier = Modifier.height(6.dp))
+            SageSecondaryButton(
+              text = strings.signOut,
+              onClick = {
+                signOutUser(credentialManager, scope, onSignOutComplete, context)
+              },
+              modifier = Modifier.testTag("loading_escape_sign_out_btn"),
             )
-            if (showSlowSyncEscape) {
-              Spacer(modifier = Modifier.height(8.dp))
-              com.example.ui.components.SageSecondaryButton(
-                text = strings.signOut,
-                onClick = {
-                  signOutUser(credentialManager, scope, onSignOutComplete, context)
-                },
-                modifier = Modifier.testTag("loading_escape_sign_out_btn"),
-              )
-            }
           }
         }
       }
@@ -547,33 +614,68 @@ private fun AuthenticatedSyndicatApp(
       is UiState.Success -> {
         val data = state.data
         val contentMod = Modifier.padding(innerPadding)
-        when (currentDestination) {
+        Crossfade(
+          targetState = currentDestination,
+          animationSpec = tween(durationMillis = 210),
+          label = "nav_crossfade",
+        ) { dest ->
+        when (dest) {
           AppDestination.DASHBOARD -> {
             DashboardScreen(
               data = data,
               isBackupOverdue = isBackupOverdue,
               onTriggerBackupJson = {
-                BackupManager.exportAndShareJsonBackup(context, data) { err ->
-                  scope.launch { snackbarHostState.showSnackbar(err) }
-                }
+                BackupManager.exportAndShareJsonBackup(
+                  context = context,
+                  data = data,
+                  onError = { err ->
+                    scope.launch { snackbarHostState.showSnackbar(err) }
+                  },
+                  specialCalls = specialCalls,
+                )
                 isBackupOverdue = false
               },
               onOpenWizard = { showOnboardingWizard = true },
               onMarkReminded = { apt, updatedPhone, updatedTemplate ->
                 viewModel.markWhatsAppReminderSent(apt, data.config, updatedPhone, updatedTemplate)
               },
-              onNavigateToPosters = { currentDestination = AppDestination.POSTER },
-              onNavigateToProjects = { currentDestination = AppDestination.PROJECTS },
+              onNavigateToPosters = { selectDestination(AppDestination.POSTER) },
+              onNavigateToProjects = {
+                projectsInitialCallsOnly = false
+                selectDestination(AppDestination.PROJECTS)
+              },
               onNavigateToApartments = {
                 viewModel.selectStatusFilter(StatusFilter.ALL)
-                currentDestination = AppDestination.APARTMENTS
+                selectDestination(AppDestination.APARTMENTS)
               },
-              onNavigateToExpenses = { currentDestination = AppDestination.EXPENSES },
+              onNavigateToExpenses = {
+                expensesInitialUnpaidOnly = false
+                selectDestination(AppDestination.EXPENSES)
+              },
               onNavigateToLateApartments = {
                 viewModel.selectStatusFilter(StatusFilter.LATE)
-                currentDestination = AppDestination.APARTMENTS
+                selectDestination(AppDestination.APARTMENTS)
               },
               onInfoMessage = { msg -> viewModel.showToastMessage(msg) },
+              isCloudSynced = isCloudSynced,
+              specialCalls = specialCalls,
+              onNavigateToUnpaidExpenses = {
+                expensesInitialUnpaidOnly = true
+                currentDestination = AppDestination.EXPENSES
+              },
+              onNavigateToSpecialCalls = {
+                projectsInitialCallsOnly = true
+                currentDestination = AppDestination.PROJECTS
+              },
+              onQuickPayTap = { showQuickPayPickerDialog = true },
+              isPrivacyMode = isPrivacyMode,
+              onTogglePrivacy = { isPrivacyMode = !isPrivacyMode },
+              onSearchSelectApartment = { apt ->
+                viewModel.updateSearchQuery(apt.displayNumber)
+                viewModel.selectStatusFilter(StatusFilter.ALL)
+                viewModel.selectFloor(null)
+                selectDestination(AppDestination.APARTMENTS)
+              },
               modifier = contentMod,
             )
           }
@@ -620,6 +722,8 @@ private fun AuthenticatedSyndicatApp(
               },
               onRequestReceiptNo = { apt -> viewModel.nextReceiptNumber(apt) },
               onExportError = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+              initialQuickPayAptNumber = quickPayTargetAptNumber,
+              onConsumeQuickPayTarget = { quickPayTargetAptNumber = null },
               modifier = contentMod,
             )
           }
@@ -633,6 +737,10 @@ private fun AuthenticatedSyndicatApp(
               onUpdateExpense = { exp -> viewModel.updateExpense(exp, data.config) },
               onDeleteExpense = { exp -> viewModel.deleteExpense(exp, data.config) },
               onExportError = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+              onAddExpenseWithId = { title, cat, amt, paid, supplier, date, notes, explicitId ->
+                viewModel.addExpense(title, cat, amt, paid, supplier, date, notes, data.config, explicitId = explicitId)
+              },
+              initialUnpaidOnly = expensesInitialUnpaidOnly,
               modifier = contentMod,
             )
           }
@@ -644,6 +752,18 @@ private fun AuthenticatedSyndicatApp(
               onUpdateProject = { proj, prev -> viewModel.updateProject(proj, prev, data.config) },
               onDeleteProject = { proj -> viewModel.deleteProject(proj, data.config) },
               onLoadStarterProjects = { viewModel.seedStarterProjects(data.config) },
+              specialCalls = specialCalls,
+              onCreateSpecialCall = { titleFr, titleAr, amountPerAptDh, projectId, dueDateLabel ->
+                extrasStore.createSpecialCall(titleFr, titleAr, amountPerAptDh, projectId, dueDateLabel)
+              },
+              onToggleSpecialCallPayment = { callId, aptNum, paid ->
+                extrasStore.toggleSpecialCallApartmentPayment(callId, aptNum, paid)
+              },
+              onDeleteSpecialCall = { callId ->
+                extrasStore.deleteSpecialCall(callId)
+              },
+              onExportError = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+              initialFocusSpecialCalls = projectsInitialCallsOnly,
               modifier = contentMod,
             )
           }
@@ -703,11 +823,138 @@ private fun AuthenticatedSyndicatApp(
                   viewModel.restoreBackupData(localSnap, currentLanguage == AppLanguage.AR)
                 }
               },
+              auditLogs = auditLogs,
               modifier = contentMod,
             )
           }
         }
+        } // end Crossfade
       }
-    }
+        } // end when(uiState)
+      } // end Scaffold
+    } // end Row
+  } // end BoxWithConstraints
+  } // end CompositionLocalProvider(LocalPrivacyMode)
+}
+
+@Composable
+private fun QuickPayApartmentPickerDialog(
+  data: SyndicatDashboardData,
+  onDismiss: () -> Unit,
+  onSelectApartment: (ApartmentRecord) -> Unit,
+) {
+  val strings = LocalStrings.current
+  val tokens = LocalSyndicatTokens.current
+  val cfg = data.config
+  val cur = cfg.currency
+  val dig = cfg.digitsAr
+  val isAr = strings.language == AppLanguage.AR
+
+  val sortedApartments = remember(data.apartments, cfg) {
+    data.apartments
+      .filter { !it.isVacantForConfig(cfg) }
+      .sortedWith(
+        compareByDescending<ApartmentRecord> { it.remainingDh(cfg) }
+          .thenBy { it.number },
+      )
   }
+
+  SyndicatDialog(
+    onDismissRequest = onDismiss,
+    title = {
+      Text(
+        text = strings.quickPayPickerTitle,
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.SemiBold,
+        color = tokens.inkDeep,
+      )
+    },
+    text = {
+      LazyColumn(
+        modifier = Modifier
+          .fillMaxWidth()
+          .heightIn(max = 360.dp)
+          .testTag("quick_pay_picker_list"),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(vertical = 2.dp),
+      ) {
+        items(sortedApartments, key = { it.number }) { apt ->
+          val rem = apt.remainingDh(cfg)
+          Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = if (rem > 0L) tokens.surfaceSoft else tokens.cardBg,
+            border = BorderStroke(tokens.borderStrokeDp.dp, tokens.divider),
+            modifier = Modifier
+              .fillMaxWidth()
+              .minimumInteractiveComponentSize()
+              .clip(RoundedCornerShape(14.dp))
+              .clickable { onSelectApartment(apt) }
+              .testTag("quick_pay_pick_apt_${apt.number}"),
+          ) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+              Surface(
+                shape = CircleShape,
+                color = if (rem > 0L) tokens.primaryTint else tokens.surfaceStrong,
+                modifier = Modifier.size(38.dp),
+              ) {
+                Box(contentAlignment = Alignment.Center) {
+                  Text(
+                    text = localizeDigits(apt.displayNumber, dig),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (rem > 0L) tokens.linkColor else tokens.ink,
+                  )
+                }
+              }
+              Column(modifier = Modifier.weight(1f)) {
+                val isPrivacy = LocalPrivacyMode.current
+                val rawOwner = apt.displayOwner(isAr).ifBlank { "${strings.colAppt} ${localizeDigits(apt.displayNumber, dig)}" }
+                Text(
+                  text = maskSensitiveName(rawOwner, isPrivacy),
+                  style = MaterialTheme.typography.bodyMedium,
+                  fontWeight = FontWeight.Medium,
+                  color = tokens.inkDeep,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis,
+                )
+                val paidCount = cfg.activeMonthColumns.count { col ->
+                  val exp = apt.expectedFeeForMonth(col, cfg)
+                  exp > 0L && apt.amountFor(col) >= exp
+                }
+                Text(
+                  text = "${strings.floorDisplay(apt.floor)} · ${formatNumber(paidCount.toLong(), dig)}/${formatNumber(cfg.activeMonthColumns.size.toLong(), dig)}",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = tokens.mute,
+                )
+              }
+              if (rem > 0L) {
+                Text(
+                  text = maskSensitiveDh(formatDh(rem, cur, dig), LocalPrivacyMode.current),
+                  style = MaterialTheme.typography.labelMedium,
+                  fontWeight = FontWeight.Bold,
+                  color = tokens.negativeDeep,
+                )
+              } else {
+                StatusPillBadge(status = PaymentBadgeStatus.PAID)
+              }
+            }
+          }
+        }
+      }
+    },
+    confirmButton = {},
+    dismissButton = {
+      SageSecondaryButton(
+        text = strings.apptCancel,
+        compact = true,
+        onClick = onDismiss,
+      )
+    },
+  )
 }

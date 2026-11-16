@@ -1,9 +1,14 @@
 <resources>
-    <string name="app_name">Syndicat C49</string>
+    <string name="app_name">SYNDICAT</string>
+    <string name="app_editor_name">DYNIC</string>
+    <string name="app_editor_label">Éditeur : DYNIC</string>
+    <string name="app_version_label">Version 2.0</string>
+    <string name="app_edition_year_label">Année d\'édition : 2026</string>
+    <string name="app_version_edition_full">Éditeur DYNIC · Version 2.0 · Édition 2026</string>
 
     <!-- Auth Screen -->
-    <string name="auth_badge">GESTION DE COPROPRIÉTÉ · SYNDIC</string>
-    <string name="auth_title">Syndicat C49</string>
+    <string name="auth_badge">GESTION DE COPROPRIÉTÉ · ÉDITEUR DYNIC</string>
+    <string name="auth_title">SYNDICAT</string>
     <string name="auth_subtitle">Gestion personnalisable des cotisations mensuelles, dépenses d\'immeuble, relances et édition d\'affiches PDF/Image en Français et Arabe.</string>
     <string name="auth_sign_in_google">Se connecter avec Google</string>
     <string name="auth_security_note">Synchronisation cloud sécurisée et sauvegarde automatique de votre trésorerie.</string>
@@ -62,5 +67,9 @@
     <string name="theme_style_wise">Citron calme</string>
     <string name="export_variant_print">Impression</string>
     <string name="export_variant_screen">Écran</string>
+    <string name="export_mode_color">Couleur</string>
+    <string name="export_mode_monochrome">Noir &amp; Blanc (N&amp;B)</string>
+    <string name="export_card_projects_title">État d\'avancement des projets</string>
+    <string name="export_card_projects_sub">Rapport complet des projets en cours, futurs et terminés avec budgets et couverture caisse.</string>
     <string name="sign_out">Se déconnecter</string>
 </resources>

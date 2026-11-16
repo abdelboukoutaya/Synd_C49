@@ -16,6 +16,8 @@ import com.example.data.model.canonicalApartmentDocId
 import com.example.data.model.evaluatePlannedProjectsReadiness
 import com.example.data.model.projectApartmentsForYear
 import com.example.data.model.sortProjectsByPriority
+import com.example.data.local.AuditActionType
+import com.example.data.local.SyndicatExtrasStore
 import com.example.data.repository.SyndicatDataSource
 import com.example.ui.i18n.formatNumber
 import com.example.util.ParsedOwnerRow
@@ -63,6 +65,7 @@ data class SyndicatDashboardData(
   val payments: List<PaymentRecord> = emptyList(),
   val baseApartments: List<ApartmentRecord> = apartments,
   val baseYear: Long = config.year,
+  val previousYearMonthlyTotals: Map<MonthColumn, Long> = emptyMap(),
 ) {
   /** Années disponibles dans le sélecteur d'exercice annuel */
   val availableYears: List<Long>
@@ -167,11 +170,18 @@ data class SyndicatDashboardData(
 
   val readyToStartProjectsCount: Int
     get() = plannedReadinessList.count { it.canStartNowDirect }
+
+  val unpaidExpensesCount: Int
+    get() = expenses.count { !it.isFullyPaid }
+
+  val hasPreviousYearChartData: Boolean
+    get() = previousYearMonthlyTotals.values.any { it > 0L }
 }
 
 class SyndicatViewModel(
   private val repository: SyndicatDataSource,
   private val currentUserId: String,
+  private val extrasStore: SyndicatExtrasStore? = null,
 ) : ViewModel() {
 
   private val _searchQuery = MutableStateFlow("")
@@ -230,6 +240,18 @@ class SyndicatViewModel(
       targetYear = targetYear,
       payments = payments,
     )
+    val prevYear = (targetYear - 1L).coerceAtLeast(2020L)
+    val prevYearTotals: Map<MonthColumn, Long> = if (prevYear < targetYear) {
+      val prevApts = projectApartmentsForYear(
+        baseApartments = core.apartments,
+        baseConfig = baseCfg,
+        targetYear = prevYear,
+        payments = payments,
+      )
+      MonthColumn.entries.associateWith { col -> prevApts.sumOf { it.amountFor(col) } }
+    } else {
+      emptyMap()
+    }
     SyndicatDashboardData(
       config = effectiveCfg,
       apartments = projectedApts,
@@ -238,6 +260,7 @@ class SyndicatViewModel(
       payments = payments,
       baseApartments = core.apartments,
       baseYear = baseCfg.year,
+      previousYearMonthlyTotals = prevYearTotals,
     )
   }
     .map<SyndicatDashboardData, UiState<SyndicatDashboardData>> { data ->
@@ -362,6 +385,12 @@ class SyndicatViewModel(
               notes = paymentNotes.trim(),
             )
           )
+          extrasStore?.appendAuditLog(
+            actionType = AuditActionType.PAYMENT,
+            summaryFr = "Paiement Appt ${canonicalApt.displayNumber} (${config.year}) : $deltaAmountDh ${config.currency} · ${PaymentMethod.fromCode(paymentMethod).code} (#${"%03d".format(receiptNo)})",
+            summaryAr = "أداء الشقة ${canonicalApt.displayNumber} (${config.year}): $deltaAmountDh ${config.currency} · وصل #${"%03d".format(receiptNo)}",
+            amountDeltaDh = deltaAmountDh,
+          )
         }
 
         val isAr = config.language != "fr"
@@ -423,6 +452,12 @@ class SyndicatViewModel(
           }
         }
         val isAr = config.language != "fr"
+        extrasStore?.appendAuditLog(
+          actionType = AuditActionType.PAYMENT_DELETED,
+          summaryFr = "Paiement supprimé Appt ${payment.apartmentNumber} : -${payment.amountDh} ${config.currency}",
+          summaryAr = "حذف دفعة الشقة ${payment.apartmentNumber}: -${payment.amountDh} ${config.currency}",
+          amountDeltaDh = -payment.amountDh,
+        )
         val msg = if (isAr) {
           "تم إلغاء الدفعة (${formatDh(payment.amountDh, config.currency, config.digitsAr)})"
         } else {
@@ -489,6 +524,7 @@ class SyndicatViewModel(
     dateLabel: String,
     notes: String,
     config: SyndicatConfig,
+    explicitId: String? = null,
     onSuccess: () -> Unit = {},
   ) {
     viewModelScope.launch {
@@ -502,6 +538,13 @@ class SyndicatViewModel(
           supplier = supplier,
           dateLabel = dateLabel,
           notes = notes,
+          explicitId = explicitId,
+        )
+        extrasStore?.appendAuditLog(
+          actionType = AuditActionType.EXPENSE_ADDED,
+          summaryFr = "Dépense ajoutée : $title ($amountDh ${config.currency})",
+          summaryAr = "إضافة مصروف: $title ($amountDh ${config.currency})",
+          amountDeltaDh = -amountDh,
         )
         val isAr = config.language != "fr"
         val amtText = formatDh(amountDh, config.currency, config.digitsAr)
@@ -532,6 +575,11 @@ class SyndicatViewModel(
       _isSaving.value = true
       try {
         repository.updateExpense(expense)
+        extrasStore?.appendAuditLog(
+          actionType = AuditActionType.EXPENSE_UPDATED,
+          summaryFr = "Dépense modifiée : ${expense.title} (${expense.amountDh} ${config.currency})",
+          summaryAr = "تعديل مصروف: ${expense.title} (${expense.amountDh} ${config.currency})",
+        )
         val isAr = config.language != "fr"
         val amtText = formatDh(expense.amountDh, config.currency, config.digitsAr)
         val msg = if (isAr) "تم تعديل المصروف ($amtText)" else "Dépense modifiée ($amtText)"
@@ -549,6 +597,11 @@ class SyndicatViewModel(
     viewModelScope.launch {
       try {
         repository.deleteExpense(expense.id)
+        extrasStore?.appendAuditLog(
+          actionType = AuditActionType.EXPENSE_DELETED,
+          summaryFr = "Dépense supprimée : ${expense.title} (${expense.amountDh} ${config.currency})",
+          summaryAr = "حذف مصروف: ${expense.title} (${expense.amountDh} ${config.currency})",
+        )
         val isAr = config.language != "fr"
         val msg = if (isAr) "تم حذف المصروف: ${expense.title}" else "Dépense supprimée : ${expense.title}"
         val undoLabel = if (isAr) "تراجع" else "Annuler"
@@ -585,6 +638,11 @@ class SyndicatViewModel(
       _isSaving.value = true
       try {
         val createdId = repository.addProject(project)
+        extrasStore?.appendAuditLog(
+          actionType = AuditActionType.PROJECT_ADDED,
+          summaryFr = "Nouveau projet : ${project.displayTitle(false)}",
+          summaryAr = "مشروع جديد: ${project.displayTitle(true)}",
+        )
         val isAr = config.language != "fr"
         val title = project.displayTitle(isAr)
         val msg = if (isAr) "تمت إضافة المشروع: $title" else "Projet ajouté : $title"
@@ -615,6 +673,11 @@ class SyndicatViewModel(
       _isSaving.value = true
       try {
         repository.updateProject(project)
+        extrasStore?.appendAuditLog(
+          actionType = AuditActionType.PROJECT_UPDATED,
+          summaryFr = "Projet mis à jour : ${project.displayTitle(false)} (${project.clampedProgressPercent}%)",
+          summaryAr = "تحيين المشروع: ${project.displayTitle(true)} (${project.clampedProgressPercent}%)",
+        )
         val isAr = config.language != "fr"
         val title = project.displayTitle(isAr)
         val msg = if (isAr) {
@@ -643,6 +706,11 @@ class SyndicatViewModel(
     viewModelScope.launch {
       try {
         repository.deleteProject(project.id)
+        extrasStore?.appendAuditLog(
+          actionType = AuditActionType.PROJECT_DELETED,
+          summaryFr = "Projet supprimé : ${project.displayTitle(false)}",
+          summaryAr = "حذف المشروع: ${project.displayTitle(true)}",
+        )
         val isAr = config.language != "fr"
         val title = project.displayTitle(isAr)
         val msg = if (isAr) "تم حذف المشروع: $title" else "Projet supprimé : $title"
@@ -725,6 +793,11 @@ class SyndicatViewModel(
           explicitApartments = explicitApartments,
         )
         _selectedFloor.value = null
+        extrasStore?.appendAuditLog(
+          actionType = AuditActionType.CONFIG_SAVED,
+          summaryFr = if (resetBlankBuilding) "Immeuble vierge initialisé (${updatedConfig.apartmentsCount} appts)" else "Configuration enregistrée (${updatedConfig.residenceName})",
+          summaryAr = if (resetBlankBuilding) "تهيئة عمارة فارغة (${updatedConfig.apartmentsCount} شقة)" else "حفظ إعدادات ${updatedConfig.residenceName}",
+        )
         val isAr = updatedConfig.language != "fr"
         val msg = when {
           resetBlankBuilding && isAr -> "تمت تهيئة العمارة الجديدة بنجاح (${updatedConfig.apartmentsCount} شقة)."
@@ -747,6 +820,12 @@ class SyndicatViewModel(
       _isSaving.value = true
       try {
         repository.restoreFromBackup(backup)
+        extrasStore?.replaceSpecialCallsFromBackup(backup.specialCalls)
+        extrasStore?.appendAuditLog(
+          actionType = AuditActionType.BACKUP_RESTORE,
+          summaryFr = "Sauvegarde restaurée (${backup.apartments.size} appts, ${backup.expenses.size} dépenses)",
+          summaryAr = "استرجاع نسخة احتياطية (${backup.apartments.size} شقة)",
+        )
         _selectedFloor.value = null
         val msg = if (isAr) {
           "تم استرجاع النسخة الاحتياطية بنجاح (${backup.apartments.size} شقة)."
@@ -786,6 +865,11 @@ class SyndicatViewModel(
       _isSaving.value = true
       try {
         repository.ensureSeeded(forceReset = true, preserveLanguage = preserveLanguage)
+        extrasStore?.appendAuditLog(
+          actionType = AuditActionType.RESET,
+          summaryFr = "Réinitialisation aux données types C49",
+          summaryAr = "استعادة بيانات C49 النموذجية",
+        )
         _selectedFloor.value = null
         val msg = if (preserveLanguage == "fr") {
           "Données C49 restaurées (Caisse ${formatDh(8200L, "DH", false)})."

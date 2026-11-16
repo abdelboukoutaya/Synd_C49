@@ -27,10 +27,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -66,6 +66,7 @@ import com.example.auth.attemptAutoSignIn
 import com.example.auth.onGoogleSignInClicked
 import com.example.ui.components.MetaSegmentedPillRow
 import com.example.ui.components.SageSecondaryButton
+import com.example.ui.components.SyndicatBrandIconBadge
 import com.example.ui.i18n.AppLanguage
 import com.example.ui.i18n.LocalStrings
 import com.example.ui.theme.CoinbaseDarkErrorContainer
@@ -160,36 +161,71 @@ fun AuthScreen(
             .padding(horizontal = 28.dp, vertical = 32.dp),
           horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-          // Emblème minimaliste Coinbase Blue sur pastille teintée
-          Surface(
-            shape = CircleShape,
-            color = tokens.primaryTint,
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp,
-            modifier = Modifier.size(56.dp),
-          ) {
-            Box(contentAlignment = Alignment.Center) {
-              Icon(
-                imageVector = Icons.Filled.Apartment,
-                contentDescription = strings.authTitle,
-                tint = tokens.linkColor,
-                modifier = Modifier.size(26.dp),
-              )
-            }
-          }
+          // Icône officielle SYNDICAT (Éditeur DYNIC)
+          SyndicatBrandIconBadge(
+            size = 68.dp,
+            cornerRadius = 18.dp,
+            modifier = Modifier.testTag("auth_app_icon"),
+          )
 
-          Spacer(modifier = Modifier.height(20.dp))
+          Spacer(modifier = Modifier.height(16.dp))
 
-          // Titre calme éditorial (Coinbase weight 400)
           Text(
-            text = strings.authTitle,
-            style = MaterialTheme.typography.headlineMedium,
-            color = tokens.inkDeep,
+            text = strings.authBadge,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = tokens.linkColor,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
           )
 
-          Spacer(modifier = Modifier.height(8.dp))
+          Spacer(modifier = Modifier.height(6.dp))
+
+          // Titre officiel de l'application : SYNDICAT
+          Text(
+            text = strings.authTitle,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = tokens.inkDeep,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("auth_app_title"),
+          )
+
+          Spacer(modifier = Modifier.height(10.dp))
+
+          // Badge Éditeur DYNIC · Version 2.0 · Édition 2026
+          Surface(
+            shape = RoundedCornerShape(tokens.badgeRadiusDp.dp),
+            color = tokens.primaryTint,
+            border = BorderStroke(1.dp, tokens.linkColor.copy(alpha = 0.22f)),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            modifier = Modifier.testTag("auth_edition_badge"),
+          ) {
+            Row(
+              modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+              Icon(
+                imageVector = Icons.Filled.Verified,
+                contentDescription = null,
+                tint = tokens.linkColor,
+                modifier = Modifier.size(15.dp),
+              )
+              Text(
+                text = strings.appFullEditionLine,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = tokens.linkColor,
+                textAlign = TextAlign.Center,
+              )
+            }
+          }
+
+          Spacer(modifier = Modifier.height(12.dp))
 
           // Sous-titre concis
           Text(

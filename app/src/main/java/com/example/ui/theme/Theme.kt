@@ -318,8 +318,9 @@ fun AppTheme(
   content: @Composable () -> Unit,
 ) {
   val family = resolveVisualThemeFamily(themeStyle)
+  val highContrastReading = fontScale == "large"
   val colorScheme = colorSchemeForStyle(family, darkTheme)
-  val tokens = tokensForThemeStyle(family, darkTheme)
+  val tokens = tokensForThemeStyle(family, darkTheme, highContrast = highContrastReading)
   val shapes = shapesForStyle(family)
   val typography = buildAppTypography(
     themeStyle = family,
