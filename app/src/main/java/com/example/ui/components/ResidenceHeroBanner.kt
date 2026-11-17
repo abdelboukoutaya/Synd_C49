@@ -247,9 +247,9 @@ fun ResidenceHeroBanner(
           .fillMaxSize()
           .background(
             Brush.verticalGradient(
-              0.0f to CoinbaseSurfaceDark.copy(alpha = 0.36f),
-              0.45f to CoinbaseSurfaceDark.copy(alpha = 0.42f),
-              1.0f to CoinbaseSurfaceDark.copy(alpha = 0.88f),
+              0.0f to CoinbaseSurfaceDark.copy(alpha = 0.28f),
+              0.48f to CoinbaseSurfaceDark.copy(alpha = 0.36f),
+              1.0f to CoinbaseSurfaceDark.copy(alpha = 0.86f),
             )
           ),
       )
@@ -269,8 +269,8 @@ fun ResidenceHeroBanner(
           if (!badgeText.isNullOrBlank()) {
             Surface(
               shape = RoundedCornerShape(100.dp),
-              color = CoinbaseSurfaceDark.copy(alpha = 0.62f),
-              border = BorderStroke(1.dp, Color.White.copy(alpha = 0.24f)),
+              color = CoinbaseSurfaceDark.copy(alpha = 0.58f),
+              border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
               tonalElevation = 0.dp,
               shadowElevation = 0.dp,
             ) {
@@ -309,8 +309,8 @@ fun ResidenceHeroBanner(
             // Bouton pilule / icône pour choisir une photo personnalisée de la résidence
             Surface(
               shape = RoundedCornerShape(100.dp),
-              color = CoinbaseSurfaceDark.copy(alpha = 0.68f),
-              border = BorderStroke(1.dp, Color.White.copy(alpha = 0.30f)),
+              color = CoinbaseSurfaceDark.copy(alpha = 0.62f),
+              border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
               tonalElevation = 0.dp,
               shadowElevation = 0.dp,
               modifier = Modifier

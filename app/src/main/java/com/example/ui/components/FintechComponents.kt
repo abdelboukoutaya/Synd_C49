@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -97,7 +98,6 @@ import com.example.ui.theme.MetaCanvas
 import com.example.ui.theme.MetaCobaltTintLight
 import com.example.ui.theme.MetaCritical
 import com.example.ui.theme.MetaInkDeep
-import com.example.ui.theme.MetaOculusPurple
 import com.example.ui.theme.MetaPrimaryCobalt
 import com.example.ui.theme.MetaPrimarySoft
 import com.example.ui.theme.MetaSuccess
@@ -185,45 +185,42 @@ fun FintechPalePositiveCard(
 }
 
 /**
- * Meta Showcase / Promo Strip (`{rounded.xxxl}` = 32dp):
- * Renders on `{colors.ink-deep}` (`#0A1317`) with subtle Cobalt/Oculus atmospheric glow in the corner
- * so product/financial hero banners achieve Meta's signature hardware showcase presence.
+ * Carte Showcase sombre architecturale :
+ * Surface matte encadrée d'un filet 1dp avec ligne d'accent supérieure sobre, sans halo lumineux artificiel.
  */
 @Composable
 fun AirtableSignatureCard(
   backgroundColor: Color,
   modifier: Modifier = Modifier,
   padding: Dp = 26.dp,
-  accentGlow: Color = MetaPrimaryCobalt,
+  accentGlow: Color = Color.Unspecified,
   content: @Composable ColumnScope.() -> Unit,
 ) {
   val tokens = LocalSyndicatTokens.current
   val shape = RoundedCornerShape(tokens.featureCardRadiusDp.dp)
   val baseColor = if (backgroundColor == MetaCritical) MetaInkDeep else backgroundColor
-  val glowTint = if (backgroundColor == MetaCritical) MetaCritical else accentGlow
+  val accentRule = when {
+    backgroundColor == MetaCritical -> tokens.negative
+    accentGlow != Color.Unspecified -> accentGlow
+    else -> tokens.primary
+  }
 
   Surface(
     modifier = modifier,
     shape = shape,
     color = baseColor,
+    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
     tonalElevation = 0.dp,
     shadowElevation = 0.dp,
   ) {
     Column(
       modifier = Modifier
         .drawBehind {
-          drawCircle(
-            brush = Brush.radialGradient(
-              colors = listOf(
-                glowTint.copy(alpha = 0.22f),
-                MetaOculusPurple.copy(alpha = 0.08f),
-                Color.Transparent,
-              ),
-              center = Offset(size.width * 0.88f, size.height * 0.15f),
-              radius = size.maxDimension * 0.72f,
-            ),
-            radius = size.maxDimension * 0.72f,
-            center = Offset(size.width * 0.88f, size.height * 0.15f),
+          drawLine(
+            color = accentRule.copy(alpha = 0.72f),
+            start = Offset(24.dp.toPx(), 1.dp.toPx()),
+            end = Offset(size.width - 24.dp.toPx(), 1.dp.toPx()),
+            strokeWidth = 2.dp.toPx(),
           )
         }
         .padding(padding),
@@ -808,6 +805,114 @@ fun MetaSegmentedPillRow(
 }
 
 /**
+ * Variantes 3 onglets du sélecteur pilule Meta (Dépenses | Abos & Prestataires | Caisse, ou Travaux | Appels | Incidents).
+ */
+@Composable
+fun MetaSegmentedThreePillRow(
+  labels: Triple<String, String, String>,
+  selectedIndex: Int,
+  onSelectIndex: (Int) -> Unit,
+  tags: Triple<String, String, String>,
+  modifier: Modifier = Modifier,
+) {
+  val tokens = LocalSyndicatTokens.current
+  val outerShape = RoundedCornerShape(100.dp)
+  val innerShape = RoundedCornerShape(100.dp)
+  val itemsList = listOf(
+    labels.first to tags.first,
+    labels.second to tags.second,
+    labels.third to tags.third,
+  )
+
+  Surface(
+    shape = outerShape,
+    color = tokens.surfaceSoft,
+    border = BorderStroke(1.dp, tokens.divider),
+    tonalElevation = 0.dp,
+    shadowElevation = 0.dp,
+    modifier = modifier,
+  ) {
+    Row(
+      modifier = Modifier.padding(4.dp),
+      horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+      itemsList.forEachIndexed { idx, (lbl, tag) ->
+        val active = selectedIndex == idx
+        val activeBg = tokens.inkDeep
+        val activeFg = if (tokens.isDark) MetaInkDeep else MetaCanvas
+        Surface(
+          shape = innerShape,
+          color = if (active) activeBg else Color.Transparent,
+          tonalElevation = 0.dp,
+          shadowElevation = 0.dp,
+          modifier = Modifier
+            .weight(1f)
+            .minimumInteractiveComponentSize()
+            .heightIn(min = 44.dp)
+            .clip(innerShape)
+            .clickable { onSelectIndex(idx) }
+            .testTag(tag),
+        ) {
+          Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 9.dp),
+          ) {
+            Text(
+              text = lbl,
+              style = MaterialTheme.typography.labelLarge,
+              fontWeight = FontWeight.Bold,
+              color = if (active) activeFg else tokens.ink,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+          }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+fun ReadOnlyCouncilBanner(
+  modifier: Modifier = Modifier,
+) {
+  val strings = LocalStrings.current
+  val tokens = LocalSyndicatTokens.current
+  Surface(
+    shape = RoundedCornerShape(14.dp),
+    color = tokens.warning.copy(alpha = 0.15f),
+    border = BorderStroke(1.dp, tokens.warningContent.copy(alpha = 0.35f)),
+    tonalElevation = 0.dp,
+    shadowElevation = 0.dp,
+    modifier = modifier
+      .fillMaxWidth()
+      .testTag("read_only_council_banner"),
+  ) {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 14.dp, vertical = 10.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+      Icon(
+        imageVector = Icons.Default.Visibility,
+        contentDescription = null,
+        tint = tokens.warningContent,
+        modifier = Modifier.size(18.dp),
+      )
+      Text(
+        text = strings.councilReadOnlyBanner,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        color = tokens.warningContent,
+        modifier = Modifier.weight(1f),
+      )
+    }
+  }
+}
+
+/**
  * Meta Status Badges (`badge-success`, `badge-attention`, `badge-critical`):
  * Solid vibrant pill `{rounded.full}` (100dp), `{typography.caption-bold}` (12sp / 700), padding `4px 10px`.
  */
@@ -821,12 +926,12 @@ fun StatusPillBadge(
   val strings = LocalStrings.current
   val rawText = customLabel ?: strings.badgeText(status)
 
-  val (iconGlyph, glyphColor, fg) = when (status) {
-    PaymentBadgeStatus.PAID -> Triple("✓", tokens.statusPaidText, tokens.statusPaidText)
-    PaymentBadgeStatus.PARTIAL -> Triple("●", tokens.statusPartialDot, tokens.warningContent)
-    PaymentBadgeStatus.LATE -> Triple("!", tokens.statusLateText, tokens.statusLateText)
-    PaymentBadgeStatus.EMPTY -> Triple("—", tokens.mute, tokens.mute)
-    PaymentBadgeStatus.EXEMPT -> Triple("—", tokens.mute, tokens.mute)
+  val (dotColor, fg, showDot) = when (status) {
+    PaymentBadgeStatus.PAID -> Triple(tokens.positive, tokens.statusPaidText, true)
+    PaymentBadgeStatus.PARTIAL -> Triple(tokens.statusPartialDot, tokens.warningContent, true)
+    PaymentBadgeStatus.LATE -> Triple(tokens.statusLateText, tokens.statusLateText, true)
+    PaymentBadgeStatus.EMPTY -> Triple(tokens.mute, tokens.mute, false)
+    PaymentBadgeStatus.EXEMPT -> Triple(tokens.mute, tokens.mute, false)
   }
   Surface(
     shape = RoundedCornerShape(100.dp),
@@ -838,15 +943,17 @@ fun StatusPillBadge(
   ) {
     Row(
       verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(4.dp),
+      horizontalArrangement = Arrangement.spacedBy(6.dp),
       modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
-      Text(
-        text = iconGlyph,
-        style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.SemiBold,
-        color = glyphColor,
-      )
+      if (showDot) {
+        Box(
+          modifier = Modifier
+            .size(6.dp)
+            .clip(CircleShape)
+            .background(dotColor),
+        )
+      }
       Text(
         text = rawText,
         style = MaterialTheme.typography.labelMedium,
@@ -1311,8 +1418,9 @@ fun PinLockGateScreen(
         if (hasError) {
           Spacer(modifier = Modifier.height(10.dp))
           Text(
-            text = "! ${strings.pinWrongError}",
+            text = strings.pinWrongError,
             style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
             color = tokens.negativeDeep,
           )
         }
@@ -1501,24 +1609,17 @@ fun SyndicatEmptyStateCard(
     ) {
       Box(
         modifier = Modifier
-          .size(72.dp)
-          .clip(CircleShape)
-          .background(
-            Brush.radialGradient(
-              colors = listOf(
-                tokens.primaryTint,
-                tokens.surfaceSoft,
-              ),
-            ),
-          )
-          .border(BorderStroke(tokens.borderStrokeDp.dp, tokens.divider), CircleShape),
+          .size(60.dp)
+          .clip(RoundedCornerShape(16.dp))
+          .background(tokens.surfaceSoft)
+          .border(BorderStroke(tokens.borderStrokeDp.dp, tokens.divider), RoundedCornerShape(16.dp)),
         contentAlignment = Alignment.Center,
       ) {
         Icon(
           imageVector = icon,
           contentDescription = null,
           tint = tokens.linkColor,
-          modifier = Modifier.size(32.dp),
+          modifier = Modifier.size(28.dp),
         )
       }
       Text(

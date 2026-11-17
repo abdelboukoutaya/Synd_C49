@@ -1,10 +1,11 @@
 package com.example.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -42,8 +43,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -71,7 +70,7 @@ data class SyndicatNavItemSpec(
 
 /**
  * Barre de navigation flottante purement iconique (sans texte), avec icônes minimalistes explicatives,
- * capsule active animée en dégradé et respect strict des WindowInsets.navigationBars.
+ * capsule active sobre unie et respect strict des WindowInsets.navigationBars.
  */
 @Composable
 fun SyndicatFloatingBottomDock(
@@ -80,9 +79,8 @@ fun SyndicatFloatingBottomDock(
 ) {
   val tokens = LocalSyndicatTokens.current
   val haptic = LocalHapticFeedback.current
-  val dockBg = if (tokens.isDark) tokens.cardBg else Color.White
-  val borderTint = tokens.cardBorder.copy(alpha = if (tokens.isDark) 0.95f else 0.90f)
-  val topShine = Color.White.copy(alpha = if (tokens.isDark) 0.09f else 0.80f)
+  val dockBg = if (tokens.isDark) tokens.cardBg else tokens.navBg
+  val borderTint = tokens.cardBorder
 
   Box(
     modifier = modifier
@@ -91,31 +89,21 @@ fun SyndicatFloatingBottomDock(
         brush = Brush.verticalGradient(
           colors = listOf(
             Color.Transparent,
-            tokens.screenBg.copy(alpha = 0.78f),
-            tokens.screenBg.copy(alpha = 0.96f),
+            tokens.screenBg.copy(alpha = 0.88f),
           ),
         ),
       )
       .windowInsetsPadding(WindowInsets.navigationBars)
-      .padding(horizontal = 14.dp, vertical = 10.dp)
+      .padding(horizontal = 16.dp, vertical = 10.dp)
       .testTag("syndicat_bottom_nav_dock"),
   ) {
     Surface(
-      shape = RoundedCornerShape(30.dp),
+      shape = RoundedCornerShape(24.dp),
       color = dockBg,
-      border = BorderStroke(1.dp, borderTint),
+      border = BorderStroke(tokens.borderStrokeDp.dp, borderTint),
       tonalElevation = 0.dp,
-      shadowElevation = if (tokens.isDark) 10.dp else 12.dp,
-      modifier = Modifier
-        .fillMaxWidth()
-        .drawBehind {
-          drawLine(
-            color = topShine,
-            start = Offset(28.dp.toPx(), 1.dp.toPx()),
-            end = Offset(size.width - 28.dp.toPx(), 1.dp.toPx()),
-            strokeWidth = 1.dp.toPx(),
-          )
-        },
+      shadowElevation = if (tokens.isDark) 2.dp else 3.dp,
+      modifier = Modifier.fillMaxWidth(),
     ) {
       Row(
         modifier = Modifier
@@ -151,32 +139,29 @@ private fun DockIconTabItem(
   val selectedState = item.isSelected
 
   val iconScale by animateFloatAsState(
-    targetValue = if (selectedState) 1.06f else 0.96f,
+    targetValue = if (selectedState) 1.0f else 0.96f,
     animationSpec = spring(
-      dampingRatio = Spring.DampingRatioMediumBouncy,
-      stiffness = Spring.StiffnessMediumLow,
+      dampingRatio = Spring.DampingRatioNoBouncy,
+      stiffness = Spring.StiffnessMedium,
     ),
     label = "nav_icon_scale_${item.route}",
   )
-  val dotWidth by animateDpAsState(
-    targetValue = if (selectedState) 16.dp else 0.dp,
-    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-    label = "nav_dot_width_${item.route}",
+  val pillColor by animateColorAsState(
+    targetValue = if (selectedState) tokens.primary else Color.Transparent,
+    animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+    label = "nav_pill_bg_${item.route}",
   )
-  val inactiveIconTint by animateColorAsState(
-    targetValue = if (tokens.isDark) tokens.inkDeep.copy(alpha = 0.62f) else tokens.inkDeep.copy(alpha = 0.56f),
+  val iconTint by animateColorAsState(
+    targetValue = if (selectedState) tokens.onPrimary else tokens.body,
+    animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
     label = "nav_icon_tint_${item.route}",
-  )
-
-  val activeBrush = Brush.linearGradient(
-    colors = listOf(tokens.linkColor, tokens.linkActiveColor),
   )
 
   Box(
     modifier = modifier
       .minimumInteractiveComponentSize()
-      .heightIn(min = 52.dp)
-      .clip(RoundedCornerShape(22.dp))
+      .heightIn(min = 50.dp)
+      .clip(RoundedCornerShape(16.dp))
       .clickable(
         role = Role.Tab,
         onClick = onTap,
@@ -188,60 +173,38 @@ private fun DockIconTabItem(
       .testTag("nav_${item.route}"),
     contentAlignment = Alignment.Center,
   ) {
-    Column(
-      horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.Center,
+    Box(
+      contentAlignment = Alignment.Center,
+      modifier = Modifier
+        .graphicsLayer {
+          scaleX = iconScale
+          scaleY = iconScale
+        },
     ) {
       Box(
-        contentAlignment = Alignment.Center,
         modifier = Modifier
-          .graphicsLayer {
-            scaleX = iconScale
-            scaleY = iconScale
-          },
+          .width(48.dp)
+          .height(38.dp)
+          .clip(RoundedCornerShape(14.dp))
+          .background(pillColor),
+        contentAlignment = Alignment.Center,
       ) {
-        Box(
-          modifier = Modifier
-            .width(48.dp)
-            .height(38.dp)
-            .clip(RoundedCornerShape(19.dp))
-            .then(
-              if (selectedState) {
-                Modifier.background(brush = activeBrush)
-              } else {
-                Modifier
-              },
-            ),
-          contentAlignment = Alignment.Center,
-        ) {
-          Icon(
-            imageVector = if (selectedState) item.filledIcon else item.outlinedIcon,
-            contentDescription = item.label,
-            tint = if (selectedState) Color.White else inactiveIconTint,
-            modifier = Modifier.size(23.dp),
-          )
-        }
-
-        if (item.badgeCount > 0) {
-          NavCounterBadgePill(
-            count = item.badgeCount,
-            cutoutColor = dockBg,
-            route = item.route,
-            modifier = Modifier
-              .align(Alignment.TopEnd)
-              .offset(x = 2.dp, y = (-2).dp),
-          )
-        }
+        Icon(
+          imageVector = if (selectedState) item.filledIcon else item.outlinedIcon,
+          contentDescription = item.label,
+          tint = iconTint,
+          modifier = Modifier.size(22.dp),
+        )
       }
 
-      if (dotWidth > 0.dp) {
-        Spacer(modifier = Modifier.height(3.dp))
-        Box(
+      if (item.badgeCount > 0) {
+        NavCounterBadgePill(
+          count = item.badgeCount,
+          cutoutColor = dockBg,
+          route = item.route,
           modifier = Modifier
-            .width(dotWidth)
-            .height(3.dp)
-            .clip(CircleShape)
-            .background(tokens.linkColor),
+            .align(Alignment.TopEnd)
+            .offset(x = 2.dp, y = (-2).dp),
         )
       }
     }
@@ -258,7 +221,7 @@ fun SyndicatNavigationRailPane(
 ) {
   val tokens = LocalSyndicatTokens.current
   val haptic = LocalHapticFeedback.current
-  val railBg = if (tokens.isDark) tokens.cardBg else Color.White
+  val railBg = if (tokens.isDark) tokens.cardBg else tokens.navBg
 
   Row(
     modifier = modifier
@@ -277,18 +240,19 @@ fun SyndicatNavigationRailPane(
       verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
       Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = tokens.linkColor,
+        shape = RoundedCornerShape(12.dp),
+        color = tokens.primary,
+        border = BorderStroke(1.dp, tokens.primaryActive.copy(alpha = 0.25f)),
         tonalElevation = 0.dp,
-        shadowElevation = 2.dp,
+        shadowElevation = 0.dp,
         modifier = Modifier.size(40.dp),
       ) {
         Box(contentAlignment = Alignment.Center) {
           Text(
             text = "SY",
             style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.ExtraBold,
-            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            color = tokens.onPrimary,
           )
         }
       }

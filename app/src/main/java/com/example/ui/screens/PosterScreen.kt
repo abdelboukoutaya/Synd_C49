@@ -779,11 +779,7 @@ fun PosterScreen(
                   overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                val cashVal = if (data.cashNowDh < 0L) {
-                  "▼ ${formatDh(data.cashNowDh, cur, dig)}"
-                } else {
-                  formatDh(data.cashNowDh, cur, dig)
-                }
+                val cashVal = formatDh(data.cashNowDh, cur, dig)
                 Text(
                   text = cashVal,
                   style = MaterialTheme.typography.titleSmall,

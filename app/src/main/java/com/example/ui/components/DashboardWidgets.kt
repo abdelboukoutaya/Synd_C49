@@ -47,7 +47,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -67,13 +66,11 @@ import com.example.ui.i18n.bidiLtr
 import com.example.ui.i18n.formatNumber
 import com.example.ui.i18n.localizeDigits
 import com.example.ui.theme.CoinbaseOnDarkSoft
-import com.example.ui.theme.CoinbasePrimary
 import com.example.ui.theme.CoinbaseSemanticUp
 import com.example.ui.theme.CoinbaseSurfaceDark
 import com.example.ui.theme.CoinbaseSurfaceDarkElevated
 import com.example.ui.theme.LocalSyndicatTokens
 import com.example.ui.theme.MetaAttention
-import com.example.ui.theme.MetaOculusPurple
 import com.example.ui.theme.MetaPrimaryCobalt
 import com.example.ui.theme.MetaSuccess
 import com.example.ui.theme.MetaWarning
@@ -105,17 +102,13 @@ fun TreasuryPortfolioHeroCard(
   val animPaidOut = rememberAnimatedLong(data.totalExpensesPaidDh)
   val animBalance = rememberAnimatedLong(data.balanceDh)
 
-  val rawCashDisplay = if (animCashNow < 0L) {
-    "▼ ${formatDh(animCashNow, cur, dig)}"
-  } else {
-    formatDh(animCashNow, cur, dig)
-  }
+  val rawCashDisplay = formatDh(animCashNow, cur, dig)
   val cashDisplay = maskSensitiveDh(rawCashDisplay, isPrivacy)
 
   Surface(
     shape = RoundedCornerShape(tokens.featureCardRadiusDp.dp),
     color = CoinbaseSurfaceDark,
-    border = BorderStroke(1.dp, if (tokens.isDark) tokens.cardBorder else CoinbaseSurfaceDarkElevated),
+    border = BorderStroke(1.dp, if (tokens.isDark) tokens.cardBorder else Color.White.copy(alpha = 0.12f)),
     tonalElevation = 0.dp,
     shadowElevation = 0.dp,
     modifier = Modifier
@@ -125,18 +118,11 @@ fun TreasuryPortfolioHeroCard(
     Column(
       modifier = Modifier
         .drawBehind {
-          drawCircle(
-            brush = Brush.radialGradient(
-              colors = listOf(
-                CoinbasePrimary.copy(alpha = 0.28f),
-                CoinbasePrimary.copy(alpha = 0.06f),
-                Color.Transparent,
-              ),
-              center = Offset(size.width * 0.88f, size.height * 0.12f),
-              radius = size.maxDimension * 0.78f,
-            ),
-            radius = size.maxDimension * 0.78f,
-            center = Offset(size.width * 0.88f, size.height * 0.12f),
+          drawLine(
+            color = tokens.primary.copy(alpha = 0.85f),
+            start = Offset(24.dp.toPx(), 1.dp.toPx()),
+            end = Offset(size.width - 24.dp.toPx(), 1.dp.toPx()),
+            strokeWidth = 2.dp.toPx(),
           )
         }
         .padding(22.dp),
@@ -147,22 +133,12 @@ fun TreasuryPortfolioHeroCard(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
       ) {
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          Box(
-            modifier = Modifier
-              .size(8.dp)
-              .background(CoinbaseSemanticUp, CircleShape),
-          )
-          Text(
-            text = strings.dashCashEyebrow,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Medium,
-            color = CoinbaseOnDarkSoft,
-          )
-        }
+        Text(
+          text = strings.dashCashEyebrow,
+          style = MaterialTheme.typography.labelLarge,
+          fontWeight = FontWeight.Medium,
+          color = CoinbaseOnDarkSoft,
+        )
 
         Surface(
           shape = RoundedCornerShape(100.dp),
@@ -275,13 +251,24 @@ fun TreasuryPortfolioHeroCard(
                 Modifier
               },
             ) {
-              Text(
-                text = "◐ ${strings.expSupplierRemaining(maskSensitiveDh(formatDh(data.unpaidExpensesDh, cur, dig), isPrivacy))}",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFFFF8A94),
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-              )
+              ) {
+                Box(
+                  modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFFF8A94)),
+                )
+                Text(
+                  text = strings.expSupplierRemaining(maskSensitiveDh(formatDh(data.unpaidExpensesDh, cur, dig), isPrivacy)),
+                  style = MaterialTheme.typography.labelSmall,
+                  fontWeight = FontWeight.SemiBold,
+                  color = Color(0xFFFF8A94),
+                )
+              }
             }
           }
         }
@@ -345,13 +332,14 @@ fun DashboardQuickActionButton(
   modifier: Modifier = Modifier,
 ) {
   val tokens = LocalSyndicatTokens.current
-  val circleBg = if (isPrimary) tokens.buyCta else tokens.surfaceStrong
+  val iconBoxBg = if (isPrimary) tokens.buyCta else tokens.surfaceSoft
   val iconTint = if (isPrimary) tokens.onBuyCta else tokens.inkDeep
+  val iconBorder = if (isPrimary) null else BorderStroke(1.dp, tokens.divider)
 
   Surface(
     shape = RoundedCornerShape(16.dp),
     color = tokens.cardBg,
-    border = BorderStroke(1.dp, tokens.cardBorder),
+    border = BorderStroke(tokens.borderStrokeDp.dp, tokens.cardBorder),
     tonalElevation = 0.dp,
     shadowElevation = 0.dp,
     modifier = modifier
@@ -368,9 +356,10 @@ fun DashboardQuickActionButton(
     ) {
       Box(contentAlignment = Alignment.TopEnd) {
         Surface(
-          shape = CircleShape,
-          color = circleBg,
-          modifier = Modifier.size(42.dp),
+          shape = RoundedCornerShape(12.dp),
+          color = iconBoxBg,
+          border = iconBorder,
+          modifier = Modifier.size(40.dp),
         ) {
           Box(contentAlignment = Alignment.Center) {
             Icon(
@@ -453,16 +442,16 @@ fun CoinbaseKpiMetricCard(
         verticalAlignment = Alignment.CenterVertically,
       ) {
         Surface(
-          shape = CircleShape,
+          shape = RoundedCornerShape(8.dp),
           color = iconContainer,
-          modifier = Modifier.size(34.dp),
+          modifier = Modifier.size(28.dp),
         ) {
           Box(contentAlignment = Alignment.Center) {
             Icon(
               imageVector = icon,
               contentDescription = null,
               tint = iconTint,
-              modifier = Modifier.size(18.dp),
+              modifier = Modifier.size(16.dp),
             )
           }
         }
@@ -616,8 +605,9 @@ fun CollectionRateRingCard(
           maxLines = 1,
         )
         Text(
-          text = "✓ ${bidiLtr("${localizeDigits(upToDateCount.toString(), digitsAr)}/${localizeDigits(occupiedCount.toString(), digitsAr)}")} ${strings.badgePaid}",
+          text = "${bidiLtr("${localizeDigits(upToDateCount.toString(), digitsAr)}/${localizeDigits(occupiedCount.toString(), digitsAr)}")} · ${strings.badgePaid}",
           style = MaterialTheme.typography.labelSmall,
+          fontFamily = numericFont,
           color = tokens.positiveDeep,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
@@ -630,6 +620,7 @@ fun CollectionRateRingCard(
 /**
  * Graphique à barres verticales (100 % largeur portrait, zéro slider horizontal).
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MonthlyCollectionsChartCard(
   data: SyndicatDashboardData,
@@ -666,27 +657,63 @@ fun MonthlyCollectionsChartCard(
           fontWeight = FontWeight.SemiBold,
           color = tokens.inkDeep,
         )
-        Spacer(modifier = Modifier.height(4.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-          Text(
-            text = "● ${if (isAr) "عادي:" else "Standard :"} ${formatDh(cfg.defaultMonthlyFee, cur, dig)}",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Medium,
-            color = cotisationColorForAmount(cfg.defaultMonthlyFee, cfg.defaultMonthlyFee),
-          )
-          Text(
-            text = "● ${strings.dashCustomFeeLegend(cur)}",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Medium,
-            color = cotisationColorForAmount(cfg.defaultMonthlyFee + 50L, cfg.defaultMonthlyFee),
-          )
-          if (data.hasPreviousYearChartData) {
+        Spacer(modifier = Modifier.height(6.dp))
+        FlowRow(
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+          verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+          ) {
+            Box(
+              modifier = Modifier
+                .size(8.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(cotisationColorForAmount(cfg.defaultMonthlyFee, cfg.defaultMonthlyFee)),
+            )
             Text(
-              text = "◐ ${strings.dashPreviousYearLegend((cfg.year - 1L).coerceAtLeast(2020L))}",
+              text = "${if (isAr) "عادي:" else "Standard :"} ${formatDh(cfg.defaultMonthlyFee, cur, dig)}",
               style = MaterialTheme.typography.labelSmall,
               fontWeight = FontWeight.Medium,
-              color = tokens.mute,
+              color = tokens.body,
             )
+          }
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+          ) {
+            Box(
+              modifier = Modifier
+                .size(8.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(cotisationColorForAmount(cfg.defaultMonthlyFee + 50L, cfg.defaultMonthlyFee)),
+            )
+            Text(
+              text = strings.dashCustomFeeLegend(cur),
+              style = MaterialTheme.typography.labelSmall,
+              fontWeight = FontWeight.Medium,
+              color = tokens.body,
+            )
+          }
+          if (data.hasPreviousYearChartData) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+              Box(
+                modifier = Modifier
+                  .size(8.dp)
+                  .clip(RoundedCornerShape(2.dp))
+                  .background(tokens.mute.copy(alpha = 0.45f)),
+              )
+              Text(
+                text = strings.dashPreviousYearLegend((cfg.year - 1L).coerceAtLeast(2020L)),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
+                color = tokens.mute,
+              )
+            }
           }
         }
       }
@@ -695,6 +722,7 @@ fun MonthlyCollectionsChartCard(
     if (activeMonths.isNotEmpty()) {
       Spacer(modifier = Modifier.height(18.dp))
 
+      val guideLineColor = tokens.divider
       Surface(
         shape = RoundedCornerShape(14.dp),
         color = tokens.surfaceSoft,
@@ -704,6 +732,23 @@ fun MonthlyCollectionsChartCard(
         Row(
           modifier = Modifier
             .fillMaxWidth()
+            .drawBehind {
+              val topY = 34.dp.toPx()
+              val bottomY = size.height - 34.dp.toPx()
+              val midY = (topY + bottomY) / 2f
+              drawLine(
+                color = guideLineColor,
+                start = Offset(10.dp.toPx(), bottomY),
+                end = Offset(size.width - 10.dp.toPx(), bottomY),
+                strokeWidth = 1.dp.toPx(),
+              )
+              drawLine(
+                color = guideLineColor.copy(alpha = 0.65f),
+                start = Offset(10.dp.toPx(), midY),
+                end = Offset(size.width - 10.dp.toPx(), midY),
+                strokeWidth = 0.75.dp.toPx(),
+              )
+            }
             .padding(horizontal = 10.dp, vertical = 14.dp),
           horizontalArrangement = Arrangement.spacedBy(6.dp),
           verticalAlignment = Alignment.Bottom,
@@ -748,8 +793,8 @@ fun MonthlyCollectionsChartCard(
                 modifier = Modifier
                   .fillMaxWidth(0.76f)
                   .height(76.dp)
-                  .clip(RoundedCornerShape(6.dp))
-                  .background(tokens.trackBg),
+                  .clip(RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp))
+                  .background(tokens.trackBg.copy(alpha = 0.55f)),
                 contentAlignment = Alignment.BottomCenter,
               ) {
                 Row(
@@ -770,7 +815,7 @@ fun MonthlyCollectionsChartCard(
                     modifier = Modifier
                       .weight(if (data.hasPreviousYearChartData && prevFillFraction > 0f) 0.58f else 1f)
                       .height((76f * barFillFraction).dp)
-                      .clip(RoundedCornerShape(6.dp))
+                      .clip(RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp))
                       .background(barColor),
                   )
                 }
@@ -812,7 +857,7 @@ fun ExpenseCategoriesBreakdownCard(
       MetaPrimaryCobalt,
       MetaSuccess,
       MetaAttention,
-      MetaOculusPurple,
+      Color(0xFF0F766E),
       MetaWarning,
       tokens.linkColor,
       tokens.negativeDeep,

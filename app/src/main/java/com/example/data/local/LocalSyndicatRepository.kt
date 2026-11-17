@@ -51,8 +51,18 @@ class LocalSyndicatRepository(
   private val appContext = context.applicationContext
   private val mutex = Mutex()
 
-  private val storeFile: File by lazy {
-    storageFileOverride ?: File(File(appContext.filesDir, "local_store").apply { mkdirs() }, "syndicat_local_state.json")
+  @Volatile
+  private var activeBuildingId: String = "default"
+
+  private fun resolveStoreFile(): File {
+    if (storageFileOverride != null) return storageFileOverride
+    val dir = File(appContext.filesDir, "local_store").apply { mkdirs() }
+    val safeId = activeBuildingId.trim().replace(Regex("[^a-zA-Z0-9_-]"), "_").ifBlank { "default" }
+    return if (safeId == "default") {
+      File(dir, "syndicat_local_state.json")
+    } else {
+      File(dir, "building_${safeId}_state.json")
+    }
   }
 
   private val configFlow = MutableStateFlow<SyndicatConfig?>(null)
@@ -70,9 +80,10 @@ class LocalSyndicatRepository(
 
   private fun loadSynchronouslyIfPresent() {
     try {
+      val currentFile = resolveStoreFile()
       val candidate = when {
-        storeFile.exists() && storeFile.length() > 0L -> storeFile
-        storageFileOverride == null -> {
+        currentFile.exists() && currentFile.length() > 0L -> currentFile
+        storageFileOverride == null && activeBuildingId == "default" -> {
           val fallbackSnapshot = File(File(appContext.filesDir, "backups"), "syndicat_auto_weekly.json")
           if (fallbackSnapshot.exists() && fallbackSnapshot.length() > 0L) fallbackSnapshot else null
         }
@@ -88,14 +99,60 @@ class LocalSyndicatRepository(
           projectsFlow.value = parsed.projects
           paymentsFlow.value = parsed.payments
           initializedFromDisk = true
+          return
         }
       }
+      configFlow.value = null
+      apartmentsFlow.value = emptyList()
+      expensesFlow.value = emptyList()
+      projectsFlow.value = emptyList()
+      paymentsFlow.value = emptyList()
+      initializedFromDisk = false
     } catch (_: Exception) {
+    }
+  }
+
+  suspend fun switchBuilding(
+    buildingId: String,
+    defaultBuildingName: String? = null,
+    preserveLanguage: String? = null,
+  ) {
+    val cleanId = buildingId.trim().replace(Regex("[^a-zA-Z0-9_-]"), "_").ifBlank { "default" }
+    val needSeed = mutex.withLock {
+      if (cleanId == activeBuildingId && initializedFromDisk && configFlow.value != null) {
+        return
+      }
+      activeBuildingId = cleanId
+      loadSynchronouslyIfPresent()
+      !initializedFromDisk || configFlow.value == null
+    }
+    if (needSeed) {
+      ensureSeeded(forceReset = true, preserveLanguage = preserveLanguage)
+      if (!defaultBuildingName.isNullOrBlank()) {
+        mutex.withLock {
+          val cur = configFlow.value ?: return@withLock
+          configFlow.value = cur.copy(
+            residenceName = defaultBuildingName.trim().take(120),
+            buildingTitle = defaultBuildingName.trim().take(180),
+          )
+          persistCurrentStateLocked()
+        }
+      }
+    }
+  }
+
+  suspend fun deleteBuildingStorage(buildingId: String) {
+    val cleanId = buildingId.trim().replace(Regex("[^a-zA-Z0-9_-]"), "_")
+    if (cleanId.isBlank() || cleanId == "default") return
+    mutex.withLock {
+      val dir = File(appContext.filesDir, "local_store")
+      File(dir, "building_${cleanId}_state.json").delete()
     }
   }
 
   private suspend fun persistCurrentStateLocked() {
     val cfg = configFlow.value ?: return
+    val currentFile = resolveStoreFile()
     val dash = SyndicatDashboardData(
       config = cfg,
       apartments = apartmentsFlow.value,
@@ -106,13 +163,13 @@ class LocalSyndicatRepository(
       baseYear = cfg.year,
     )
     withContext(Dispatchers.IO) {
-      val parent = storeFile.parentFile ?: appContext.filesDir
+      val parent = currentFile.parentFile ?: appContext.filesDir
       if (!parent.exists()) parent.mkdirs()
-      val tmpFile = File(parent, "${storeFile.name}.tmp")
+      val tmpFile = File(parent, "${currentFile.name}.tmp")
       val json = BackupManager.serializeBackupJson(dash)
       tmpFile.writeText(json, Charsets.UTF_8)
-      if (!tmpFile.renameTo(storeFile)) {
-        storeFile.writeText(json, Charsets.UTF_8)
+      if (!tmpFile.renameTo(currentFile)) {
+        currentFile.writeText(json, Charsets.UTF_8)
         tmpFile.delete()
       }
     }

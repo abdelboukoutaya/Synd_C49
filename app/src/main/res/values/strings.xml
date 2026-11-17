@@ -72,4 +72,10 @@
     <string name="export_card_projects_title">État d\'avancement des projets</string>
     <string name="export_card_projects_sub">Rapport complet des projets en cours, futurs et terminés avec budgets et couverture caisse.</string>
     <string name="sign_out">Se déconnecter</string>
+    <string name="widget_label_compact">SYNDICAT · Compact (2×1)</string>
+    <string name="widget_label_classic">SYNDICAT · Tableau de bord (4×2)</string>
+    <string name="widget_label_detailed">SYNDICAT · Complet &amp; Retards (4×3)</string>
+    <string name="widget_description_compact">Solde disponible en caisse et raccourci d\'action rapide.</string>
+    <string name="widget_description">Trésorerie, recouvrement, retards et raccourci d\'encaissement personnalisable.</string>
+    <string name="widget_description_detailed">Vue complète avec encaissements, dépenses, top retards et 2 actions rapides.</string>
 </resources>

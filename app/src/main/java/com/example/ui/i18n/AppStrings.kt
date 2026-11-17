@@ -1363,6 +1363,259 @@ class SyndicatStrings(
     }
   val agQuorumResetBtn: String
     get() = if (language == AppLanguage.AR) "تصفير الحضور" else "Réinitialiser"
+
+  // --- Aliases & v2.3 Reports (Relevé annuel & PV AG) ---
+  val apptLabel: String
+    get() = colAppt
+  val yearExerciseLabel: String
+    get() = if (language == AppLanguage.AR) "السنة المالية" else "Exercice"
+  val cardTotalPaid: String
+    get() = colPaid
+  val cardDueLabel: String
+    get() = if (language == AppLanguage.AR) "المستحق" else "Exigible"
+  val dashRemaining: String
+    get() = colRemaining
+  val tabSpecialCalls: String
+    get() = projectsViewCallsTab
+  val statusVacant: String
+    get() = badgeEmpty
+  val statementTitle: String
+    get() = if (language == AppLanguage.AR) "كشف الوضعية السنوي" else "Relevé de situation annuel"
+  val statementMonthsSection: String
+    get() = if (language == AppLanguage.AR) "جدول المساهمات الشهرية (12 شهراً)" else "Détail des cotisations (12 mois)"
+  val aptStatementPdfBtn: String
+    get() = if (language == AppLanguage.AR) "كشف سنوي (PDF)" else "Relevé annuel (PDF)"
+  val aptStatementWaBtn: String
+    get() = if (language == AppLanguage.AR) "إرسال الكشف (واتساب)" else "Envoyer relevé (WhatsApp)"
+
+  val agPvPdfTitle: String
+    get() = if (language == AppLanguage.AR) "محضر الجمع العام العادي" else "Procès-Verbal d'Assemblée Générale"
+  val agQuorumTitle: String
+    get() = agQuorumCardTitle
+  val agQuorumReached: String
+    get() = if (language == AppLanguage.AR) "النصاب مكتمل" else "Quorum atteint"
+  val agQuorumMissing: String
+    get() = if (language == AppLanguage.AR) "النصاب غير مكتمل" else "Quorum non atteint"
+  val agDateLabel: String
+    get() = if (language == AppLanguage.AR) "تاريخ الجمع العام" else "Date de l'AG"
+  val agLocationLabel: String
+    get() = if (language == AppLanguage.AR) "المكان" else "Lieu de la réunion"
+  val agAgendaLabel: String
+    get() = if (language == AppLanguage.AR) "جدول الأعمال" else "Ordre du jour"
+  val agAgendaHint: String
+    get() = if (language == AppLanguage.AR) "نقط جدول الأعمال (سطر لكل نقطة)..." else "Points à l'ordre du jour (1 par ligne)…"
+  val agResolutionsLabel: String
+    get() = if (language == AppLanguage.AR) "القرارات والتصويت" else "Résolutions & Votes"
+  val agNewResolutionHint: String
+    get() = if (language == AppLanguage.AR) "إضافة قرار للتصويت…" else "Nouvelle résolution à voter…"
+  val agVoteFor: String
+    get() = if (language == AppLanguage.AR) "مع" else "Pour"
+  val agVoteAgainst: String
+    get() = if (language == AppLanguage.AR) "ضد" else "Contre"
+  val agVoteAbstain: String
+    get() = if (language == AppLanguage.AR) "امتناع" else "Abst."
+  val agResolutionAdopted: String
+    get() = if (language == AppLanguage.AR) "مقبول ✓" else "Adoptée ✓"
+  val agResolutionRejected: String
+    get() = if (language == AppLanguage.AR) "مرفوض ✗" else "Rejetée ✗"
+  val agSigSyndic: String
+    get() = if (language == AppLanguage.AR) "توقيع السانديك" else "Signature Syndic"
+  val agSigCouncil: String
+    get() = if (language == AppLanguage.AR) "توقيع مجلس الإقامة" else "Signature Conseil Syndical"
+  val agExportPvColorBtn: String
+    get() = if (language == AppLanguage.AR) "تصدير المحضر PDF (ملون)" else "Exporter PV (PDF Couleur)"
+  val agExportPvMonoBtn: String
+    get() = if (language == AppLanguage.AR) "تصدير المحضر PDF (أبيض وأسود)" else "Exporter PV (PDF N&B)"
+
+  // --- Dépenses récurrentes & Prestataires ---
+  val tabAbosVendorsMode: String
+    get() = if (language == AppLanguage.AR) "الاشتراكات والمزودون" else "Abos & Prestataires"
+  val recurringSectionTitle: String
+    get() = if (language == AppLanguage.AR) "مصاريف شهرية قارة (بنقرة واحدة)" else "Dépenses récurrentes (1 clic)"
+  val recurringGenerateMonthBtn: String
+    get() = if (language == AppLanguage.AR) "توليد مصاريف هذا الشهر" else "Générer ce mois"
+  val recurringGeneratedMsg: (Int) -> String
+    get() = { count ->
+      if (language == AppLanguage.AR) "تمت إضافة $count مصاريف قارة لهذا الشهر"
+      else "$count dépense(s) récurrente(s) générée(s) ce mois"
+    }
+  val recurringNonePendingMsg: String
+    get() = if (language == AppLanguage.AR) "تم توليد كل الاشتراكات المفعلة لهذا الشهر مسبقاً" else "Tous les abonnements actifs sont déjà générés ce mois-ci"
+  val recurringAddBtn: String
+    get() = if (language == AppLanguage.AR) "اشتراك جديد" else "Nouvel abo"
+  val recurringPresetsBtn: String
+    get() = if (language == AppLanguage.AR) "قوالب جاهزة" else "Modèles types"
+  val recurringEmptyHint: String
+    get() = if (language == AppLanguage.AR) "أضف اشتراكات النظافة والحراسة والمصعد لتسجيلها شهرياً بنقرة." else "Ajoutez ménage, gardiennage, ascenseur ou eau pour générer le mois en 1 clic."
+
+  val vendorsSectionTitle: String
+    get() = if (language == AppLanguage.AR) "سجل المزودين والعقود" else "Carnet des Prestataires & Contrats"
+  val vendorAddBtn: String
+    get() = if (language == AppLanguage.AR) "مزود جديد" else "Nouveau prestataire"
+  val vendorEmptyHint: String
+    get() = if (language == AppLanguage.AR) "احفظ أرقام الكهربائي، السباك، شركة النظافة وتواريخ العقود." else "Centralisez téléphone, WhatsApp, tarif mensuel et échéance de contrat."
+  val vendorNameLabel: String
+    get() = if (language == AppLanguage.AR) "اسم المزود / الشركة" else "Nom / Entreprise"
+  val vendorServiceLabel: String
+    get() = if (language == AppLanguage.AR) "الخدمة (سباكة، مصعد…)" else "Service / Spécialité"
+  val vendorContractEndLabel: String
+    get() = if (language == AppLanguage.AR) "نهاية العقد (اختياري)" else "Fin de contrat (optionnel)"
+  val vendorMonthlyFeeLabel: (String) -> String
+    get() = { cur -> if (language == AppLanguage.AR) "التعريفة الشهرية ($cur)" else "Forfait mensuel ($cur)" }
+  val vendorPaidYtdLabel: (String) -> String
+    get() = { amt -> if (language == AppLanguage.AR) "المجموع المؤدى هذه السنة: $amt" else "Total payé cet exercice : $amt" }
+
+  // --- OCR Facture ---
+  val ocrScanInvoiceBtn: String
+    get() = if (language == AppLanguage.AR) "قراءة الفاتورة بالكاميرا / صورة (OCR)" else "Lire facture photo (OCR)"
+  val ocrScanningMsg: String
+    get() = if (language == AppLanguage.AR) "جاري تحليل نص الفاتورة محلياً…" else "Analyse OCR de la facture en cours…"
+  val ocrSuccessMsg: String
+    get() = if (language == AppLanguage.AR) "تم استخراج بيانات الفاتورة تلقائياً ✓" else "Champs pré-remplis depuis la facture ✓"
+  val ocrNoTextMsg: String
+    get() = if (language == AppLanguage.AR) "لم يتم العثور على نص واضح في هذه الصورة" else "Aucun texte lisible détecté sur cette image"
+
+  // --- Incidents & Réclamations ---
+  val projectsViewIncidentsTab: String
+    get() = if (language == AppLanguage.AR) "الحوادث والشكاوى" else "Incidents"
+  val incidentAddBtn: String
+    get() = if (language == AppLanguage.AR) "التبليغ عن حادث" else "Signaler un incident"
+  val incidentEmptyTitle: String
+    get() = if (language == AppLanguage.AR) "لا توجد شكاوى أو أعطال مسجلة" else "Aucun incident signalé"
+  val incidentEmptySub: String
+    get() = if (language == AppLanguage.AR) "تتبع أعطال المصعد أو التسربات وحوّلها إلى مصروف بنقرة واحدة." else "Suivez pannes, fuites ou réclamations et convertissez-les en dépense en 1 clic."
+  val incidentConvertExpenseBtn: String
+    get() = if (language == AppLanguage.AR) "تحويل إلى مصروف" else "Convertir en dépense"
+  val incidentStatusOpen: String
+    get() = if (language == AppLanguage.AR) "مفتوح" else "Ouvert"
+  val incidentStatusInProgress: String
+    get() = if (language == AppLanguage.AR) "قيد المعالجة" else "En cours"
+  val incidentStatusResolved: String
+    get() = if (language == AppLanguage.AR) "تم الإصلاح" else "Résolu"
+  val incidentSeverityLow: String
+    get() = if (language == AppLanguage.AR) "عادي" else "Normal"
+  val incidentSeverityMedium: String
+    get() = if (language == AppLanguage.AR) "مهم" else "Important"
+  val incidentSeverityUrgent: String
+    get() = if (language == AppLanguage.AR) "مستعجل" else "Urgent"
+
+  // --- Multi-immeubles & Partage Conseil Syndical ---
+  val multiBuildingTitle: String
+    get() = if (language == AppLanguage.AR) "تعدد العمارات والمباني" else "Multi-immeubles & Blocs"
+  val multiBuildingSub: String
+    get() = if (language == AppLanguage.AR) "أدر عدة عمارات أو مداخل بمعطيات وصندوق مستقل لكل عمارة." else "Gérez plusieurs immeubles ou blocs avec caisse et cotisations isolées."
+  val multiBuildingAddBtn: String
+    get() = if (language == AppLanguage.AR) "إضافة عمارة جديدة" else "Ajouter un immeuble"
+  val multiBuildingActiveBadge: String
+    get() = if (language == AppLanguage.AR) "نشط الآن" else "Actif"
+  val multiBuildingSwitchLabel: String
+    get() = if (language == AppLanguage.AR) "تغيير العمارة" else "Changer d'immeuble"
+  val councilShareTitle: String
+    get() = if (language == AppLanguage.AR) "مشاركة مجلس الإقامة (للقراءة فقط)" else "Partage Conseil Syndical (Lecture seule)"
+  val councilShareSub: String
+    get() = if (language == AppLanguage.AR) "فعّل وضع القراءة فقط أو شارك وضعية الإقامة عبر رمز QR مع أعضاء المجلس." else "Activez le mode lecture seule ou partagez la situation de l'immeuble via QR Code."
+  val councilModeAdmin: String
+    get() = if (language == AppLanguage.AR) "مدير السانديك (تعديل كامل)" else "Syndic Admin (complet)"
+  val councilModeReadOnly: String
+    get() = if (language == AppLanguage.AR) "عضو المجلس (قراءة فقط)" else "Conseil (lecture seule)"
+  val councilReadOnlyBanner: String
+    get() = if (language == AppLanguage.AR) "وضع القراءة فقط لمجلس الإقامة: التعديلات معطلة" else "Mode Conseil Syndical (lecture seule) : modifications désactivées"
+  val councilGenerateCodeBtn: String
+    get() = if (language == AppLanguage.AR) "رمز QR للمجلس" else "QR Code Conseil"
+  val councilImportCodeBtn: String
+    get() = if (language == AppLanguage.AR) "مسح / استيراد QR" else "Importer QR Code"
+  val councilQrDialogTitle: String
+    get() = if (language == AppLanguage.AR) "رمز QR للمجلس (للقراءة فقط)" else "QR Code · Conseil Syndical"
+  val councilQrReadOnlyHint: String
+    get() = if (language == AppLanguage.AR) "امسح هذا الرمز من هاتف آخر أو شارك صورة QR عبر واتساب للاطلاع فقط." else "Scannez ce QR Code depuis un autre téléphone ou partagez l'image sur WhatsApp (lecture seule)."
+  val councilQrShareImageBtn: String
+    get() = if (language == AppLanguage.AR) "مشاركة صورة QR" else "Partager l'image QR"
+  val councilQrImageDesc: String
+    get() = if (language == AppLanguage.AR) "رمز الاستجابة السريعة لوضعية الإقامة" else "QR Code de consultation de la résidence"
+  val councilQrImportSub: String
+    get() = if (language == AppLanguage.AR) "امسح رمز QR الظاهر على هاتف السانديك أو استورد صورة QR المستلمة عبر واتساب." else "Scannez le QR Code affiché par le syndic ou importez une image QR reçue sur WhatsApp."
+  val councilQrScanCameraBtn: String
+    get() = if (language == AppLanguage.AR) "مسح بالكاميرا" else "Scanner avec la caméra"
+  val councilQrPickImageBtn: String
+    get() = if (language == AppLanguage.AR) "استيراد صورة QR (واتساب / المعرض)" else "Importer image QR (WhatsApp / Galerie)"
+  val councilQrManualToggle: String
+    get() = if (language == AppLanguage.AR) "أو إدخال الرمز النصي يدوياً" else "Ou saisir un code texte manuellement"
+  val councilQrInvalidError: String
+    get() = if (language == AppLanguage.AR) "تعذّر قراءة رمز QR صالح في هذه الصورة." else "Aucun QR Code SYNDICAT valide détecté sur cette image."
+  val councilQrCameraDenied: String
+    get() = if (language == AppLanguage.AR) "إذن الكاميرا مطلوب لمسح رمز QR." else "Autorisez l'accès à la caméra pour scanner le QR Code."
+  val councilQrImportSuccess: String
+    get() = if (language == AppLanguage.AR) "تم استيراد وضعية الإقامة من رمز QR ✓" else "Situation de l'immeuble importée via QR Code ✓"
+  val councilQrCardFooter: String
+    get() = if (language == AppLanguage.AR) "افتح تطبيق SYNDICAT > الإعدادات > مسح / استيراد QR" else "Ouvrez SYNDICAT > Paramètres > Importer QR Code"
+
+  // --- Réorganisation Paramètres par ordre et importance ---
+  val settingsGroupLanguageDisplay: String
+    get() = if (language == AppLanguage.AR) "1 · اللغة والعرض" else "1 · Langue & Affichage"
+  val settingsGroupBuildingConfig: String
+    get() = if (language == AppLanguage.AR) "2 · الإقامة والهيكل والمساهمات" else "2 · Immeuble, Structure & Cotisations"
+  val settingsGroupToolsGovernance: String
+    get() = if (language == AppLanguage.AR) "3 · التواصل والودجات ومجلس الإقامة" else "3 · Communication, Widgets & Conseil"
+  val settingsGroupSecurityData: String
+    get() = if (language == AppLanguage.AR) "4 · الأمان والتنبيهات والنسخ الاحتياطي" else "4 · Sécurité, Rappels & Données"
+  val settingsGroupAdvancedAbout: String
+    get() = if (language == AppLanguage.AR) "5 · إعدادات متقدمة وحول التطبيق" else "5 · Zone avancée & Application"
+  val settingsSecurityRemindersTitle: String
+    get() = if (language == AppLanguage.AR) "الأمان والتنبيهات وسجل التدقيق" else "Sécurité, Rappels & Journal d'audit"
+  val settingsBackupDataTitle: String
+    get() = if (language == AppLanguage.AR) "النسخ الاحتياطي وتصدير البيانات" else "Sauvegardes & Exports (JSON / CSV)"
+  val settingsDangerResetTitle: String
+    get() = if (language == AppLanguage.AR) "إعادة الضبط والحساب" else "Réinitialisation & Session"
+
+  // --- Studio Widget Écran d'accueil ---
+  val widgetStudioTitle: String
+    get() = if (language == AppLanguage.AR) "ودجات الشاشة الرئيسية (3 أحجام)" else "Widgets Écran d'Accueil (3 formats)"
+  val widgetStudioSub: String
+    get() = if (language == AppLanguage.AR) "اختر الشكل، الألوان، الخيارات وزر الإجراء السريع ثم ثبّته على شاشة الهاتف." else "Personnalisez le format, le thème, les indicateurs et le raccourci, puis épinglez sur l'accueil."
+  val widgetFormatLabel: String
+    get() = if (language == AppLanguage.AR) "حجم الودجت" else "Format du widget"
+  val widgetFormatCompact: String
+    get() = if (language == AppLanguage.AR) "مصغّر 2×1" else "Compact 2×1"
+  val widgetFormatClassic: String
+    get() = if (language == AppLanguage.AR) "كلاسيكي 4×2" else "Classique 4×2"
+  val widgetFormatDetailed: String
+    get() = if (language == AppLanguage.AR) "مفصل 4×3" else "Complet 4×3"
+  val widgetThemeLabel: String
+    get() = if (language == AppLanguage.AR) "مظهر الودجت" else "Apparence du widget"
+  val widgetThemeNavy: String
+    get() = if (language == AppLanguage.AR) "أزرق ملكي" else "Marine"
+  val widgetThemeLight: String
+    get() = if (language == AppLanguage.AR) "أبيض نقي" else "Clair"
+  val widgetThemeDark: String
+    get() = if (language == AppLanguage.AR) "داكن AMOLED" else "AMOLED"
+  val widgetThemeEmerald: String
+    get() = if (language == AppLanguage.AR) "زمردي" else "Émeraude"
+  val widgetActionLabel: String
+    get() = if (language == AppLanguage.AR) "زر الإجراء السريع" else "Bouton d'action rapide"
+  val widgetActionPay: String
+    get() = if (language == AppLanguage.AR) "+ تحصيل" else "+ Encaisser"
+  val widgetActionLate: String
+    get() = if (language == AppLanguage.AR) "المتأخرون" else "Retards"
+  val widgetActionExpense: String
+    get() = if (language == AppLanguage.AR) "+ مصروف" else "+ Dépense"
+  val widgetActionOpen: String
+    get() = if (language == AppLanguage.AR) "فتح التطبيق" else "Aperçu"
+  val widgetOptPrivacy: String
+    get() = if (language == AppLanguage.AR) "إخفاء المبالغ على الشاشة الرئيسية (الخصوصية)" else "Masquer les montants (confidentialité)"
+  val widgetOptShowRate: String
+    get() = if (language == AppLanguage.AR) "إظهار نسبة التحصيل (%)" else "Afficher taux de recouvrement (%)"
+  val widgetOptShowLateCount: String
+    get() = if (language == AppLanguage.AR) "إظهار عدد المتأخرين" else "Afficher compteur de retards"
+  val widgetOptShowExpenses: String
+    get() = if (language == AppLanguage.AR) "إظهار المداخيل / باقي المصاريف" else "Afficher encaissements & reste dépenses"
+  val widgetOptShowLateList: String
+    get() = if (language == AppLanguage.AR) "إظهار أبرز 3 شقق متأخرة (في الحجم المفصل)" else "Afficher top 3 retards (format Complet)"
+  val widgetPinBtn: String
+    get() = if (language == AppLanguage.AR) "تثبيت هذا الودجت على الشاشة" else "Épingler ce format sur l'accueil"
+  val widgetPinRequestedMsg: String
+    get() = if (language == AppLanguage.AR) "تم إرسال طلب إضافة الودجت للشاشة الرئيسية ✓" else "Ajout du widget demandé à l'écran d'accueil ✓"
+  val widgetPinManualHint: String
+    get() = if (language == AppLanguage.AR) "اضغط مطولاً على الشاشة الرئيسية > Widgets > SYNDICAT" else "Appui long sur l'écran d'accueil > Widgets > SYNDICAT"
 }
 
 val ArabicStrings = SyndicatStrings(

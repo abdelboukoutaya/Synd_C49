@@ -58,7 +58,19 @@ import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.ExpensesScreen
 import com.example.ui.screens.ProjectsScreen
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
+import com.example.data.local.AgMinutesDraft
+import com.example.data.local.AgResolutionRecord
+import com.example.data.local.BuildingProfile
+import com.example.data.local.IncidentRecord
+import com.example.data.local.IncidentSeverity
+import com.example.data.local.IncidentStatus
+import com.example.data.local.RecurringExpenseTemplate
+import com.example.data.local.SpecialCallRecord
+import com.example.data.local.SyndicatAdvancedCodec
+import com.example.data.local.SyndicatRoleMode
+import com.example.data.local.VendorRecord
 import com.example.ui.theme.AppTheme
 import com.example.ui.theme.CoinbaseCanvas
 import com.example.ui.theme.CoinbaseDarkCardBg
@@ -87,7 +99,18 @@ import com.example.util.CotisationExportOptions
 import com.example.util.ExportVariant
 import com.example.util.PdfPosterExporter
 import com.example.util.RelanceExportOptions
+import com.example.util.SyndicatCouncilShareCodec
+import com.example.util.SyndicatReportsExporter
 import com.example.util.WhatsAppHelper
+import com.example.widget.SyndicatCompactWidgetReceiver
+import com.example.widget.SyndicatDetailedWidgetReceiver
+import com.example.widget.SyndicatGlanceWidgetReceiver
+import com.example.widget.SyndicatWidgetPrefs
+import com.example.widget.SyndicatWidgetSnapshot
+import com.example.widget.WidgetFormatPreset
+import com.example.widget.WidgetQuickAction
+import com.example.widget.WidgetThemePreset
+import com.example.widget.widgetPaletteFor
 import java.io.File
 import java.text.Bidi
 import kotlinx.coroutines.flow.first
@@ -1158,25 +1181,45 @@ class ExampleRobolectricTest {
     }
     composeTestRule.waitForIdle()
 
-    composeTestRule.onNodeWithTag("settings_sync_card").performScrollTo().assertIsDisplayed()
+    // Language & Display is placed right at the top of Settings without scrolling
+    composeTestRule.onNodeWithTag("settings_group_1").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("lang_option_fr").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("lang_option_ar").assertIsDisplayed()
+
+    composeTestRule.onNodeWithTag("settings_screen").performScrollToNode(hasTestTag("settings_sync_card"))
+    composeTestRule.onNodeWithTag("settings_sync_card").assertIsDisplayed()
     composeTestRule.onNodeWithTag("settings_connect_google_btn").performScrollTo().performClick()
     composeTestRule.waitForIdle()
     assertTrue("Expected optional Google sync CTA to invoke callback", connectGoogleClicked)
 
-    composeTestRule.onNodeWithTag("settings_screen").performScrollToIndex(3)
+    composeTestRule.onNodeWithTag("settings_screen").performScrollToNode(hasTestTag("theme_style_meta"))
     composeTestRule.waitForIdle()
 
-    composeTestRule.onNodeWithTag("theme_style_meta").performClick()
+    composeTestRule.onNodeWithTag("theme_style_meta").performScrollTo().performClick()
     composeTestRule.waitForIdle()
     assertEquals("meta", selectedThemeStyle)
 
-    composeTestRule.onNodeWithTag("theme_style_minimax").performClick()
+    composeTestRule.onNodeWithTag("theme_style_minimax").performScrollTo().performClick()
     composeTestRule.waitForIdle()
     assertEquals("minimax", selectedThemeStyle)
 
-    composeTestRule.onNodeWithTag("theme_style_coinbase").performClick()
+    composeTestRule.onNodeWithTag("theme_style_coinbase").performScrollTo().performClick()
     composeTestRule.waitForIdle()
     assertEquals("coinbase", selectedThemeStyle)
+
+    // Verify all ordered section groups and separated security/backup cards exist in order
+    composeTestRule.onNodeWithTag("settings_screen").performScrollToNode(hasTestTag("settings_group_2"))
+    composeTestRule.onNodeWithTag("settings_group_2").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("settings_screen").performScrollToNode(hasTestTag("settings_group_3"))
+    composeTestRule.onNodeWithTag("settings_group_3").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("settings_screen").performScrollToNode(hasTestTag("settings_group_4"))
+    composeTestRule.onNodeWithTag("settings_group_4").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("settings_screen").performScrollToNode(hasTestTag("settings_security_reminders_card"))
+    composeTestRule.onNodeWithTag("settings_security_reminders_card").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("settings_screen").performScrollToNode(hasTestTag("settings_backup_data_card"))
+    composeTestRule.onNodeWithTag("settings_backup_data_card").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("settings_screen").performScrollToNode(hasTestTag("settings_group_5"))
+    composeTestRule.onNodeWithTag("settings_group_5").assertIsDisplayed()
   }
 
   @Test
@@ -1807,6 +1850,632 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("nav_settings").performClick()
     composeTestRule.waitForIdle()
     assertEquals(AppDestination.SETTINGS, activeDest.value)
+  }
+
+  @Test
+  fun reportsExporterAndCouncilCodecAndWidgetSnapshot_workCleanly() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val cfg = SyndicatConfig(
+      residenceName = "Résidence C49",
+      syndicatName = "Syndic C49",
+      language = "fr",
+      year = 2026L,
+      cutoffMonth = 4L,
+      activeMonths = listOf(1L, 2L, 3L, 4L),
+      defaultMonthlyFee = 50L,
+    )
+    val apt = ApartmentRecord(
+      id = "apt_01",
+      number = 1L,
+      floor = "RDC",
+      status = "occupied",
+      ownerName = "Karim Benali",
+      ownerNameAr = "كريم",
+      jan = 50L,
+      feb = 50L,
+    )
+    val pay = PaymentRecord(
+      id = "pay_1",
+      apartmentNumber = 1L,
+      year = 2026L,
+      amountDh = 100L,
+      monthsCovered = listOf(1L, 2L),
+      paymentDate = "10/02/2026",
+      receiptNumber = 12L,
+    )
+    val specialCall = SpecialCallRecord(
+      id = "sc_1",
+      titleFr = "Étanchéité",
+      titleAr = "عزل",
+      projectId = "proj_1",
+      amountPerAptDh = 200L,
+      createdDate = "01/04/2026",
+    )
+    val data = SyndicatDashboardData(
+      config = cfg,
+      apartments = listOf(apt),
+      expenses = emptyList(),
+      payments = listOf(pay),
+    )
+
+    val stmtColor = SyndicatReportsExporter.generateApartmentStatementBitmap(
+      data = data,
+      apartment = apt,
+      specialCalls = listOf(specialCall),
+      payments = listOf(pay),
+      monochromeMode = false,
+    )
+    val stmtMono = SyndicatReportsExporter.generateApartmentStatementBitmap(
+      data = data,
+      apartment = apt,
+      specialCalls = listOf(specialCall),
+      payments = listOf(pay),
+      monochromeMode = true,
+    )
+    assertEquals(1240, stmtColor.width)
+    assertEquals(1754, stmtColor.height)
+    assertEquals(Color.WHITE, stmtColor.getPixel(5, 1740))
+    assertEquals(1240, stmtMono.width)
+
+    val agDraft = AgMinutesDraft(
+      meetingDate = "18/04/2026",
+      location = "Hall Résidence",
+      agenda = "Validation budget travaux",
+      presentAptNumbers = setOf(1L),
+      resolutions = listOf(
+        AgResolutionRecord(id = "r1", title = "Validation budget 2026", votesFor = 15, votesAgainst = 1),
+      ),
+    )
+    val pvColor = SyndicatReportsExporter.generateAgMinutesBitmap(data, agDraft, monochromeMode = false)
+    val pvMono = SyndicatReportsExporter.generateAgMinutesBitmap(data, agDraft, monochromeMode = true)
+    assertEquals(1240, pvColor.width)
+    assertEquals(1754, pvColor.height)
+    assertEquals(1240, pvMono.width)
+
+    val waStmt = SyndicatReportsExporter.buildApartmentWhatsAppStatement(
+      strings = stringsForLanguage("fr"),
+      data = data,
+      apartment = apt,
+      specialCalls = listOf(specialCall),
+    )
+    assertTrue(waStmt.contains("Karim Benali"))
+    assertTrue(waStmt.contains("100"))
+
+    // Council Share Codec round-trip
+    val shareCode = SyndicatCouncilShareCodec.encodeShareCode(data, listOf(specialCall))
+    assertTrue(shareCode.startsWith("SYNDICAT-CONSEIL-1:"))
+    val decoded = SyndicatCouncilShareCodec.decodeShareCode(shareCode, LOCAL_DEVICE_USER_ID)
+    assertEquals(1, decoded.apartments.size)
+    assertEquals(1, decoded.specialCalls.size)
+    assertEquals("Résidence C49", decoded.config.residenceName)
+
+    // Widget Snapshot update runs cleanly
+    runBlocking {
+      SyndicatWidgetSnapshot.saveAndRefresh(context, data)
+    }
+  }
+
+  @Test
+  @Config(sdk = [36], qualifiers = "w412dp-h920dp")
+  fun v23Features_abosVendorsOcrIncidentsAgPvReadOnlyMultiBuildingAndStatementsWorkCleanly() {
+    val frStrings = stringsForLanguage("fr")
+    val cfg = SyndicatConfig(
+      residenceName = "Résidence C49",
+      language = "fr",
+      year = 2026L,
+    )
+    val apt1 = ApartmentRecord(
+      id = "apt_01",
+      number = 1L,
+      floor = "RDC",
+      status = "occupied",
+      ownerName = "Karim Benali",
+    )
+    val inc1 = IncidentRecord(
+      id = "inc_1",
+      title = "Ampoule palier 2e",
+      locationFloor = "2e étage",
+      severity = IncidentSeverity.HIGH,
+      status = IncidentStatus.REPORTED,
+    )
+    val baseData = SyndicatDashboardData(
+      config = cfg,
+      apartments = listOf(apt1),
+      expenses = emptyList(),
+    )
+
+    val screenMode = androidx.compose.runtime.mutableStateOf("expenses")
+    val templatesState = androidx.compose.runtime.mutableStateOf<List<RecurringExpenseTemplate>>(emptyList())
+    val vendorsState = androidx.compose.runtime.mutableStateOf<List<VendorRecord>>(emptyList())
+    val roleModeState = androidx.compose.runtime.mutableStateOf(SyndicatRoleMode.ADMIN)
+    val agDraftState = androidx.compose.runtime.mutableStateOf(AgMinutesDraft(presentAptNumbers = setOf(1L)))
+    var seededCalled = false
+    var generatedExpCount = 0
+    var cycledIncidentId: String? = null
+    var convertedIncident: IncidentRecord? = null
+    var selectedBuildingId = "default"
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(
+        LocalStrings provides frStrings,
+        LocalLayoutDirection provides LayoutDirection.Ltr,
+      ) {
+        AppTheme(darkTheme = false, isArabic = false, themeStyle = "coinbase") {
+          when (screenMode.value) {
+            "expenses" -> ExpensesScreen(
+              data = baseData,
+              onAddExpense = { _, _, _, _, _, _, _ -> generatedExpCount++ },
+              onUpdateExpense = {},
+              onDeleteExpense = {},
+              onExportError = {},
+              recurringTemplates = templatesState.value,
+              vendors = vendorsState.value,
+              onSeedRecurringPresets = {
+                seededCalled = true
+                templatesState.value = listOf(
+                  RecurringExpenseTemplate(
+                    id = "rec_guard",
+                    title = "Gardiennage",
+                    category = "Gardiennage",
+                    amountDh = 1200L,
+                  ),
+                )
+              },
+              onUpsertVendor = { v -> vendorsState.value = listOf(v.copy(id = "v_1")) },
+              isReadOnlyMode = roleModeState.value == SyndicatRoleMode.READ_ONLY_COUNCIL,
+            )
+            "projects" -> ProjectsScreen(
+              data = baseData,
+              onAddProject = {},
+              onUpdateProject = { _, _ -> },
+              onDeleteProject = {},
+              onLoadStarterProjects = {},
+              incidents = listOf(inc1),
+              onCycleIncidentStatus = { id -> cycledIncidentId = id },
+              onConvertIncidentToExpense = { inc -> convertedIncident = inc },
+              agMinutes = agDraftState.value,
+              onSaveAgMinutes = { agDraftState.value = it },
+              isReadOnlyMode = roleModeState.value == SyndicatRoleMode.READ_ONLY_COUNCIL,
+            )
+            "apartments" -> ApartmentsScreen(
+              data = baseData,
+              searchQuery = "",
+              selectedFloor = null,
+              statusFilter = StatusFilter.ALL,
+              onSearchQueryChange = {},
+              onSelectFloor = {},
+              onSelectStatusFilter = {},
+              onSaveApartment = { _, _ -> },
+              onMarkReminded = { _, _, _ -> },
+              onRequestReceiptNo = { 1L },
+              onExportError = {},
+              isReadOnlyMode = roleModeState.value == SyndicatRoleMode.READ_ONLY_COUNCIL,
+            )
+            else -> SettingsScreen(
+              data = baseData,
+              currentUserId = LOCAL_DEVICE_USER_ID,
+              userEmail = null,
+              currentLanguage = AppLanguage.FR,
+              isSaving = false,
+              onSelectLanguage = {},
+              onUpdateDisplayPrefs = { _, _, _, _ -> },
+              onOpenWizard = {},
+              onSaveConfig = { _, _ -> },
+              onRestoreBackup = {},
+              onImportCsvOwners = {},
+              onResetC49 = {},
+              onBackupExported = {},
+              onPinUpdated = {},
+              onSignOut = {},
+              onMessage = {},
+              buildings = listOf(
+                BuildingProfile("default", "Résidence C49", "Casablanca"),
+                BuildingProfile("bloc_b", "Bloc B", "Rabat"),
+              ),
+              activeBuildingId = selectedBuildingId,
+              onSelectBuilding = { selectedBuildingId = it },
+              roleMode = roleModeState.value,
+              onSetRoleMode = { roleModeState.value = it },
+            )
+          }
+        }
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // 1. ExpensesScreen: OCR button exists in Add modal, Abos & Prestataires tab works & excludes double caisse
+    composeTestRule.onNodeWithTag("add_expense_fab").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("ocr_scan_invoice_btn").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithText(frStrings.apptCancel).performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("switch_abos_vendors_mode").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("seed_recurring_presets_btn").performClick()
+    composeTestRule.waitForIdle()
+    assertTrue(seededCalled)
+    composeTestRule.onNodeWithTag("generate_recurring_month_btn").performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(1, generatedExpCount)
+
+    // Add Vendor
+    composeTestRule.onNodeWithTag("add_vendor_btn").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("vendor_name_input").performTextReplacement("Atlas Lift")
+    composeTestRule.onNodeWithTag("save_vendor_btn").performClick()
+    composeTestRule.waitForIdle()
+    assertEquals("Atlas Lift", vendorsState.value.firstOrNull()?.name)
+
+    // 2. ProjectsScreen: Incidents tab + AG PV export & resolution
+    screenMode.value = "projects"
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("projects_tab_incidents").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("incident_status_inc_1").performClick()
+    assertEquals("inc_1", cycledIncidentId)
+    composeTestRule.onNodeWithTag("convert_incident_expense_inc_1").performClick()
+    assertEquals("inc_1", convertedIncident?.id)
+
+    composeTestRule.onNodeWithTag("projects_tab_works").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("ag_quorum_btn").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("ag_resolution_input").performScrollTo().performTextReplacement("Adopter peinture")
+    composeTestRule.onNodeWithTag("ag_add_resolution_btn").performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(1, agDraftState.value.resolutions.size)
+    composeTestRule.onNodeWithTag("ag_export_pv_pdf_btn").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("ag_export_pv_mono_btn").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("ag_quorum_close_btn").performClick()
+    composeTestRule.waitForIdle()
+
+    // 3. ApartmentsScreen: Statement buttons visible, excluded Paiement groupé / Double Caisse absent
+    screenMode.value = "apartments"
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("apartments_cards_list").performScrollToNode(hasTestTag("card_pay_apt_1"))
+    composeTestRule.onNodeWithTag("card_pay_apt_1").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("apt_statement_pdf_btn").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("apt_statement_wa_btn").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Trimestre").assertDoesNotExist()
+    composeTestRule.onNodeWithText("Double caisse").assertDoesNotExist()
+
+    // 4. SettingsScreen: Multi-building switcher & Read-Only Council governance mode
+    screenMode.value = "settings"
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("settings_screen").performScrollToNode(hasTestTag("settings_multi_building_card"))
+    composeTestRule.onNodeWithTag("switch_building_bloc_b").performClick()
+    assertEquals("bloc_b", selectedBuildingId)
+
+    composeTestRule.onNodeWithTag("settings_screen").performScrollToNode(hasTestTag("settings_council_share_card"))
+    composeTestRule.onNodeWithTag("role_mode_readonly_chip").performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(SyndicatRoleMode.READ_ONLY_COUNCIL, roleModeState.value)
+    composeTestRule.onNodeWithTag("settings_screen").performScrollToNode(hasTestTag("read_only_council_banner"))
+    composeTestRule.onNodeWithTag("read_only_council_banner").assertIsDisplayed()
+
+    composeTestRule.onNodeWithTag("settings_screen").performScrollToNode(hasTestTag("save_settings_button"))
+    composeTestRule.onNodeWithTag("save_settings_button").assertIsNotEnabled()
+    composeTestRule.onNodeWithTag("settings_screen").performScrollToNode(hasTestTag("reset_c49_btn"))
+    composeTestRule.onNodeWithTag("reset_c49_btn").assertIsNotEnabled()
+  }
+
+  @Test
+  fun syndicatAdvancedCodec_roundTripsRecurringVendorsIncidentsAgMinutesAndBuildings() {
+    val templates = listOf(
+      RecurringExpenseTemplate(
+        id = "rec_1",
+        title = "Gardiennage",
+        category = "Gardiennage",
+        amountDh = 1200L,
+        supplier = "Hassan",
+        dayOfMonth = 2,
+        lastAppliedMonthKey = "2026-04",
+        active = true,
+      ),
+    )
+    val parsedRec = SyndicatAdvancedCodec.parseRecurringJsonArray(SyndicatAdvancedCodec.recurringToJsonArray(templates))
+    assertEquals(1, parsedRec.size)
+    assertEquals(1200L, parsedRec[0].amountDh)
+    assertEquals("2026-04", parsedRec[0].lastAppliedMonthKey)
+
+    val vendors = listOf(
+      VendorRecord(
+        id = "v_1",
+        name = "Atlas Lift",
+        specialty = "Ascenseur",
+        phone = "0611223344",
+        monthlyFeeDh = 600L,
+        contractEndDate = "31/12/2026",
+      ),
+    )
+    val parsedVendors = SyndicatAdvancedCodec.parseVendorsJsonArray(SyndicatAdvancedCodec.vendorsToJsonArray(vendors))
+    assertEquals(vendors, parsedVendors)
+
+    val incidents = listOf(
+      IncidentRecord(
+        id = "inc_1",
+        title = "Fuite colonne eau",
+        locationFloor = "3e étage",
+        severity = IncidentSeverity.HIGH,
+        status = IncidentStatus.IN_PROGRESS,
+        linkedExpenseId = "exp_9",
+      ),
+    )
+    val parsedInc = SyndicatAdvancedCodec.parseIncidentsJsonArray(SyndicatAdvancedCodec.incidentsToJsonArray(incidents))
+    assertEquals(incidents, parsedInc)
+    assertEquals(IncidentStatus.RESOLVED, parsedInc[0].status.next())
+
+    val draft = AgMinutesDraft(
+      meetingDate = "12/04/2026",
+      location = "Hall RDC",
+      agenda = "Budget & Peinture",
+      presentAptNumbers = setOf(1L, 3L, 8L),
+      resolutions = listOf(
+        AgResolutionRecord(id = "r1", title = "Peinture façade", votesFor = 18, votesAgainst = 2, votesAbstain = 1),
+      ),
+    )
+    val parsedDraft = SyndicatAdvancedCodec.parseAgMinutesJsonObject(SyndicatAdvancedCodec.agMinutesToJsonObject(draft))
+    assertEquals(draft, parsedDraft)
+    assertTrue(parsedDraft.resolutions[0].isAdopted())
+
+    val buildings = listOf(
+      BuildingProfile(id = "default", name = "Résidence C49", city = "Casa"),
+      BuildingProfile(id = "bloc_b", name = "Bloc B", city = "Rabat"),
+    )
+    val (activeB, parsedBuildings) = SyndicatAdvancedCodec.parseBuildingsJsonObject(
+      SyndicatAdvancedCodec.buildingsToJsonObject("bloc_b", buildings),
+    )
+    assertEquals("bloc_b", activeB)
+    assertEquals(2, parsedBuildings.size)
+  }
+
+  @Test
+  @Config(sdk = [36], qualifiers = "w412dp-h920dp")
+  fun widgetStudioAndMultiFormatWidgets_persistPrefsMaskAmountsAndPreviewAllFormats() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val frStrings = stringsForLanguage("fr")
+    val cfg = SyndicatConfig(
+      residenceName = "Résidence C49",
+      language = "fr",
+      year = 2026L,
+      cutoffMonth = 3L,
+      activeMonths = listOf(1L, 2L, 3L),
+      defaultMonthlyFee = 50L,
+      openingBalanceDh = 2000L,
+    )
+    val aptLate = ApartmentRecord(
+      id = "apt_01",
+      number = 1L,
+      floor = "RDC",
+      status = "occupied",
+      ownerName = "Karim Benali",
+      jan = 50L,
+      feb = 0L,
+      mar = 0L,
+    )
+    val exp = ExpenseRecord(
+      id = "exp_1",
+      title = "Nettoyage",
+      category = "Nettoyage",
+      amountDh = 600L,
+      paidAmountDh = 200L,
+      supplier = "CleanCo",
+      dateLabel = "10/03/2026",
+    )
+    val data = SyndicatDashboardData(
+      config = cfg,
+      apartments = listOf(aptLate),
+      expenses = listOf(exp),
+    )
+
+    // 1. Reset prefs & verify saveAndRefresh populates detailed snapshot (cash, collected, unpaid expenses, top late)
+    SyndicatWidgetSnapshot.savePrefs(context, SyndicatWidgetPrefs())
+    SyndicatWidgetSnapshot.saveAndRefresh(context, data)
+    val snap = SyndicatWidgetSnapshot.load(context)
+    assertEquals("Résidence C49", snap.residenceName)
+    assertEquals(1, snap.lateCount)
+    assertTrue("Expected late preview line for Karim Benali", snap.latePreviewLines.firstOrNull()?.contains("Karim Benali") == true)
+    assertFalse(snap.prefs.privacyMask)
+    assertFalse(snap.displayedCashText.contains("•"))
+
+    // Verify all 3 widget receivers are declared in manifest
+    val pm = context.packageManager
+    listOf(
+      SyndicatCompactWidgetReceiver::class.java,
+      SyndicatGlanceWidgetReceiver::class.java,
+      SyndicatDetailedWidgetReceiver::class.java,
+    ).forEach { cls ->
+      val info = pm.getReceiverInfo(android.content.ComponentName(context, cls), 0)
+      assertNotNull("Receiver ${cls.simpleName} must be registered", info)
+    }
+
+    // Verify distinct palettes & enum parsing
+    assertEquals(4, WidgetThemePreset.entries.size)
+    assertEquals(3, WidgetFormatPreset.entries.size)
+    assertEquals(4, WidgetQuickAction.entries.size)
+    assertTrue(widgetPaletteFor(WidgetThemePreset.LIGHT_CLEAN).bg != widgetPaletteFor(WidgetThemePreset.NAVY_PRO).bg)
+
+    // 2. Interactive Widget Studio in SettingsScreen: format tabs, theme, action, privacy switch & pin CTA
+    composeTestRule.setContent {
+      CompositionLocalProvider(
+        LocalStrings provides frStrings,
+        LocalLayoutDirection provides LayoutDirection.Ltr,
+      ) {
+        AppTheme(darkTheme = false, isArabic = false, themeStyle = "coinbase") {
+          SettingsScreen(
+            data = data,
+            currentUserId = LOCAL_DEVICE_USER_ID,
+            userEmail = null,
+            currentLanguage = AppLanguage.FR,
+            isSaving = false,
+            onSelectLanguage = {},
+            onUpdateDisplayPrefs = { _, _, _, _ -> },
+            onOpenWizard = {},
+            onSaveConfig = { _, _ -> },
+            onRestoreBackup = {},
+            onImportCsvOwners = {},
+            onResetC49 = {},
+            onBackupExported = {},
+            onPinUpdated = {},
+            onSignOut = {},
+            onMessage = {},
+          )
+        }
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("settings_screen").performScrollToNode(hasTestTag("widget_studio_card"))
+    composeTestRule.onNodeWithTag("widget_studio_card").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("widget_preview_box").performScrollTo().assertIsDisplayed()
+
+    composeTestRule.onNodeWithTag("widget_format_compact").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("widget_format_detailed").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("widget_theme_emerald").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("widget_action_late").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("widget_opt_privacy").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("widget_pin_btn").performScrollTo().assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+
+    val updatedSnap = SyndicatWidgetSnapshot.load(context)
+    assertEquals(WidgetFormatPreset.DETAILED, updatedSnap.prefs.previewFormat)
+    assertEquals(WidgetThemePreset.EMERALD_FINTECH, updatedSnap.prefs.theme)
+    assertEquals(WidgetQuickAction.LATE_LIST, updatedSnap.prefs.primaryAction)
+    assertTrue(updatedSnap.prefs.privacyMask)
+    assertEquals("••••••", updatedSnap.displayedCashText)
+  }
+
+  @Test
+  @Config(sdk = [36], qualifiers = "w412dp-h920dp")
+  fun councilShareQrCode_roundTripsPayloadAndDisplaysQrDialogsInsteadOfRawText() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val frStrings = stringsForLanguage("fr")
+    val cfg = SyndicatConfig(
+      residenceName = "Résidence Les Oliviers",
+      language = "fr",
+      year = 2026L,
+      apartmentsCount = 12L,
+      defaultMonthlyFee = 100L,
+      cutoffMonth = 6L,
+    )
+    val apts = (1L..12L).map { n ->
+      ApartmentRecord(
+        id = "apt_${n.toString().padStart(2, '0')}",
+        number = n,
+        floor = if (n <= 4L) "RDC" else "1",
+        ownerName = "Copropriétaire $n",
+        jan = if (n % 2L == 0L) 100L else 0L,
+        feb = if (n % 2L == 0L) 100L else 0L,
+        mar = 100L,
+      )
+    }
+    val expenses = listOf(
+      ExpenseRecord(id = "exp_1", title = "Nettoyage hall", category = "Nettoyage", amountDh = 600L, paidAmountDh = 600L),
+    )
+    val calls = listOf(
+      SpecialCallRecord(
+        id = "call_1",
+        titleFr = "Peinture façade",
+        titleAr = "صباغة الواجهة",
+        projectId = "proj_1",
+        amountPerAptDh = 300L,
+        createdDate = "01/04/2026",
+      ),
+    )
+    val data = SyndicatDashboardData(
+      config = cfg,
+      apartments = apts,
+      expenses = expenses,
+      baseYear = 2026L,
+    )
+
+    // 1. High-capacity QR round-trip: Encode full snapshot -> QR Bitmap -> Shareable PNG Card -> ZXing Decode -> Parse snapshot
+    val encodedPayload = SyndicatCouncilShareCodec.encodeShareCode(data, calls)
+    val qrBitmap = com.example.util.CouncilQrCodeHelper.encodeShareQrBitmap(encodedPayload, sizePx = 720)
+    val decodedFromRaw = com.example.util.CouncilQrCodeHelper.decodeQrFromBitmap(qrBitmap)
+    assertEquals(encodedPayload, decodedFromRaw)
+
+    val shareCardBitmap = com.example.util.CouncilQrCodeHelper.buildShareableQrCardBitmap(
+      qrBitmap = qrBitmap,
+      residenceName = cfg.residenceName,
+      year = 2026L,
+      summaryText = "12 appts",
+    )
+    val decodedFromCard = com.example.util.CouncilQrCodeHelper.decodeQrFromBitmap(shareCardBitmap)
+    assertEquals(encodedPayload, decodedFromCard)
+
+    val parsed = SyndicatCouncilShareCodec.decodeShareCode(decodedFromCard!!, LOCAL_DEVICE_USER_ID)
+    assertEquals("Résidence Les Oliviers", parsed.config.residenceName)
+    assertEquals(12, parsed.apartments.size)
+    assertEquals(1, parsed.expenses.size)
+    assertEquals(1, parsed.specialCalls.size)
+
+    // 2. Compose UI: SettingsScreen CouncilShareCard shows QR code dialog (no long raw text) & QR-first import dialog
+    composeTestRule.setContent {
+      CompositionLocalProvider(
+        LocalStrings provides frStrings,
+        LocalLayoutDirection provides LayoutDirection.Ltr,
+      ) {
+        AppTheme(darkTheme = false, isArabic = false, themeStyle = "coinbase") {
+          SettingsScreen(
+            data = data,
+            currentUserId = LOCAL_DEVICE_USER_ID,
+            userEmail = null,
+            currentLanguage = AppLanguage.FR,
+            isSaving = false,
+            onSelectLanguage = {},
+            onUpdateDisplayPrefs = { _, _, _, _ -> },
+            onOpenWizard = {},
+            onSaveConfig = { _, _ -> },
+            onRestoreBackup = {},
+            onImportCsvOwners = {},
+            onResetC49 = {},
+            onBackupExported = {},
+            onPinUpdated = {},
+            onSignOut = {},
+            onMessage = {},
+            specialCalls = calls,
+          )
+        }
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("settings_screen").performScrollToNode(hasTestTag("settings_council_share_card"))
+    composeTestRule.onNodeWithTag("generate_council_code_btn").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("council_qr_dialog").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("council_qr_image").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("share_council_qr_image_btn").assertIsDisplayed()
+    // Ensure long raw Base64 share text is NOT rendered in the dialog
+    composeTestRule.onNodeWithText("SYNDICAT-CONSEIL-1:", substring = true).assertDoesNotExist()
+
+    composeTestRule.onNodeWithTag("close_council_qr_dialog_btn").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("council_qr_dialog").assertDoesNotExist()
+
+    // Open QR Import Dialog
+    composeTestRule.onNodeWithTag("import_council_code_btn").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("council_qr_import_dialog").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("scan_council_qr_camera_btn").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("pick_council_qr_image_btn").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("council_code_input").assertDoesNotExist()
+
+    // Expand optional manual fallback
+    composeTestRule.onNodeWithTag("toggle_manual_council_code_btn").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("council_code_input").assertIsDisplayed()
   }
 }
 

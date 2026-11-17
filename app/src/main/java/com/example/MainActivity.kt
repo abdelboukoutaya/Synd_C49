@@ -74,8 +74,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.auth.signOutUser
+import com.example.data.local.IncidentRecord
 import com.example.data.local.LocalSyndicatRepository
 import com.example.data.local.SyndicatExtrasStore
+import com.example.data.local.SyndicatRoleMode
 import com.example.data.model.ApartmentRecord
 import com.example.data.model.PaymentBadgeStatus
 import com.example.data.repository.LOCAL_DEVICE_USER_ID
@@ -122,6 +124,7 @@ import com.example.ui.viewmodel.UiState
 import com.example.ui.viewmodel.formatDh
 import com.example.util.BackupManager
 import com.example.util.BiometricHelper
+import com.example.widget.SyndicatWidgetSnapshot
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
@@ -150,17 +153,31 @@ enum class AppDestination(
 }
 
 class MainActivity : ComponentActivity() {
+  companion object {
+    const val EXTRA_OPEN_QUICK_PAY = "open_quick_pay"
+    const val EXTRA_WIDGET_DESTINATION = "widget_destination"
+    const val WIDGET_ROUTE_STUDIO = "widget_studio"
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
+    val openQuickPayFromWidget = intent?.getBooleanExtra(EXTRA_OPEN_QUICK_PAY, false) == true
+    val widgetDest = intent?.getStringExtra(EXTRA_WIDGET_DESTINATION)
     setContent {
-      SyndicatRootApp()
+      SyndicatRootApp(
+        initialOpenQuickPay = openQuickPayFromWidget,
+        initialWidgetDestination = widgetDest,
+      )
     }
   }
 }
 
 @Composable
-fun SyndicatRootApp() {
+fun SyndicatRootApp(
+  initialOpenQuickPay: Boolean = false,
+  initialWidgetDestination: String? = null,
+) {
   val context = LocalContext.current
   var currentLanguage by remember {
     mutableStateOf(LanguagePreferences.getSavedLanguage(context))
@@ -245,6 +262,8 @@ fun SyndicatRootApp() {
         val activeUserId = user?.uid ?: LOCAL_DEVICE_USER_ID
         val isCloudSynced = user != null
         AuthenticatedSyndicatApp(
+          initialOpenQuickPay = initialOpenQuickPay,
+          initialWidgetDestination = initialWidgetDestination,
           currentUserId = activeUserId,
           userEmail = user?.email,
           isCloudSynced = isCloudSynced,
@@ -287,6 +306,8 @@ fun SyndicatRootApp() {
 
 @Composable
 private fun AuthenticatedSyndicatApp(
+  initialOpenQuickPay: Boolean = false,
+  initialWidgetDestination: String? = null,
   currentUserId: String,
   userEmail: String?,
   isCloudSynced: Boolean,
@@ -307,6 +328,14 @@ private fun AuthenticatedSyndicatApp(
   val extrasStore = remember(context) { SyndicatExtrasStore.getInstance(context) }
   val specialCalls by extrasStore.specialCalls.collectAsStateWithLifecycle()
   val auditLogs by extrasStore.auditLogs.collectAsStateWithLifecycle()
+  val buildings by extrasStore.buildings.collectAsStateWithLifecycle()
+  val activeBuildingId by extrasStore.activeBuildingId.collectAsStateWithLifecycle()
+  val roleMode by extrasStore.roleMode.collectAsStateWithLifecycle()
+  val recurringTemplates by extrasStore.recurringTemplates.collectAsStateWithLifecycle()
+  val vendors by extrasStore.vendors.collectAsStateWithLifecycle()
+  val incidents by extrasStore.incidents.collectAsStateWithLifecycle()
+  val agMinutes by extrasStore.agMinutes.collectAsStateWithLifecycle()
+  val isReadOnlyMode = roleMode == SyndicatRoleMode.READ_ONLY_COUNCIL
 
   val viewModelKey = if (isCloudSynced) "syndicat_vm_cloud_$currentUserId" else "syndicat_vm_local"
   val viewModel: SyndicatViewModel = viewModel(
@@ -341,8 +370,41 @@ private fun AuthenticatedSyndicatApp(
   var projectsInitialCallsOnly by rememberSaveable { mutableStateOf(false) }
   var quickPayTargetAptNumber by remember { mutableStateOf<Long?>(null) }
   var showQuickPayPickerDialog by remember { mutableStateOf(false) }
+  var consumedQuickPayIntent by rememberSaveable { mutableStateOf(false) }
+  var prefillIncidentForExpense by remember { mutableStateOf<IncidentRecord?>(null) }
   var isPrivacyMode by rememberSaveable { mutableStateOf(false) }
   val snackbarHostState = remember { SnackbarHostState() }
+
+  LaunchedEffect(activeBuildingId) {
+    if (!isCloudSynced) {
+      localRepo.switchBuilding(activeBuildingId, preserveLanguage = currentLanguage.code)
+    }
+  }
+
+  LaunchedEffect(initialOpenQuickPay, initialWidgetDestination, uiState, isReadOnlyMode) {
+    if (!consumedQuickPayIntent && uiState is UiState.Success) {
+      when {
+        (initialOpenQuickPay || initialWidgetDestination == "quick_pay") && !isReadOnlyMode -> {
+          consumedQuickPayIntent = true
+          showQuickPayPickerDialog = true
+        }
+        initialWidgetDestination == "late" -> {
+          consumedQuickPayIntent = true
+          viewModel.selectStatusFilter(StatusFilter.LATE)
+          viewModel.selectFloor(null)
+          currentDestination = AppDestination.APARTMENTS
+        }
+        initialWidgetDestination == "expenses" -> {
+          consumedQuickPayIntent = true
+          currentDestination = AppDestination.EXPENSES
+        }
+        initialWidgetDestination == MainActivity.WIDGET_ROUTE_STUDIO -> {
+          consumedQuickPayIntent = true
+          currentDestination = AppDestination.SETTINGS
+        }
+      }
+    }
+  }
 
   val selectDestination: (AppDestination) -> Unit = { dest ->
     if (dest != AppDestination.EXPENSES) expensesInitialUnpaidOnly = false
@@ -379,6 +441,7 @@ private fun AuthenticatedSyndicatApp(
           showOnboardingWizard = true
         }
         BackupManager.saveAutoLocalSnapshot(context, state.data, specialCalls)
+        SyndicatWidgetSnapshot.saveAndRefresh(context, state.data)
         if (isCloudSynced) {
           localRepo.mirrorFromCloud(state.data)
         }
@@ -529,7 +592,7 @@ private fun AuthenticatedSyndicatApp(
           )
         },
         floatingActionButton = {
-          if (successData != null && (currentDestination == AppDestination.DASHBOARD || currentDestination == AppDestination.APARTMENTS)) {
+          if (!isReadOnlyMode && successData != null && (currentDestination == AppDestination.DASHBOARD || currentDestination == AppDestination.APARTMENTS)) {
             ExtendedFloatingActionButton(
               onClick = { showQuickPayPickerDialog = true },
               shape = CircleShape,
@@ -676,6 +739,13 @@ private fun AuthenticatedSyndicatApp(
                 viewModel.selectFloor(null)
                 selectDestination(AppDestination.APARTMENTS)
               },
+              buildings = buildings,
+              activeBuildingId = activeBuildingId,
+              onSelectBuilding = { id ->
+                extrasStore.selectBuilding(id)
+                scope.launch { localRepo.switchBuilding(id, preserveLanguage = currentLanguage.code) }
+              },
+              isReadOnlyMode = isReadOnlyMode,
               modifier = contentMod,
             )
           }
@@ -724,6 +794,8 @@ private fun AuthenticatedSyndicatApp(
               onExportError = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
               initialQuickPayAptNumber = quickPayTargetAptNumber,
               onConsumeQuickPayTarget = { quickPayTargetAptNumber = null },
+              specialCalls = specialCalls,
+              isReadOnlyMode = isReadOnlyMode,
               modifier = contentMod,
             )
           }
@@ -741,6 +813,21 @@ private fun AuthenticatedSyndicatApp(
                 viewModel.addExpense(title, cat, amt, paid, supplier, date, notes, data.config, explicitId = explicitId)
               },
               initialUnpaidOnly = expensesInitialUnpaidOnly,
+              recurringTemplates = recurringTemplates,
+              vendors = vendors,
+              onSeedRecurringPresets = {
+                extrasStore.seedStarterRecurringTemplates(currentLanguage == AppLanguage.AR)
+              },
+              onUpsertRecurring = { tpl -> extrasStore.upsertRecurringTemplate(tpl) },
+              onDeleteRecurring = { id -> extrasStore.deleteRecurringTemplate(id) },
+              onMarkRecurringApplied = { ids, mKey -> extrasStore.markRecurringTemplatesApplied(ids, mKey) },
+              onUpsertVendor = { v -> extrasStore.upsertVendor(v) },
+              onDeleteVendor = { id -> extrasStore.deleteVendor(id) },
+              prefillIncidentDraft = prefillIncidentForExpense,
+              onIncidentConverted = { inc, expId -> extrasStore.linkIncidentExpense(inc.id, expId) },
+              onConsumePrefillIncident = { prefillIncidentForExpense = null },
+              onInfoMessage = { msg -> viewModel.showToastMessage(msg) },
+              isReadOnlyMode = isReadOnlyMode,
               modifier = contentMod,
             )
           }
@@ -764,6 +851,17 @@ private fun AuthenticatedSyndicatApp(
               },
               onExportError = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
               initialFocusSpecialCalls = projectsInitialCallsOnly,
+              incidents = incidents,
+              onUpsertIncident = { inc -> extrasStore.upsertIncident(inc) },
+              onCycleIncidentStatus = { id -> extrasStore.cycleIncidentStatus(id) },
+              onDeleteIncident = { id -> extrasStore.deleteIncident(id) },
+              onConvertIncidentToExpense = { inc ->
+                prefillIncidentForExpense = inc
+                selectDestination(AppDestination.EXPENSES)
+              },
+              agMinutes = agMinutes,
+              onSaveAgMinutes = { draft -> extrasStore.updateAgMinutes { draft } },
+              isReadOnlyMode = isReadOnlyMode,
               modifier = contentMod,
             )
           }
@@ -824,6 +922,35 @@ private fun AuthenticatedSyndicatApp(
                 }
               },
               auditLogs = auditLogs,
+              buildings = buildings,
+              activeBuildingId = activeBuildingId,
+              onSelectBuilding = { id ->
+                extrasStore.selectBuilding(id)
+                scope.launch { localRepo.switchBuilding(id, preserveLanguage = currentLanguage.code) }
+              },
+              onCreateBuilding = { name, city ->
+                val created = extrasStore.addBuilding(name, city)
+                scope.launch {
+                  localRepo.switchBuilding(
+                    created.id,
+                    defaultBuildingName = created.name,
+                    preserveLanguage = currentLanguage.code,
+                  )
+                }
+              },
+              onDeleteBuilding = { id ->
+                extrasStore.deleteBuilding(id)
+                scope.launch {
+                  localRepo.deleteBuildingStorage(id)
+                  localRepo.switchBuilding(extrasStore.activeBuildingId.value, preserveLanguage = currentLanguage.code)
+                }
+              },
+              roleMode = roleMode,
+              onSetRoleMode = { mode -> extrasStore.setRoleMode(mode) },
+              specialCalls = specialCalls,
+              onImportCouncilSnapshot = { parsed ->
+                viewModel.restoreBackupData(parsed, currentLanguage == AppLanguage.AR)
+              },
               modifier = contentMod,
             )
           }

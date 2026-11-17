@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ViewAgenda
@@ -85,6 +86,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.data.local.SpecialCallRecord
 import com.example.data.model.ApartmentRecord
 import com.example.data.model.MonthColumn
 import com.example.data.model.PaymentMethod
@@ -98,6 +100,7 @@ import com.example.ui.components.LocalPrivacyMode
 import com.example.ui.components.MetaCobaltBuyButton
 import com.example.ui.components.MetaSearchPill
 import com.example.ui.components.MetaSegmentedPillRow
+import com.example.ui.components.ReadOnlyCouncilBanner
 import com.example.ui.components.RemindedPillBadge
 import com.example.ui.components.ResidenceHeroBanner
 import com.example.ui.components.RoundIconCircleButton
@@ -124,6 +127,7 @@ import com.example.ui.viewmodel.StatusFilter
 import com.example.ui.viewmodel.SyndicatDashboardData
 import com.example.ui.viewmodel.formatDh
 import com.example.util.PdfPosterExporter
+import com.example.util.SyndicatReportsExporter
 import com.example.util.WhatsAppHelper
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -155,6 +159,8 @@ fun ApartmentsScreen(
   onDeletePayment: (PaymentRecord) -> Unit = {},
   initialQuickPayAptNumber: Long? = null,
   onConsumeQuickPayTarget: () -> Unit = {},
+  specialCalls: List<SpecialCallRecord> = emptyList(),
+  isReadOnlyMode: Boolean = false,
   modifier: Modifier = Modifier,
 ) {
   val context = LocalContext.current
@@ -252,6 +258,9 @@ fun ApartmentsScreen(
         .padding(horizontal = 16.dp, vertical = 12.dp),
       verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+      if (isReadOnlyMode) {
+        ReadOnlyCouncilBanner()
+      }
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -642,8 +651,9 @@ fun ApartmentsScreen(
               config = cfg,
               isAr = isAr,
               paymentsHistory = selectedApt?.let { data.paymentsForApartment(it.number) }.orEmpty(),
+              isReadOnlyMode = isReadOnlyMode,
               onOpenFullEditor = { apt -> editingApartment = apt },
-              onQuickMonthClick = { apt, m -> quickCellTarget = apt to m },
+              onQuickMonthClick = { apt, m -> if (!isReadOnlyMode) quickCellTarget = apt to m },
               onRemindWhatsApp = { apt -> remindingApartment = apt },
               onShareReceipt = { apt ->
                 scope.launch {
@@ -656,6 +666,20 @@ fun ApartmentsScreen(
                     onError = onExportError,
                   )
                 }
+              },
+              onExportStatementPdf = { apt ->
+                SyndicatReportsExporter.exportApartmentStatementPdf(
+                  context = context,
+                  data = data,
+                  apartment = apt,
+                  specialCalls = specialCalls,
+                  payments = data.paymentsForApartment(apt.number),
+                  onError = onExportError,
+                )
+              },
+              onShareStatementWhatsApp = { apt ->
+                val msg = SyndicatReportsExporter.buildApartmentWhatsAppStatement(strings, data, apt, specialCalls)
+                WhatsAppHelper.openRawWhatsAppMessage(context, apt.phone, msg, onError = onExportError)
               },
               modifier = Modifier
                 .weight(0.46f)
@@ -817,7 +841,7 @@ fun ApartmentsScreen(
                     activeMonths = activeMonths,
                     config = cfg,
                     cellTagPrefix = "grid_cell_${apt.number}",
-                    onMonthClick = { m -> quickCellTarget = apt to m },
+                    onMonthClick = { m -> if (!isReadOnlyMode) quickCellTarget = apt to m },
                   )
                 }
               }
@@ -866,6 +890,7 @@ fun ApartmentsScreen(
       apartment = liveApt,
       config = cfg,
       paymentsHistory = aptPayments,
+      isReadOnlyMode = isReadOnlyMode,
       onDismiss = { editingApartment = null },
       onSharePaymentReceipt = { payRecord ->
         scope.launch {
@@ -893,14 +918,30 @@ fun ApartmentsScreen(
           )
         }
       },
+      onExportStatementPdf = {
+        SyndicatReportsExporter.exportApartmentStatementPdf(
+          context = context,
+          data = data,
+          apartment = liveApt,
+          specialCalls = specialCalls,
+          payments = aptPayments,
+          onError = onExportError,
+        )
+      },
+      onShareStatementWhatsApp = {
+        val msg = SyndicatReportsExporter.buildApartmentWhatsAppStatement(strings, data, liveApt, specialCalls)
+        WhatsAppHelper.openRawWhatsAppMessage(context, liveApt.phone, msg, onError = onExportError)
+      },
       onDeletePayment = onDeletePayment,
       onSave = { updated, methodCode, dateStr ->
-        val oldTotal = liveApt.totalForConfig(cfg)
-        val newTotal = updated.totalForConfig(cfg)
-        saveApartmentWithMeta(updated, liveApt, methodCode, dateStr, "")
-        editingApartment = null
-        if (newTotal > oldTotal && newTotal > 0L) {
-          postPaymentReceiptTarget = updated
+        if (!isReadOnlyMode) {
+          val oldTotal = liveApt.totalForConfig(cfg)
+          val newTotal = updated.totalForConfig(cfg)
+          saveApartmentWithMeta(updated, liveApt, methodCode, dateStr, "")
+          editingApartment = null
+          if (newTotal > oldTotal && newTotal > 0L) {
+            postPaymentReceiptTarget = updated
+          }
         }
       },
     )
@@ -1472,10 +1513,13 @@ private fun TabletApartmentDetailPane(
   config: SyndicatConfig,
   isAr: Boolean,
   paymentsHistory: List<PaymentRecord>,
+  isReadOnlyMode: Boolean = false,
   onOpenFullEditor: (ApartmentRecord) -> Unit,
   onQuickMonthClick: (ApartmentRecord, MonthColumn) -> Unit,
   onRemindWhatsApp: (ApartmentRecord) -> Unit,
   onShareReceipt: (ApartmentRecord) -> Unit,
+  onExportStatementPdf: (ApartmentRecord) -> Unit,
+  onShareStatementWhatsApp: (ApartmentRecord) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val strings = LocalStrings.current
@@ -1543,13 +1587,15 @@ private fun TabletApartmentDetailPane(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-          MetaCobaltBuyButton(
-            text = strings.apptRecordPayment,
-            icon = Icons.Default.Payments,
-            compact = true,
-            onClick = { onOpenFullEditor(apartment) },
-            modifier = Modifier.weight(1f),
-          )
+          if (!isReadOnlyMode) {
+            MetaCobaltBuyButton(
+              text = strings.apptRecordPayment,
+              icon = Icons.Default.Payments,
+              compact = true,
+              onClick = { onOpenFullEditor(apartment) },
+              modifier = Modifier.weight(1f),
+            )
+          }
           if (apartment.remainingDh(config) > 0L && !apartment.isVacantForConfig(config)) {
             SageSecondaryButton(
               text = strings.dashRemindBtn,
@@ -1566,6 +1612,25 @@ private fun TabletApartmentDetailPane(
               onClick = { onShareReceipt(apartment) },
             )
           }
+        }
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          SageSecondaryButton(
+            text = strings.aptStatementPdfBtn,
+            icon = Icons.Default.PictureAsPdf,
+            compact = true,
+            onClick = { onExportStatementPdf(apartment) },
+            modifier = Modifier.weight(1f),
+          )
+          SageSecondaryButton(
+            text = strings.aptStatementWaBtn,
+            icon = Icons.AutoMirrored.Filled.Send,
+            compact = true,
+            onClick = { onShareStatementWhatsApp(apartment) },
+            modifier = Modifier.weight(1f),
+          )
         }
 
         if (paymentsHistory.isNotEmpty()) {
@@ -1858,9 +1923,12 @@ private fun ApartmentPaymentAndOwnerModal(
   apartment: ApartmentRecord,
   config: SyndicatConfig,
   paymentsHistory: List<PaymentRecord>,
+  isReadOnlyMode: Boolean = false,
   onDismiss: () -> Unit,
   onSharePaymentReceipt: (PaymentRecord) -> Unit,
   onSharePaymentWhatsApp: (PaymentRecord) -> Unit,
+  onExportStatementPdf: () -> Unit,
+  onShareStatementWhatsApp: () -> Unit,
   onDeletePayment: (PaymentRecord) -> Unit,
   onSave: (ApartmentRecord, String, String) -> Unit,
 ) {
@@ -1976,6 +2044,26 @@ private fun ApartmentPaymentAndOwnerModal(
           .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(14.dp),
       ) {
+        // Relevé de situation annuel (PDF + WhatsApp)
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          SageSecondaryButton(
+            text = strings.aptStatementPdfBtn,
+            icon = Icons.Default.PictureAsPdf,
+            compact = true,
+            onClick = onExportStatementPdf,
+            modifier = Modifier.weight(1f).testTag("apt_statement_pdf_btn"),
+          )
+          SageSecondaryButton(
+            text = strings.aptStatementWaBtn,
+            icon = Icons.AutoMirrored.Filled.Send,
+            compact = true,
+            onClick = onShareStatementWhatsApp,
+            modifier = Modifier.weight(1f).testTag("apt_statement_wa_btn"),
+          )
+        }
         // Multi-Month Lump Sum Auto-Distribution Card (Soft Cloud 24dp warranty-card)
         FintechPalePositiveCard(
           modifier = Modifier.fillMaxWidth(),
@@ -2306,12 +2394,14 @@ private fun ApartmentPaymentAndOwnerModal(
       }
     },
     confirmButton = {
-      MetaCobaltBuyButton(
-        text = strings.apptSave,
-        compact = true,
-        onClick = { onSave(buildCurrentDraft(), selectedMethod.code, paymentDate.trim()) },
-        modifier = Modifier.testTag("save_apartment_button"),
-      )
+      if (!isReadOnlyMode) {
+        MetaCobaltBuyButton(
+          text = strings.apptSave,
+          compact = true,
+          onClick = { onSave(buildCurrentDraft(), selectedMethod.code, paymentDate.trim()) },
+          modifier = Modifier.testTag("save_apartment_button"),
+        )
+      }
     },
     dismissButton = {
       SageSecondaryButton(

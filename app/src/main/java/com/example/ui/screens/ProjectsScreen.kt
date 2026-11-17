@@ -32,6 +32,8 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
@@ -63,6 +65,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.minimumInteractiveComponentSize
+import com.example.data.local.AgMinutesDraft
+import com.example.data.local.AgResolutionRecord
+import com.example.data.local.IncidentRecord
 import com.example.data.local.SpecialCallRecord
 import com.example.data.model.PROJECT_CATEGORIES
 import com.example.data.model.PaymentBadgeStatus
@@ -73,6 +78,7 @@ import com.example.data.model.ProjectStatus
 import com.example.util.ExportVariant
 import com.example.util.PdfPosterExporter
 import com.example.util.ProjectsExportOptions
+import com.example.util.SyndicatReportsExporter
 import com.example.ui.components.AirtableCreamCalloutCard
 import com.example.ui.components.AirtablePastelKpiCard
 import com.example.ui.components.AirtableSignatureCard
@@ -82,7 +88,9 @@ import com.example.ui.components.FintechWhiteCard
 import com.example.ui.components.LimePrimaryButton
 import com.example.ui.components.LocalPrivacyMode
 import com.example.ui.components.MetaCobaltBuyButton
-import com.example.ui.components.MetaSegmentedPillRow
+import com.example.ui.components.MetaSegmentedThreePillRow
+import com.example.ui.components.ReadOnlyCouncilBanner
+import com.example.ui.components.RoundIconCircleButton
 import com.example.ui.components.SageSecondaryButton
 import com.example.ui.components.StatusPillBadge
 import com.example.ui.components.SyndicatDialog
@@ -109,12 +117,19 @@ import com.example.ui.viewmodel.formatDh
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 private enum class ProjectFilterTab {
   ALL,
   IN_PROGRESS,
   PLANNED,
   COMPLETED,
+}
+
+private enum class ProjectsSubTab {
+  WORKS,
+  CALLS,
+  INCIDENTS,
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -131,6 +146,14 @@ fun ProjectsScreen(
   onDeleteSpecialCall: (callId: String) -> Unit = {},
   onExportError: (String) -> Unit = {},
   initialFocusSpecialCalls: Boolean = false,
+  incidents: List<IncidentRecord> = emptyList(),
+  onUpsertIncident: (IncidentRecord) -> Unit = {},
+  onCycleIncidentStatus: (String) -> Unit = {},
+  onDeleteIncident: (String) -> Unit = {},
+  onConvertIncidentToExpense: (IncidentRecord) -> Unit = {},
+  agMinutes: AgMinutesDraft = AgMinutesDraft(),
+  onSaveAgMinutes: (AgMinutesDraft) -> Unit = {},
+  isReadOnlyMode: Boolean = false,
   modifier: Modifier = Modifier,
 ) {
   val context = LocalContext.current
@@ -144,11 +167,11 @@ fun ProjectsScreen(
   val isAr = strings.language == AppLanguage.AR
   val numericFont = tokens.numericFontFamily ?: tokens.monoFontFamily
 
-  var showCallsSectionOnly by rememberSaveable(initialFocusSpecialCalls) {
-    mutableStateOf(initialFocusSpecialCalls)
+  var subTab by rememberSaveable(initialFocusSpecialCalls) {
+    mutableStateOf(if (initialFocusSpecialCalls) ProjectsSubTab.CALLS else ProjectsSubTab.WORKS)
   }
   LaunchedEffect(initialFocusSpecialCalls) {
-    if (initialFocusSpecialCalls) showCallsSectionOnly = true
+    if (initialFocusSpecialCalls) subTab = ProjectsSubTab.CALLS
   }
   var selectedTab by rememberSaveable { mutableStateOf(ProjectFilterTab.ALL) }
   var showEditorDialog by remember { mutableStateOf(false) }
@@ -157,26 +180,49 @@ fun ProjectsScreen(
   var showNewSpecialCallDialog by remember { mutableStateOf(false) }
   var trackingSpecialCallId by remember { mutableStateOf<String?>(null) }
   var showQuorumDialog by remember { mutableStateOf(false) }
-  var quorumPresentNumbers by rememberSaveable { mutableStateOf(listOf<Long>()) }
+  var showIncidentDialog by remember { mutableStateOf(false) }
+  var localAgMinutes by remember(agMinutes) { mutableStateOf(agMinutes) }
 
   val ongoingList = data.inProgressProjects
   val plannedReadiness = data.plannedReadinessList
   val completedList = data.completedProjects
 
+  if (showIncidentDialog && !isReadOnlyMode) {
+    IncidentEditorDialog(
+      onDismiss = { showIncidentDialog = false },
+      onSave = { inc ->
+        onUpsertIncident(inc)
+        showIncidentDialog = false
+      },
+    )
+  }
+
   if (showQuorumDialog) {
     AgQuorumVoteDialog(
+      data = data,
       apartments = data.apartments.filter { !it.isVacantForConfig(cfg) },
       isAr = isAr,
       digitsAr = dig,
-      presentNumbers = quorumPresentNumbers.toSet(),
-      onToggleApt = { aptNum ->
-        quorumPresentNumbers = if (aptNum in quorumPresentNumbers) {
-          quorumPresentNumbers - aptNum
-        } else {
-          quorumPresentNumbers + aptNum
-        }
+      draft = localAgMinutes,
+      isReadOnlyMode = isReadOnlyMode,
+      onUpdateDraft = { updated ->
+        localAgMinutes = updated
+        onSaveAgMinutes(updated)
       },
-      onReset = { quorumPresentNumbers = emptyList() },
+      onReset = {
+        val resetDraft = localAgMinutes.copy(presentAptNumbers = emptySet())
+        localAgMinutes = resetDraft
+        onSaveAgMinutes(resetDraft)
+      },
+      onExportPvPdf = { mono ->
+        SyndicatReportsExporter.exportAgMinutesPdf(
+          context = context,
+          data = data,
+          draft = localAgMinutes,
+          monochromeMode = mono,
+          onError = onExportError,
+        )
+      },
       onDismiss = { showQuorumDialog = false },
     )
   }
@@ -287,6 +333,9 @@ fun ProjectsScreen(
     // 1. Meta Editorial Header + Overview Primary Black Pill (« إضافة مشروع / Nouveau projet »)
     item {
       Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (isReadOnlyMode) {
+          ReadOnlyCouncilBanner()
+        }
         Text(
           text = strings.projectsPageTitle,
           style = MaterialTheme.typography.headlineLarge,
@@ -303,17 +352,19 @@ fun ProjectsScreen(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-          LimePrimaryButton(
-            text = strings.projectsAddBtn,
-            icon = Icons.Default.Add,
-            onClick = {
-              editingProject = null
-              showEditorDialog = true
-            },
-            modifier = Modifier
-              .weight(1.3f)
-              .testTag("add_project_fab"),
-          )
+          if (!isReadOnlyMode) {
+            LimePrimaryButton(
+              text = strings.projectsAddBtn,
+              icon = Icons.Default.Add,
+              onClick = {
+                editingProject = null
+                showEditorDialog = true
+              },
+              modifier = Modifier
+                .weight(1.3f)
+                .testTag("add_project_fab"),
+            )
+          }
           SageSecondaryButton(
             text = strings.exportPdfPrimaryBtn,
             icon = Icons.Default.PictureAsPdf,
@@ -328,16 +379,20 @@ fun ProjectsScreen(
         } else {
           ""
         }
-        MetaSegmentedPillRow(
-          firstLabel = strings.projectsViewWorksTab,
-          secondLabel = "${strings.projectsViewCallsTab}$callsBadgeSuffix",
-          isFirstSelected = !showCallsSectionOnly,
-          onSelectFirst = { showCallsSectionOnly = false },
-          onSelectSecond = { showCallsSectionOnly = true },
-          firstTag = "projects_tab_works",
-          secondTag = "projects_tab_calls",
-          firstIcon = Icons.Default.Construction,
-          secondIcon = Icons.Default.Campaign,
+        val incBadgeSuffix = if (incidents.isNotEmpty()) {
+          " (${formatNumber(incidents.size.toLong(), dig)})"
+        } else {
+          ""
+        }
+        MetaSegmentedThreePillRow(
+          labels = Triple(
+            strings.projectsViewWorksTab,
+            "${strings.projectsViewCallsTab}$callsBadgeSuffix",
+            "${strings.projectsViewIncidentsTab}$incBadgeSuffix",
+          ),
+          selectedIndex = subTab.ordinal,
+          onSelectIndex = { idx -> subTab = ProjectsSubTab.entries[idx] },
+          tags = Triple("projects_tab_works", "projects_tab_calls", "projects_tab_incidents"),
           modifier = Modifier.fillMaxWidth(),
         )
         SageSecondaryButton(
@@ -353,7 +408,7 @@ fun ProjectsScreen(
     }
 
     // 2. Meta Showcase Card (#0A1317 32dp) + 2 Soft Cloud KPI Tiles (24dp)
-    if (!showCallsSectionOnly) {
+    if (subTab == ProjectsSubTab.WORKS) {
     item {
       Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         AirtableSignatureCard(
@@ -370,11 +425,7 @@ fun ProjectsScreen(
             color = Color.White.copy(alpha = 0.90f),
           )
           Spacer(modifier = Modifier.height(6.dp))
-          val cashText = if (data.cashNowDh < 0L) {
-            "▼ ${formatDh(data.cashNowDh, cur, dig)}"
-          } else {
-            formatDh(data.cashNowDh, cur, dig)
-          }
+          val cashText = formatDh(data.cashNowDh, cur, dig)
           Text(
             text = maskSensitiveDh(cashText, isPrivacy),
             style = MaterialTheme.typography.displayMedium.copy(
@@ -634,10 +685,10 @@ fun ProjectsScreen(
         )
       }
     }
-    } // end if (!showCallsSectionOnly)
+    } // end if (subTab == ProjectsSubTab.WORKS)
 
     // 7. SECTION 4 : Appels de fonds exceptionnels (Travaux / Projets)
-    if (showCallsSectionOnly) {
+    if (subTab == ProjectsSubTab.CALLS) {
       item {
         AirtableSoftCard(
           modifier = Modifier
@@ -672,14 +723,16 @@ fun ProjectsScreen(
               }
             }
 
-            LimePrimaryButton(
-              text = strings.specialCallsNewBtn,
-              icon = Icons.Default.Add,
-              onClick = { showNewSpecialCallDialog = true },
-              modifier = Modifier
-                .fillMaxWidth()
-                .testTag("add_special_call_btn"),
-            )
+            if (!isReadOnlyMode) {
+              LimePrimaryButton(
+                text = strings.specialCallsNewBtn,
+                icon = Icons.Default.Add,
+                onClick = { showNewSpecialCallDialog = true },
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .testTag("add_special_call_btn"),
+              )
+            }
           }
         }
       }
@@ -690,10 +743,10 @@ fun ProjectsScreen(
             icon = Icons.Default.Campaign,
             title = strings.specialCallsSectionTitle,
             subtitle = strings.specialCallsEmptyText,
-            actionLabel = strings.specialCallsNewBtn,
+            actionLabel = if (isReadOnlyMode) null else strings.specialCallsNewBtn,
             actionIcon = Icons.Default.Add,
             actionTag = "special_calls_empty_add_btn",
-            onAction = { showNewSpecialCallDialog = true },
+            onAction = { if (!isReadOnlyMode) showNewSpecialCallDialog = true },
           )
         }
       }
@@ -711,8 +764,48 @@ fun ProjectsScreen(
           digitsAr = dig,
           isAr = isAr,
           onTrackApartments = { trackingSpecialCallId = call.id },
-          onDelete = { onDeleteSpecialCall(call.id) },
+          onDelete = { if (!isReadOnlyMode) onDeleteSpecialCall(call.id) },
         )
+      }
+    }
+
+    // 8. SECTION 5 : Journal des Incidents & Réclamations
+    if (subTab == ProjectsSubTab.INCIDENTS) {
+      if (!isReadOnlyMode) {
+        item(key = "incidents_header_action") {
+          LimePrimaryButton(
+            text = strings.incidentAddBtn,
+            icon = Icons.Default.ReportProblem,
+            onClick = { showIncidentDialog = true },
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("add_incident_btn"),
+          )
+        }
+      }
+
+      if (incidents.isEmpty()) {
+        item(key = "incidents_empty") {
+          SyndicatEmptyStateCard(
+            icon = Icons.Default.ReportProblem,
+            title = strings.incidentEmptyTitle,
+            subtitle = strings.incidentEmptySub,
+            actionLabel = if (isReadOnlyMode) null else strings.incidentAddBtn,
+            actionIcon = Icons.Default.Add,
+            actionTag = "incidents_empty_add_btn",
+            onAction = { if (!isReadOnlyMode) showIncidentDialog = true },
+          )
+        }
+      } else {
+        items(incidents, key = { "inc_${it.id}" }) { inc ->
+          IncidentItemCard(
+            incident = inc,
+            isReadOnlyMode = isReadOnlyMode,
+            onCycleStatus = { onCycleIncidentStatus(inc.id) },
+            onConvertToExpense = { onConvertIncidentToExpense(inc) },
+            onDelete = { onDeleteIncident(inc.id) },
+          )
+        }
       }
     }
   }
@@ -2021,23 +2114,29 @@ private fun SpecialCallApartmentsDialog(
 
 @Composable
 private fun AgQuorumVoteDialog(
+  data: SyndicatDashboardData,
   apartments: List<com.example.data.model.ApartmentRecord>,
   isAr: Boolean,
   digitsAr: Boolean,
-  presentNumbers: Set<Long>,
-  onToggleApt: (Long) -> Unit,
+  draft: AgMinutesDraft,
+  isReadOnlyMode: Boolean,
+  onUpdateDraft: (AgMinutesDraft) -> Unit,
   onReset: () -> Unit,
+  onExportPvPdf: (Boolean) -> Unit,
   onDismiss: () -> Unit,
 ) {
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
   val isPrivacy = LocalPrivacyMode.current
+  val presentNumbers = draft.presentAptNumbers
   val totalLots = apartments.size.coerceAtLeast(1)
   val presentCount = apartments.count { it.number in presentNumbers }
   val requiredCount = (totalLots / 2) + 1
   val missingCount = (requiredCount - presentCount).coerceAtLeast(0)
   val hasQuorum = presentCount * 2 >= totalLots && apartments.isNotEmpty()
   val ratio = (presentCount.toFloat() / totalLots.toFloat()).coerceIn(0f, 1f)
+  var newResolutionTitle by remember { mutableStateOf("") }
+  val today = remember { SimpleDateFormat("dd/MM/yyyy", Locale.FRANCE).format(Date()) }
 
   SyndicatDialog(
     onDismissRequest = onDismiss,
@@ -2052,7 +2151,10 @@ private fun AgQuorumVoteDialog(
     },
     text = {
       Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+          .fillMaxWidth()
+          .heightIn(max = 480.dp)
+          .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp),
       ) {
         Text(
@@ -2114,16 +2216,47 @@ private fun AgQuorumVoteDialog(
           }
         }
 
-        Column(
-          modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = 260.dp)
-            .verticalScroll(rememberScrollState()),
-          verticalArrangement = Arrangement.spacedBy(6.dp),
+        // Date, lieu & ordre du jour du PV
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+          FintechTextField(
+            value = draft.meetingDate.ifBlank { today },
+            onValueChange = { if (!isReadOnlyMode) onUpdateDraft(draft.copy(meetingDate = it.take(25))) },
+            label = strings.agDateLabel,
+            modifier = Modifier.weight(1f),
+          )
+          FintechTextField(
+            value = draft.location,
+            onValueChange = { if (!isReadOnlyMode) onUpdateDraft(draft.copy(location = it.take(100))) },
+            label = strings.agLocationLabel,
+            placeholder = data.config.residenceName,
+            modifier = Modifier.weight(1f),
+          )
+        }
+        FintechTextField(
+          value = draft.agenda,
+          onValueChange = { if (!isReadOnlyMode) onUpdateDraft(draft.copy(agenda = it.take(500))) },
+          label = strings.agAgendaLabel,
+          placeholder = strings.agAgendaHint,
+          singleLine = false,
+          minLines = 2,
+          maxLines = 3,
+          modifier = Modifier.fillMaxWidth(),
+        )
+
+        // Feuille de présence (lots présents ou représentés)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
           apartments.forEach { apt ->
             val checked = apt.number in presentNumbers
             val ownerName = maskSensitiveName(apt.displayOwner(isAr), isPrivacy)
+            val togglePresent: () -> Unit = {
+              if (!isReadOnlyMode) {
+                val nextSet = if (checked) presentNumbers - apt.number else presentNumbers + apt.number
+                onUpdateDraft(draft.copy(presentAptNumbers = nextSet))
+              }
+            }
             Surface(
               shape = RoundedCornerShape(10.dp),
               color = if (checked) tokens.primaryTint.copy(alpha = 0.45f) else tokens.cardBg,
@@ -2133,7 +2266,7 @@ private fun AgQuorumVoteDialog(
                 .minimumInteractiveComponentSize()
                 .heightIn(min = 48.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .clickable { onToggleApt(apt.number) }
+                .clickable(onClick = togglePresent)
                 .testTag("quorum_apt_${apt.number}"),
             ) {
               Row(
@@ -2145,7 +2278,7 @@ private fun AgQuorumVoteDialog(
               ) {
                 Checkbox(
                   checked = checked,
-                  onCheckedChange = { onToggleApt(apt.number) },
+                  onCheckedChange = { togglePresent() },
                 )
                 Text(
                   text = "${strings.colAppt} ${localizeDigits(apt.displayNumber, digitsAr)}",
@@ -2167,6 +2300,152 @@ private fun AgQuorumVoteDialog(
             }
           }
         }
+
+        HorizontalDivider(color = tokens.divider)
+
+        // Résolutions & Votes
+        Text(
+          text = strings.agResolutionsLabel,
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.Bold,
+          color = tokens.inkDeep,
+        )
+        if (!isReadOnlyMode) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            FintechTextField(
+              value = newResolutionTitle,
+              onValueChange = { newResolutionTitle = it.take(180) },
+              label = strings.agNewResolutionHint,
+              modifier = Modifier.weight(1f).testTag("ag_resolution_input"),
+            )
+            RoundIconCircleButton(
+              icon = Icons.Default.Add,
+              contentDescription = strings.agResolutionsLabel,
+              onClick = {
+                val clean = newResolutionTitle.trim()
+                if (clean.isNotBlank()) {
+                  val res = AgResolutionRecord(
+                    id = "res_${UUID.randomUUID().toString().take(8)}",
+                    title = clean,
+                    votesFor = presentCount.coerceAtLeast(1),
+                  )
+                  onUpdateDraft(draft.copy(resolutions = draft.resolutions + res))
+                  newResolutionTitle = ""
+                }
+              },
+              modifier = Modifier.testTag("ag_add_resolution_btn"),
+            )
+          }
+        }
+
+        draft.resolutions.forEach { res ->
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = tokens.surfaceSoft,
+            border = BorderStroke(1.dp, tokens.divider),
+            modifier = Modifier.fillMaxWidth().testTag("ag_resolution_${res.id}"),
+          ) {
+            Column(
+              modifier = Modifier.padding(10.dp),
+              verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+              ) {
+                Text(
+                  text = res.title,
+                  style = MaterialTheme.typography.bodyMedium,
+                  fontWeight = FontWeight.SemiBold,
+                  color = tokens.inkDeep,
+                  modifier = Modifier.weight(1f),
+                )
+                Text(
+                  text = if (res.isAdopted()) strings.agResolutionAdopted else strings.agResolutionRejected,
+                  style = MaterialTheme.typography.labelSmall,
+                  fontWeight = FontWeight.Bold,
+                  color = if (res.isAdopted()) tokens.positiveDeep else tokens.negativeDeep,
+                )
+              }
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+              ) {
+                Text(
+                  text = "${strings.agVoteFor}: ${res.votesFor} · ${strings.agVoteAgainst}: ${res.votesAgainst} · ${strings.agVoteAbstain}: ${res.votesAbstain}",
+                  style = MaterialTheme.typography.labelMedium,
+                  color = tokens.body,
+                  modifier = Modifier.weight(1f),
+                )
+                if (!isReadOnlyMode) {
+                  IconButton(
+                    onClick = {
+                      onUpdateDraft(
+                        draft.copy(
+                          resolutions = draft.resolutions.map {
+                            if (it.id == res.id) it.copy(votesFor = it.votesFor + 1) else it
+                          },
+                        ),
+                      )
+                    },
+                    modifier = Modifier.size(36.dp),
+                  ) {
+                    Icon(Icons.Default.Add, contentDescription = strings.agVoteFor, tint = tokens.positiveDeep)
+                  }
+                  IconButton(
+                    onClick = {
+                      onUpdateDraft(
+                        draft.copy(
+                          resolutions = draft.resolutions.map {
+                            if (it.id == res.id) it.copy(votesAgainst = it.votesAgainst + 1) else it
+                          },
+                        ),
+                      )
+                    },
+                    modifier = Modifier.size(36.dp),
+                  ) {
+                    Icon(Icons.Default.Remove, contentDescription = strings.agVoteAgainst, tint = tokens.negativeDeep)
+                  }
+                  IconButton(
+                    onClick = {
+                      onUpdateDraft(draft.copy(resolutions = draft.resolutions.filterNot { it.id == res.id }))
+                    },
+                    modifier = Modifier.size(36.dp),
+                  ) {
+                    Icon(Icons.Default.DeleteOutline, contentDescription = strings.expDelete, tint = tokens.mute)
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // Export PV PDF (Couleur & N&B)
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          MetaCobaltBuyButton(
+            text = strings.agExportPvColorBtn,
+            icon = Icons.Default.PictureAsPdf,
+            compact = true,
+            onClick = { onExportPvPdf(false) },
+            modifier = Modifier.weight(1f).testTag("ag_export_pv_pdf_btn"),
+          )
+          SageSecondaryButton(
+            text = strings.agExportPvMonoBtn,
+            icon = Icons.Default.PictureAsPdf,
+            compact = true,
+            onClick = { onExportPvPdf(true) },
+            modifier = Modifier.weight(1f).testTag("ag_export_pv_mono_btn"),
+          )
+        }
       }
     },
     confirmButton = {
@@ -2178,7 +2457,7 @@ private fun AgQuorumVoteDialog(
       )
     },
     dismissButton = {
-      if (presentCount > 0) {
+      if (presentCount > 0 && !isReadOnlyMode) {
         SageSecondaryButton(
           text = strings.agQuorumResetBtn,
           compact = true,

@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,7 +38,6 @@ import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Apartment
-import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CheckCircle
@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Construction
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -76,6 +77,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.data.local.BuildingProfile
 import com.example.data.local.SpecialCallRecord
 import com.example.data.model.ApartmentRecord
 import com.example.data.model.ExpenseRecord
@@ -89,9 +91,11 @@ import com.example.ui.components.HeroOverlayCircleButton
 import com.example.ui.components.LocalPrivacyMode
 import com.example.ui.components.MetaCobaltBuyButton
 import com.example.ui.components.MonthlyCollectionsChartCard
+import com.example.ui.components.ReadOnlyCouncilBanner
 import com.example.ui.components.RemindedPillBadge
 import com.example.ui.components.ResidenceHeroBanner
 import com.example.ui.components.SageSecondaryButton
+import com.example.ui.components.SyndicatFilterChip
 import com.example.ui.components.SyndicatProgressBar
 import com.example.ui.components.SyndicatTopBrandBar
 import com.example.ui.components.TreasuryPortfolioHeroCard
@@ -157,6 +161,10 @@ fun DashboardScreen(
   onSearchSelectApartment: (ApartmentRecord) -> Unit = { _ -> onNavigateToApartments() },
   onSearchSelectExpense: (ExpenseRecord) -> Unit = { _ -> onNavigateToExpenses() },
   onSearchSelectProject: (ProjectRecord) -> Unit = { _ -> onNavigateToProjects() },
+  buildings: List<BuildingProfile> = emptyList(),
+  activeBuildingId: String = "default",
+  onSelectBuilding: (String) -> Unit = {},
+  isReadOnlyMode: Boolean = false,
 ) {
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
@@ -263,6 +271,9 @@ fun DashboardScreen(
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+          if (isReadOnlyMode) {
+            ReadOnlyCouncilBanner()
+          }
           SyndicatTopBrandBar(
             tag = "dashboard_app_brand_bar",
             statusLabel = statusLabel,
@@ -274,6 +285,24 @@ fun DashboardScreen(
             onTogglePrivacy = onTogglePrivacy,
             showBrandHeader = false,
           )
+
+          if (buildings.size > 1) {
+            LazyRow(
+              modifier = Modifier
+                .fillMaxWidth()
+                .testTag("dash_building_switcher_row"),
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              items(buildings, key = { it.id }) { b ->
+                SyndicatFilterChip(
+                  selected = b.id == activeBuildingId,
+                  onClick = { onSelectBuilding(b.id) },
+                  label = b.name,
+                  modifier = Modifier.testTag("dash_switch_building_${b.id}"),
+                )
+              }
+            }
+          }
 
           ResidenceHeroBanner(
             residenceName = cfg.residenceName.ifBlank { strings.navDashboard },
@@ -289,7 +318,7 @@ fun DashboardScreen(
             },
             trailingActions = {
               HeroOverlayCircleButton(
-                icon = Icons.Default.AutoFixHigh,
+                icon = Icons.Default.Tune,
                 contentDescription = strings.dashLaunchWizardBtn,
                 onClick = onOpenWizard,
                 modifier = Modifier.testTag("dash_open_wizard_btn"),
@@ -423,11 +452,7 @@ fun DashboardScreen(
     // 5. GRILLE 2×2 DES INDICATEURS CLÉS (Cartes Coinbase épurées + Anneau %)
     // =========================================================================
     item(key = "dash_kpi_grid") {
-      val balanceText = if (data.balanceDh < 0L) {
-        "▼ ${formatDh(data.balanceDh, cur, dig)}"
-      } else {
-        formatDh(data.balanceDh, cur, dig)
-      }
+      val balanceText = formatDh(data.balanceDh, cur, dig)
       val posBg = if (tokens.isDark) Color(0xFF0A2E1F) else CoinbaseSuccessTintLight
       val negBg = if (tokens.isDark) CoinbaseDarkErrorContainer else CoinbaseErrorTintLight
       val blueBg = if (tokens.isDark) CoinbaseDarkBlueContainer else CoinbasePrimaryTintLight
@@ -605,13 +630,24 @@ fun DashboardScreen(
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp,
               ) {
-                Text(
-                  text = "! ${strings.dashUnpaidSub(data.lateApartments.size)}",
-                  style = MaterialTheme.typography.labelMedium,
-                  fontWeight = FontWeight.SemiBold,
-                  color = tokens.statusLateText,
+                Row(
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.spacedBy(6.dp),
                   modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                )
+                ) {
+                  Box(
+                    modifier = Modifier
+                      .size(6.dp)
+                      .clip(CircleShape)
+                      .background(tokens.statusLateText),
+                  )
+                  Text(
+                    text = strings.dashUnpaidSub(data.lateApartments.size),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = tokens.statusLateText,
+                  )
+                }
               }
 
               Text(
@@ -818,21 +854,12 @@ fun DashboardScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
           ) {
-            val blueTint = if (tokens.isDark) CoinbaseDarkBlueContainer else CoinbasePrimaryTintLight
-            Surface(
-              shape = CircleShape,
-              color = blueTint,
-              modifier = Modifier.size(38.dp),
-            ) {
-              Box(contentAlignment = Alignment.Center) {
-                Icon(
-                  imageVector = Icons.Default.Construction,
-                  contentDescription = null,
-                  tint = tokens.linkColor,
-                  modifier = Modifier.size(19.dp),
-                )
-              }
-            }
+            Icon(
+              imageVector = Icons.Default.Construction,
+              contentDescription = null,
+              tint = tokens.linkColor,
+              modifier = Modifier.size(20.dp),
+            )
             Column(modifier = Modifier.weight(1f)) {
               Text(
                 text = strings.dashProjectsCardTitle,
@@ -1065,7 +1092,7 @@ fun DashboardScreen(
           }
           SageSecondaryButton(
             text = strings.dashLaunchWizardBtn,
-            icon = Icons.Default.AutoFixHigh,
+            icon = Icons.Default.Tune,
             onClick = onOpenWizard,
             modifier = Modifier
               .fillMaxWidth()
@@ -1083,14 +1110,14 @@ fun DashboardScreen(
       exit = fadeOut() + slideOutVertically { -it },
       modifier = Modifier
         .align(Alignment.TopCenter)
-        .padding(horizontal = 12.dp, vertical = 8.dp),
+        .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
       Surface(
-        shape = RoundedCornerShape(100.dp),
+        shape = RoundedCornerShape(18.dp),
         color = CoinbaseSurfaceDark,
-        border = BorderStroke(1.dp, CoinbasePrimary.copy(alpha = 0.4f)),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f)),
         tonalElevation = 0.dp,
-        shadowElevation = 4.dp,
+        shadowElevation = 2.dp,
         modifier = Modifier
           .fillMaxWidth()
           .testTag("dash_sticky_treasury_bar"),
@@ -1106,11 +1133,6 @@ fun DashboardScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
           ) {
-            Box(
-              modifier = Modifier
-                .size(8.dp)
-                .background(CoinbaseSemanticUp, CircleShape),
-            )
             Text(
               text = strings.dashCashEyebrow,
               style = MaterialTheme.typography.labelMedium,
@@ -1128,7 +1150,7 @@ fun DashboardScreen(
           }
           Surface(
             shape = RoundedCornerShape(100.dp),
-            color = CoinbasePrimary,
+            color = tokens.primary,
             modifier = Modifier
               .clip(RoundedCornerShape(100.dp))
               .clickable(onClick = onQuickPayTap)
@@ -1288,9 +1310,9 @@ private fun PriorityMiniCard(
       horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
       Surface(
-        shape = CircleShape,
+        shape = RoundedCornerShape(10.dp),
         color = tintBg,
-        modifier = Modifier.size(36.dp),
+        modifier = Modifier.size(34.dp),
       ) {
         Box(contentAlignment = Alignment.Center) {
           Icon(

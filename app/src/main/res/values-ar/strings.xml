@@ -28,4 +28,10 @@
     <string name="export_mode_monochrome">أبيض وأسود (N&amp;B)</string>
     <string name="export_card_projects_title">وضعية ومشاريع العمارة</string>
     <string name="export_card_projects_sub">تقرير رسمي للمشاريع قيد الإنجاز والمستقبلية والمنجزة مع الميزانيات وتغطية الصندوق.</string>
+    <string name="widget_label_compact">SYNDICAT · مصغّر (2×1)</string>
+    <string name="widget_label_classic">SYNDICAT · لوحة الصندوق (4×2)</string>
+    <string name="widget_label_detailed">SYNDICAT · مفصل والمتأخرون (4×3)</string>
+    <string name="widget_description_compact">السيولة المتوفرة في الصندوق وزر الإجراء السريع.</string>
+    <string name="widget_description">رصيد الصندوق، نسبة التحصيل، المتأخرون وزر تسجيل سريع قابل للتخصيص.</string>
+    <string name="widget_description_detailed">نظرة شاملة: المداخيل، المصاريف، أبرز المتأخرين وزرّان للإجراء السريع.</string>
 </resources>

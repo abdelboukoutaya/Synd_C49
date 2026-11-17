@@ -8,6 +8,7 @@ import com.example.data.model.PaymentRecord
 import com.example.data.model.SyndicatConfig
 import com.example.ui.viewmodel.SyndicatDashboardData
 import com.example.util.BackupManager
+import com.example.util.InvoiceOcrHelper
 import com.example.util.QrCodeGenerator
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -130,5 +131,29 @@ class ExampleUnitTest {
     assertEquals(1, call.paidApartmentsCount(apartments))
     assertTrue(call.isApartmentPaid(1L))
     assertFalse(call.isApartmentPaid(2L))
+  }
+
+  @Test
+  fun invoiceOcrHelper_extractsTotalTtcAmountDateAndSupplierAndIgnoresPlainYears() {
+    val invoiceText = """
+      STE ATLAS ELEVATOR
+      Facture N° 104
+      Date: 15-03-2026
+      Entretien mensuel: 600 DH
+      Total TTC: 1 450,00 DH
+    """.trimIndent()
+    val parsed = InvoiceOcrHelper.parseInvoiceText(invoiceText)
+    assertEquals("STE ATLAS ELEVATOR", parsed.detectedSupplier)
+    assertEquals("15/03/2026", parsed.detectedDate)
+    assertEquals(1450L, parsed.detectedAmountDh)
+
+    val plainYearText = """
+      Plomberie Al Amal
+      Intervention exercice 2026
+      Main d'oeuvre 320
+    """.trimIndent()
+    val parsedPlainYear = InvoiceOcrHelper.parseInvoiceText(plainYearText)
+    assertEquals(320L, parsedPlainYear.detectedAmountDh)
+    assertEquals("Plomberie Al Amal", parsedPlainYear.detectedSupplier)
   }
 }

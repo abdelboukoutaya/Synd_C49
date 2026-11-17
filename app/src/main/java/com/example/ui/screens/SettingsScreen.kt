@@ -25,27 +25,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoFixHigh
-import androidx.compose.material.icons.filled.Backup
-import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.CloudSync
-import androidx.compose.material.icons.filled.FileOpen
-import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.TableView
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -70,7 +55,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.local.AuditLogEntry
+import com.example.data.local.BuildingProfile
+import com.example.data.local.SpecialCallRecord
 import com.example.data.local.SyndicatExtrasStore
+import com.example.data.local.SyndicatRoleMode
 import com.example.data.model.MonthColumn
 import com.example.data.model.SyndicatConfig
 import com.example.data.model.buildFloorLabels
@@ -81,6 +69,7 @@ import com.example.ui.components.FintechWhiteCard
 import com.example.ui.components.InkTertiaryButton
 import com.example.ui.components.MetaCobaltBuyButton
 import com.example.ui.components.PinSetupDialog
+import com.example.ui.components.ReadOnlyCouncilBanner
 import com.example.ui.components.ResidenceHeroBanner
 import com.example.ui.components.RoundIconCircleButton
 import com.example.ui.components.SageSecondaryButton
@@ -129,6 +118,15 @@ fun SettingsScreen(
   onConnectGoogleSync: () -> Unit = {},
   onPushLocalToCloud: () -> Unit = {},
   auditLogs: List<AuditLogEntry> = emptyList(),
+  buildings: List<BuildingProfile> = listOf(BuildingProfile("default", data.config.residenceName.ifBlank { "Résidence Principale" })),
+  activeBuildingId: String = "default",
+  onSelectBuilding: (String) -> Unit = {},
+  onCreateBuilding: (name: String, city: String) -> Unit = { _, _ -> },
+  onDeleteBuilding: (String) -> Unit = {},
+  roleMode: SyndicatRoleMode = SyndicatRoleMode.ADMIN,
+  onSetRoleMode: (SyndicatRoleMode) -> Unit = {},
+  specialCalls: List<SpecialCallRecord> = emptyList(),
+  onImportCouncilSnapshot: (ParsedSyndicatBackup) -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val context = LocalContext.current
@@ -136,6 +134,7 @@ fun SettingsScreen(
   val tokens = LocalSyndicatTokens.current
   val cfg = data.config
   val isAr = currentLanguage == AppLanguage.AR
+  val isReadOnlyMode = roleMode == SyndicatRoleMode.READ_ONLY_COUNCIL
   val monoOrDefault = tokens.monoFontFamily
 
   // Building Identity State
@@ -315,6 +314,9 @@ fun SettingsScreen(
     // Title + Application Brand Bar (SYNDICAT · Éditeur DYNIC · Version 2.0 · 2026)
     item {
       Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (isReadOnlyMode) {
+          ReadOnlyCouncilBanner()
+        }
         SyndicatTopBrandBar(tag = "settings_app_brand_bar")
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
           Text(
@@ -333,126 +335,23 @@ fun SettingsScreen(
       }
     }
 
-    // 1. 6-Step Onboarding Wizard Launcher Card (Carte signature Forêt + bouton secondaire blanc)
-    item {
-      FintechDarkFeatureCard(
-        modifier = Modifier.fillMaxWidth(),
-        padding = 24.dp,
-      ) {
-        Text(
-          text = strings.settingsOpenWizardCardTitle,
-          style = MaterialTheme.typography.titleLarge,
-          fontWeight = FontWeight.Normal,
-          color = Color.White,
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-          text = strings.settingsOpenWizardCardSub,
-          style = MaterialTheme.typography.bodySmall,
-          color = Color.White.copy(alpha = 0.88f),
-        )
-        Spacer(modifier = Modifier.height(14.dp))
-        SageSecondaryButton(
-          text = strings.dashLaunchWizardBtn,
-          icon = Icons.Default.AutoFixHigh,
-          onSignatureCard = true,
-          onClick = onOpenWizard,
-          modifier = Modifier.fillMaxWidth().testTag("settings_open_wizard_btn"),
-        )
-      }
+    // =========================================================================
+    // 1. LANGUE & AFFICHAGE (Priorité 1 — tout en haut)
+    // =========================================================================
+    item(key = "settings_group_1_header") {
+      SettingsGroupHeader(
+        title = strings.settingsGroupLanguageDisplay,
+        tag = "settings_group_1",
+      )
     }
 
-    // 1b. Local Storage & Optional Cloud Synchronization Card
-    item {
-      AirtableSoftCard(
+    item(key = "settings_lang_display_item") {
+      FintechWhiteCard(
         modifier = Modifier
           .fillMaxWidth()
-          .testTag("settings_sync_card"),
+          .testTag("settings_lang_display_card"),
         padding = 24.dp,
       ) {
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-          Icon(
-            imageVector = if (isCloudSynced) Icons.Default.CloudDone else Icons.Default.PhoneAndroid,
-            contentDescription = strings.syncSectionTitle,
-            tint = if (isCloudSynced) tokens.statusPaidText else tokens.linkColor,
-          )
-          Text(
-            text = strings.syncSectionTitle,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = tokens.inkDeep,
-            modifier = Modifier.weight(1f),
-          )
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Surface(
-          shape = RoundedCornerShape(tokens.badgeRadiusDp.dp),
-          color = tokens.primaryTint,
-          tonalElevation = 0.dp,
-          shadowElevation = 0.dp,
-        ) {
-          Text(
-            text = if (isCloudSynced) strings.syncCloudBadge else strings.syncLocalBadge,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = tokens.linkColor,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-          )
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-          text = if (isCloudSynced) strings.syncCloudDesc else strings.syncLocalDesc,
-          style = MaterialTheme.typography.bodySmall,
-          color = tokens.body,
-        )
-        if (isCloudSynced && !userEmail.isNullOrBlank()) {
-          Spacer(modifier = Modifier.height(6.dp))
-          Text(
-            text = strings.settingsConnectedAs(userEmail),
-            style = MaterialTheme.typography.labelMedium,
-            color = tokens.inkDeep,
-          )
-        }
-        Spacer(modifier = Modifier.height(14.dp))
-        if (!isCloudSynced) {
-          MetaCobaltBuyButton(
-            text = strings.syncConnectGoogleBtn,
-            icon = Icons.Default.CloudSync,
-            onClick = onConnectGoogleSync,
-            modifier = Modifier
-              .fillMaxWidth()
-              .testTag("settings_connect_google_btn"),
-          )
-        } else {
-          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            SageSecondaryButton(
-              text = strings.syncPushLocalBtn,
-              icon = Icons.Default.CloudSync,
-              compact = true,
-              onClick = onPushLocalToCloud,
-              modifier = Modifier
-                .fillMaxWidth()
-                .testTag("settings_push_local_btn"),
-            )
-            InkTertiaryButton(
-              text = strings.signOutToLocal,
-              icon = Icons.AutoMirrored.Filled.Logout,
-              onClick = onSignOut,
-              modifier = Modifier
-                .fillMaxWidth()
-                .testTag("settings_disconnect_cloud_btn"),
-            )
-          }
-        }
-      }
-    }
-
-    // 2. Language, Digits (0-9 / ٠-٩), Style « الأبيض الهادئ », Mode (تلقائي / فاتح / داكن) & Font Scale
-    item {
-      FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = 24.dp) {
         Text(
           text = strings.settingsLangDisplayTitle,
           style = MaterialTheme.typography.titleLarge,
@@ -543,10 +442,10 @@ fun SettingsScreen(
             styleId = "minimax",
             label = strings.themeChoiceMinimax,
             selected = activeThemeFamily == "minimax",
-            accentColor = Color(0xFF7C3AED),
-            surfacePreviewColor = Color(0xFF1A1826),
-            headerBgColor = Color(0xFFEDE9FE),
-            cornerRadiusDp = 14,
+            accentColor = Color(0xFFD93F26),
+            surfacePreviewColor = Color(0xFFFAF8F5),
+            headerBgColor = Color(0xFF141518),
+            cornerRadiusDp = 10,
             onClick = { onUpdateDisplayPrefs(null, "minimax", null, null) },
             modifier = Modifier.weight(1f),
           )
@@ -560,7 +459,7 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // §8 : Mode d'apparence : تلقائي (système) / فاتح (clair) / داكن (sombre)
+        // Mode d'apparence : Système / Clair / Sombre
         Text(
           text = strings.settingsThemeLabel,
           style = MaterialTheme.typography.labelLarge,
@@ -630,6 +529,45 @@ fun SettingsScreen(
             )
           }
         }
+      }
+    }
+
+    // =========================================================================
+    // 2. IMMEUBLE, STRUCTURE & COTISATIONS (Essentiel)
+    // =========================================================================
+    item(key = "settings_group_2_header") {
+      SettingsGroupHeader(
+        title = strings.settingsGroupBuildingConfig,
+        tag = "settings_group_2",
+      )
+    }
+
+    // Assistant rapide 6 étapes
+    item(key = "settings_wizard_item") {
+      FintechDarkFeatureCard(
+        modifier = Modifier.fillMaxWidth(),
+        padding = 24.dp,
+      ) {
+        Text(
+          text = strings.settingsOpenWizardCardTitle,
+          style = MaterialTheme.typography.titleLarge,
+          fontWeight = FontWeight.Normal,
+          color = Color.White,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+          text = strings.settingsOpenWizardCardSub,
+          style = MaterialTheme.typography.bodySmall,
+          color = Color.White.copy(alpha = 0.88f),
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+        SageSecondaryButton(
+          text = strings.dashLaunchWizardBtn,
+          onSignatureCard = true,
+          enabled = !isReadOnlyMode,
+          onClick = onOpenWizard,
+          modifier = Modifier.fillMaxWidth().testTag("settings_open_wizard_btn"),
+        )
       }
     }
 
@@ -1055,8 +993,18 @@ fun SettingsScreen(
       }
     }
 
-    // 6. WhatsApp Reminder Template & Relance Note (FintechWhiteCard — alternance après AirtableSoftCard)
-    item {
+    // =========================================================================
+    // 3. COMMUNICATION, WIDGETS & CONSEIL
+    // =========================================================================
+    item(key = "settings_group_3_header") {
+      SettingsGroupHeader(
+        title = strings.settingsGroupToolsGovernance,
+        tag = "settings_group_3",
+      )
+    }
+
+    // Modèles WhatsApp & Relance
+    item(key = "settings_whatsapp_item") {
       FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = 24.dp) {
         Text(
           text = strings.settingsWhatsappTitle,
@@ -1195,22 +1143,70 @@ fun SettingsScreen(
       }
     }
 
-    // Meta Configurator Primary CTA (`button-buy-cta` Cobalt #0064E0 pill)
-    item {
+    // Partage Conseil Syndical (QR Code)
+    item(key = "settings_council_share_item") {
+      CouncilShareCard(
+        data = data,
+        specialCalls = specialCalls,
+        roleMode = roleMode,
+        currentUserId = currentUserId,
+        onSetRoleMode = onSetRoleMode,
+        onImportSnapshot = onImportCouncilSnapshot,
+        onMessage = onMessage,
+      )
+    }
+
+    // Multi-immeubles & Blocs
+    item(key = "settings_multi_building_item") {
+      MultiBuildingManagementCard(
+        buildings = buildings,
+        activeBuildingId = activeBuildingId,
+        isReadOnlyMode = isReadOnlyMode,
+        onSelectBuilding = onSelectBuilding,
+        onCreateBuilding = onCreateBuilding,
+        onDeleteBuilding = onDeleteBuilding,
+      )
+    }
+
+    // Studio Widget Écran d'accueil
+    item(key = "settings_widget_studio_item") {
+      SettingsWidgetStudioCard(
+        data = data,
+        onMessage = onMessage,
+      )
+    }
+
+    // Bouton principal d'enregistrement des paramètres
+    item(key = "settings_save_cta_item") {
       MetaCobaltBuyButton(
         text = strings.settingsSaveButton,
         icon = Icons.Default.Save,
-        enabled = !isSaving,
+        enabled = !isSaving && !isReadOnlyMode,
         onClick = { onSaveConfig(buildUpdatedConfig(), false) },
         modifier = Modifier.fillMaxWidth().testTag("save_settings_button"),
       )
     }
 
-    // 7. Backup (.json), CSV Import & PIN Lock Security (AirtableSoftCard — alternance après le bouton primaire)
-    item {
-      AirtableSoftCard(modifier = Modifier.fillMaxWidth(), padding = 24.dp) {
+    // =========================================================================
+    // 4. SÉCURITÉ, RAPPELS & DONNÉES
+    // =========================================================================
+    item(key = "settings_group_4_header") {
+      SettingsGroupHeader(
+        title = strings.settingsGroupSecurityData,
+        tag = "settings_group_4",
+      )
+    }
+
+    // 4a. Sécurité (PIN & Biométrie), Rappels mensuels & Journal d'audit
+    item(key = "settings_security_reminders_item") {
+      FintechWhiteCard(
+        modifier = Modifier
+          .fillMaxWidth()
+          .testTag("settings_security_reminders_card"),
+        padding = 24.dp,
+      ) {
         Text(
-          text = strings.settingsBackupSecurityTitle,
+          text = strings.settingsSecurityRemindersTitle,
           style = MaterialTheme.typography.titleLarge,
           fontWeight = FontWeight.Normal,
           color = tokens.ink,
@@ -1218,92 +1214,6 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          SageSecondaryButton(
-            text = strings.settingsExportJsonBtn,
-            icon = Icons.Default.Backup,
-            onClick = {
-              val specialCalls = SyndicatExtrasStore.getInstance(context).specialCalls.value
-              BackupManager.exportAndShareJsonBackup(
-                context = context,
-                data = data,
-                onError = { err -> onMessage(err) },
-                specialCalls = specialCalls,
-              )
-              onBackupExported()
-            },
-            modifier = Modifier.fillMaxWidth().testTag("export_json_backup_btn"),
-          )
-
-          SageSecondaryButton(
-            text = strings.settingsImportJsonBtn,
-            icon = Icons.Default.FileOpen,
-            onClick = {
-              jsonImportLauncher.launch(arrayOf("application/json", "text/*", "*/*"))
-            },
-            modifier = Modifier.fillMaxWidth().testTag("import_json_backup_btn"),
-          )
-
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-          ) {
-            SageSecondaryButton(
-              text = strings.exportPaymentsCsvBtn,
-              icon = Icons.Default.TableView,
-              compact = true,
-              onClick = {
-                val csv = BackupManager.generatePaymentsCsv(data)
-                BackupManager.shareCsvFile(
-                  context = context,
-                  filePrefix = "payments_${cfg.year}",
-                  csvContent = csv,
-                  chooserTitle = strings.exportPaymentsCsvBtn,
-                  onError = { err -> onMessage(err) },
-                )
-              },
-              modifier = Modifier.weight(1f).testTag("settings_export_payments_csv_btn"),
-            )
-            SageSecondaryButton(
-              text = strings.exportExpensesCsvBtn,
-              icon = Icons.Default.TableView,
-              compact = true,
-              onClick = {
-                val csv = BackupManager.generateExpensesCsv(data)
-                BackupManager.shareCsvFile(
-                  context = context,
-                  filePrefix = "expenses_${cfg.year}",
-                  csvContent = csv,
-                  chooserTitle = strings.exportExpensesCsvBtn,
-                  onError = { err -> onMessage(err) },
-                )
-              },
-              modifier = Modifier.weight(1f).testTag("settings_export_expenses_csv_btn"),
-            )
-          }
-
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-          ) {
-            SageSecondaryButton(
-              text = strings.settingsImportCsvBtn,
-              icon = Icons.AutoMirrored.Filled.PlaylistAdd,
-              compact = true,
-              onClick = { showCsvPasteDialog = true },
-              modifier = Modifier.weight(1f).testTag("open_csv_paste_btn"),
-            )
-            SageSecondaryButton(
-              text = "CSV File",
-              icon = Icons.Default.FileOpen,
-              compact = true,
-              onClick = {
-                csvFileImportLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*"))
-              },
-            )
-          }
-
-          HorizontalDivider(color = tokens.divider)
-
           Text(
             text = strings.settingsPinTitle,
             style = MaterialTheme.typography.titleSmall,
@@ -1316,7 +1226,6 @@ fun SettingsScreen(
           ) {
             SageSecondaryButton(
               text = strings.settingsSetPinBtn,
-              icon = Icons.Default.Lock,
               compact = true,
               onClick = { showPinDialog = true },
               modifier = Modifier.weight(1f).testTag("set_pin_btn"),
@@ -1324,7 +1233,6 @@ fun SettingsScreen(
             if (hasPin) {
               InkTertiaryButton(
                 text = strings.settingsDisablePinBtn,
-                icon = Icons.Default.LockOpen,
                 onClick = {
                   LanguagePreferences.savePinCode(context, "")
                   LanguagePreferences.setBiometricUnlockEnabled(context, false)
@@ -1337,36 +1245,24 @@ fun SettingsScreen(
             }
           }
 
-          // Biometric Unlock toggle (when available on device)
           if (bioAvailable) {
             Row(
               modifier = Modifier.fillMaxWidth(),
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically,
             ) {
-              Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-              ) {
-                Icon(
-                  imageVector = Icons.Default.Fingerprint,
-                  contentDescription = null,
-                  tint = tokens.ink,
+              Column(modifier = Modifier.weight(1f)) {
+                Text(
+                  text = strings.settingsBiometricLabel,
+                  style = MaterialTheme.typography.bodyMedium,
+                  color = tokens.ink,
                 )
-                Column {
+                if (!hasPin) {
                   Text(
-                    text = strings.settingsBiometricLabel,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = tokens.ink,
+                    text = strings.settingsBiometricHint,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = tokens.mute,
                   )
-                  if (!hasPin) {
-                    Text(
-                      text = strings.settingsBiometricHint,
-                      style = MaterialTheme.typography.labelSmall,
-                      color = tokens.mute,
-                    )
-                  }
                 }
               }
               Switch(
@@ -1383,7 +1279,6 @@ fun SettingsScreen(
 
           HorizontalDivider(color = tokens.divider)
 
-          // Automatic Monthly Reminder Notification
           Text(
             text = strings.settingsReminderTitle,
             style = MaterialTheme.typography.titleSmall,
@@ -1395,22 +1290,12 @@ fun SettingsScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
           ) {
-            Row(
+            Text(
+              text = strings.settingsReminderEnableLabel,
+              style = MaterialTheme.typography.bodyMedium,
+              color = tokens.ink,
               modifier = Modifier.weight(1f),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-              Icon(
-                imageVector = Icons.Default.NotificationsActive,
-                contentDescription = null,
-                tint = tokens.infoColor,
-              )
-              Text(
-                text = strings.settingsReminderEnableLabel,
-                style = MaterialTheme.typography.bodyMedium,
-                color = tokens.ink,
-              )
-            }
+            )
             Switch(
               checked = reminderEnabled,
               onCheckedChange = { enable ->
@@ -1458,7 +1343,6 @@ fun SettingsScreen(
           }
           SageSecondaryButton(
             text = strings.settingsReminderTestBtn,
-            icon = Icons.Default.NotificationsActive,
             compact = true,
             onClick = {
               if (MonthlyReminderScheduler.hasNotificationPermission(context)) {
@@ -1475,7 +1359,6 @@ fun SettingsScreen(
 
           SageSecondaryButton(
             text = "${strings.settingsAuditOpenBtn} (${localizeDigits(auditLogs.size.toString(), cfg.digitsAr)})",
-            icon = Icons.Default.History,
             onClick = { showAuditDialog = true },
             modifier = Modifier.fillMaxWidth().testTag("open_audit_log_btn"),
           )
@@ -1483,13 +1366,205 @@ fun SettingsScreen(
       }
     }
 
-    // 8. Building Reset & Account Sign Out (2-Tap Non-Blocking Confirmations)
-    item {
-      FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = 24.dp) {
+    // 4b. Sauvegardes & Exports (JSON / CSV)
+    item(key = "settings_backup_data_item") {
+      AirtableSoftCard(
+        modifier = Modifier
+          .fillMaxWidth()
+          .testTag("settings_backup_data_card"),
+        padding = 24.dp,
+      ) {
+        Text(
+          text = strings.settingsBackupDataTitle,
+          style = MaterialTheme.typography.titleLarge,
+          fontWeight = FontWeight.Normal,
+          color = tokens.ink,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          SageSecondaryButton(
+            text = strings.settingsExportJsonBtn,
+            onClick = {
+              val specialCalls = SyndicatExtrasStore.getInstance(context).specialCalls.value
+              BackupManager.exportAndShareJsonBackup(
+                context = context,
+                data = data,
+                onError = { err -> onMessage(err) },
+                specialCalls = specialCalls,
+              )
+              onBackupExported()
+            },
+            modifier = Modifier.fillMaxWidth().testTag("export_json_backup_btn"),
+          )
+
+          SageSecondaryButton(
+            text = strings.settingsImportJsonBtn,
+            enabled = !isReadOnlyMode,
+            onClick = {
+              jsonImportLauncher.launch(arrayOf("application/json", "text/*", "*/*"))
+            },
+            modifier = Modifier.fillMaxWidth().testTag("import_json_backup_btn"),
+          )
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            SageSecondaryButton(
+              text = strings.exportPaymentsCsvBtn,
+              compact = true,
+              onClick = {
+                val csv = BackupManager.generatePaymentsCsv(data)
+                BackupManager.shareCsvFile(
+                  context = context,
+                  filePrefix = "payments_${cfg.year}",
+                  csvContent = csv,
+                  chooserTitle = strings.exportPaymentsCsvBtn,
+                  onError = { err -> onMessage(err) },
+                )
+              },
+              modifier = Modifier.weight(1f).testTag("settings_export_payments_csv_btn"),
+            )
+            SageSecondaryButton(
+              text = strings.exportExpensesCsvBtn,
+              compact = true,
+              onClick = {
+                val csv = BackupManager.generateExpensesCsv(data)
+                BackupManager.shareCsvFile(
+                  context = context,
+                  filePrefix = "expenses_${cfg.year}",
+                  csvContent = csv,
+                  chooserTitle = strings.exportExpensesCsvBtn,
+                  onError = { err -> onMessage(err) },
+                )
+              },
+              modifier = Modifier.weight(1f).testTag("settings_export_expenses_csv_btn"),
+            )
+          }
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            SageSecondaryButton(
+              text = strings.settingsImportCsvBtn,
+              compact = true,
+              enabled = !isReadOnlyMode,
+              onClick = { showCsvPasteDialog = true },
+              modifier = Modifier.weight(1f).testTag("open_csv_paste_btn"),
+            )
+            SageSecondaryButton(
+              text = "CSV File",
+              compact = true,
+              enabled = !isReadOnlyMode,
+              onClick = {
+                csvFileImportLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*"))
+              },
+            )
+          }
+        }
+      }
+    }
+
+    // 4c. Stockage local & Synchronisation Google Cloud (optionnel)
+    item(key = "settings_sync_item") {
+      FintechWhiteCard(
+        modifier = Modifier
+          .fillMaxWidth()
+          .testTag("settings_sync_card"),
+        padding = 24.dp,
+      ) {
+        Text(
+          text = strings.syncSectionTitle,
+          style = MaterialTheme.typography.titleLarge,
+          fontWeight = FontWeight.Normal,
+          color = tokens.inkDeep,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Surface(
+          shape = RoundedCornerShape(tokens.badgeRadiusDp.dp),
+          color = tokens.primaryTint,
+          tonalElevation = 0.dp,
+          shadowElevation = 0.dp,
+        ) {
+          Text(
+            text = if (isCloudSynced) strings.syncCloudBadge else strings.syncLocalBadge,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = tokens.linkColor,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+          )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+          text = if (isCloudSynced) strings.syncCloudDesc else strings.syncLocalDesc,
+          style = MaterialTheme.typography.bodySmall,
+          color = tokens.body,
+        )
+        if (isCloudSynced && !userEmail.isNullOrBlank()) {
+          Spacer(modifier = Modifier.height(6.dp))
+          Text(
+            text = strings.settingsConnectedAs(userEmail),
+            style = MaterialTheme.typography.labelMedium,
+            color = tokens.inkDeep,
+          )
+        }
+        Spacer(modifier = Modifier.height(14.dp))
+        if (!isCloudSynced) {
+          MetaCobaltBuyButton(
+            text = strings.syncConnectGoogleBtn,
+            onClick = onConnectGoogleSync,
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("settings_connect_google_btn"),
+          )
+        } else {
+          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SageSecondaryButton(
+              text = strings.syncPushLocalBtn,
+              compact = true,
+              onClick = onPushLocalToCloud,
+              modifier = Modifier
+                .fillMaxWidth()
+                .testTag("settings_push_local_btn"),
+            )
+            InkTertiaryButton(
+              text = strings.signOutToLocal,
+              onClick = onSignOut,
+              modifier = Modifier
+                .fillMaxWidth()
+                .testTag("settings_disconnect_cloud_btn"),
+            )
+          }
+        }
+      }
+    }
+
+    // =========================================================================
+    // 5. ZONE AVANCÉE & APPLICATION (En bas)
+    // =========================================================================
+    item(key = "settings_group_5_header") {
+      SettingsGroupHeader(
+        title = strings.settingsGroupAdvancedAbout,
+        tag = "settings_group_5",
+      )
+    }
+
+    // Réinitialisation & Déconnexion
+    item(key = "settings_danger_reset_item") {
+      AirtableSoftCard(modifier = Modifier.fillMaxWidth(), padding = 24.dp) {
+        Text(
+          text = strings.settingsDangerResetTitle,
+          style = MaterialTheme.typography.titleLarge,
+          fontWeight = FontWeight.Normal,
+          color = tokens.ink,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
           SageSecondaryButton(
             text = if (armBlankReset) "! ${strings.settingsConfirmBtn}: ${strings.settingsNewBlankBuildingBtn}" else strings.settingsNewBlankBuildingBtn,
-            icon = Icons.Default.RestartAlt,
+            enabled = !isReadOnlyMode,
             onClick = {
               if (armBlankReset) {
                 armBlankReset = false
@@ -1503,7 +1578,7 @@ fun SettingsScreen(
 
           SageSecondaryButton(
             text = if (armC49Reset) "! ${strings.settingsConfirmBtn}: ${strings.settingsResetC49Btn}" else strings.settingsResetC49Btn,
-            icon = Icons.Default.RestartAlt,
+            enabled = !isReadOnlyMode,
             onClick = {
               if (armC49Reset) {
                 armC49Reset = false
@@ -1528,7 +1603,6 @@ fun SettingsScreen(
 
             InkTertiaryButton(
               text = strings.signOutToLocal,
-              icon = Icons.AutoMirrored.Filled.Logout,
               onClick = onSignOut,
               modifier = Modifier.fillMaxWidth().testTag("sign_out_button"),
             )
@@ -1537,8 +1611,8 @@ fun SettingsScreen(
       }
     }
 
-    // 9. Official Application Edition & Publisher Card (SYNDICAT · Éditeur DYNIC · Version 2.0 · Édition 2026)
-    item {
+    // À propos de l'application (SYNDICAT · Éditeur DYNIC · Version 2.0 · Édition 2026)
+    item(key = "settings_about_item") {
       SyndicatAboutEditionCard()
     }
   }
@@ -1684,7 +1758,6 @@ fun SettingsScreen(
         if (auditLogs.isNotEmpty()) {
           MetaCobaltBuyButton(
             text = strings.auditExportCsvBtn,
-            icon = Icons.Default.TableView,
             compact = true,
             onClick = {
               val csv = BackupManager.generateAuditLogCsv(auditLogs, isAr)
@@ -1709,4 +1782,22 @@ fun SettingsScreen(
       },
     )
   }
+}
+
+@Composable
+private fun SettingsGroupHeader(
+  title: String,
+  tag: String,
+) {
+  val tokens = LocalSyndicatTokens.current
+  Text(
+    text = title,
+    style = MaterialTheme.typography.labelLarge,
+    fontWeight = FontWeight.SemiBold,
+    color = tokens.primary,
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(top = 8.dp, bottom = 2.dp, start = 4.dp, end = 4.dp)
+      .testTag(tag),
+  )
 }
