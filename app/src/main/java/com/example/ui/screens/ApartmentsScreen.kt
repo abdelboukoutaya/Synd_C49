@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -93,10 +94,12 @@ import com.example.data.model.PaymentMethod
 import com.example.data.model.PaymentRecord
 import com.example.data.model.SyndicatConfig
 import com.example.data.model.UnitStatus
+import com.example.ui.components.AdaptiveContentBox
 import com.example.ui.components.FintechPalePositiveCard
 import com.example.ui.components.FintechTextField
 import com.example.ui.components.FintechWhiteCard
 import com.example.ui.components.LocalPrivacyMode
+import com.example.ui.components.LocalSyndicatAdaptiveSpec
 import com.example.ui.components.MetaCobaltBuyButton
 import com.example.ui.components.MetaSearchPill
 import com.example.ui.components.MetaSegmentedPillRow
@@ -140,7 +143,7 @@ private enum class ApartmentSortMode {
   PAID_DESC,
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ApartmentsScreen(
   data: SyndicatDashboardData,
@@ -167,7 +170,9 @@ fun ApartmentsScreen(
   val scope = rememberCoroutineScope()
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
   val isPrivacy = LocalPrivacyMode.current
+  val maxHeaderWidth = if (adaptive.isExpanded) adaptive.wideContainerMaxWidth else adaptive.readableMaxWidth
   val cfg = data.config
   val cur = cfg.currency
   val dig = cfg.digitsAr
@@ -252,30 +257,30 @@ fun ApartmentsScreen(
       .testTag("apartments_screen"),
   ) {
     // Top Header + Search Bar + Cards/Grid View Switcher
+    AdaptiveContentBox(maxWidth = maxHeaderWidth) {
     Column(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(horizontal = 16.dp, vertical = 12.dp),
+        .padding(horizontal = adaptive.horizontalPadding, vertical = 12.dp),
       verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
       if (isReadOnlyMode) {
         ReadOnlyCouncilBanner()
       }
-      Row(
+      FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
       ) {
         Text(
           text = strings.navApartments,
-          style = MaterialTheme.typography.headlineLarge,
+          style = if (adaptive.isNarrowPhone) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.headlineLarge,
           fontWeight = FontWeight.Medium,
           color = tokens.inkDeep,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
-          modifier = Modifier.weight(1f),
+          modifier = Modifier.align(Alignment.CenterVertically),
         )
-        Spacer(modifier = Modifier.width(8.dp))
 
         // Meta Segmented Pill Switcher (Cards vs 12-Month Grid — {rounded.full} 100dp pills)
         MetaSegmentedPillRow(
@@ -288,6 +293,7 @@ fun ApartmentsScreen(
           secondTag = "toggle_grid_view",
           firstIcon = Icons.Default.ViewAgenda,
           secondIcon = Icons.Default.GridOn,
+          modifier = Modifier.align(Alignment.CenterVertically),
         )
       }
 
@@ -414,6 +420,7 @@ fun ApartmentsScreen(
         )
       }
     }
+    }
 
     val singleRemindTarget = remindingApartment
     if (singleRemindTarget != null) {
@@ -448,6 +455,7 @@ fun ApartmentsScreen(
         .fillMaxWidth(),
     ) {
       val isTabletSplit = maxWidth >= 840.dp && !isGridView
+      val singlePaneConstraintWidth = if (isTabletSplit) adaptive.wideContainerMaxWidth else adaptive.readableMaxWidth
 
       if (!isGridView) {
         val listContent: @Composable (Modifier) -> Unit = { listMod ->
@@ -455,10 +463,16 @@ fun ApartmentsScreen(
             modifier = listMod
               .fillMaxHeight()
               .testTag("apartments_cards_list"),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 96.dp),
+            contentPadding = PaddingValues(
+              start = adaptive.horizontalPadding,
+              end = adaptive.horizontalPadding,
+              top = 4.dp,
+              bottom = adaptive.listBottomPadding,
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
           ) {
             item(key = "cotisations_residence_banner") {
+              AdaptiveContentBox(maxWidth = singlePaneConstraintWidth) {
               ResidenceHeroBanner(
                 residenceName = cfg.residenceName.ifBlank { strings.navApartments },
                 subtitle = "${strings.navApartments} · ${bidiLtr(localizeDigits(cfg.year.toString(), dig))}",
@@ -466,6 +480,7 @@ fun ApartmentsScreen(
                 compact = true,
                 onPhotoFeedback = onExportError,
               )
+              }
             }
 
             if (filteredApartments.isEmpty()) {
@@ -490,6 +505,7 @@ fun ApartmentsScreen(
                 if (floorApts.isNotEmpty()) {
                   item(key = "floor_hdr_$floor") {
                     val subtotal = floorApts.sumOf { it.totalForConfig(cfg) }
+                    AdaptiveContentBox(maxWidth = singlePaneConstraintWidth) {
                     Row(
                       modifier = Modifier
                         .fillMaxWidth()
@@ -511,6 +527,7 @@ fun ApartmentsScreen(
                         color = tokens.positiveDeep,
                       )
                     }
+                    }
                   }
 
                   items(
@@ -519,6 +536,7 @@ fun ApartmentsScreen(
                   ) { apt ->
                     val isVacant = apt.isVacantForConfig(cfg)
                     val cardContent: @Composable () -> Unit = {
+                      AdaptiveContentBox(maxWidth = singlePaneConstraintWidth) {
                       ApartmentFintechCard(
                         apartment = apt,
                         config = cfg,
@@ -545,6 +563,7 @@ fun ApartmentsScreen(
                           }
                         },
                       )
+                      }
                     }
 
                     if (!isVacant) {
@@ -642,6 +661,7 @@ fun ApartmentsScreen(
         }
 
         if (isTabletSplit) {
+          AdaptiveContentBox(maxWidth = adaptive.wideContainerMaxWidth) {
           Row(modifier = Modifier.fillMaxSize()) {
             listContent(Modifier.weight(0.54f))
             val selectedApt = filteredApartments.firstOrNull { it.number == selectedTabletAptNumber }
@@ -684,8 +704,9 @@ fun ApartmentsScreen(
               modifier = Modifier
                 .weight(0.46f)
                 .fillMaxHeight()
-                .padding(end = 16.dp, bottom = 24.dp, top = 4.dp),
+                .padding(end = adaptive.horizontalPadding, bottom = 24.dp, top = 4.dp),
             )
+          }
           }
         } else {
           listContent(Modifier.fillMaxWidth())
@@ -693,19 +714,25 @@ fun ApartmentsScreen(
       } else {
       // =========================================================================
       // COMPACT TABLE / GRID VIEW SANS SLIDER GAUCHE-DROITE :
-      // Tous les mois actifs s'affichent en grille multi-colonnes équilibrée (4 mois/ligne)
-      // sur 100 % de la largeur de l'écran du téléphone, sans aucun défilement horizontal.
+      // Grille multi-colonnes adaptative (1 colonne sur téléphone, 2 colonnes sur tablette)
       // =========================================================================
       val activeMonths = cfg.activeMonthColumns
+      val gridCols = if (maxWidth >= 700.dp) 2 else 1
+      val gridMaxWidth = if (gridCols > 1) adaptive.wideContainerMaxWidth else adaptive.readableMaxWidth
       LazyColumn(
         modifier = Modifier
           .fillMaxSize()
-          .padding(horizontal = 12.dp)
           .testTag("apartments_grid_list"),
-        contentPadding = PaddingValues(top = 4.dp, bottom = 28.dp),
+        contentPadding = PaddingValues(
+          start = if (adaptive.isNarrowPhone) 10.dp else adaptive.horizontalPadding,
+          end = if (adaptive.isNarrowPhone) 10.dp else adaptive.horizontalPadding,
+          top = 4.dp,
+          bottom = adaptive.listBottomPadding,
+        ),
         verticalArrangement = Arrangement.spacedBy(10.dp),
       ) {
         item(key = "grid_tariffs_legend") {
+          AdaptiveContentBox(maxWidth = gridMaxWidth) {
           Surface(
             shape = RoundedCornerShape(12.dp),
             color = tokens.surfaceSoft,
@@ -722,6 +749,7 @@ fun ApartmentsScreen(
               modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
             )
           }
+          }
         }
 
         data.orderedFloors.forEach { floor ->
@@ -729,6 +757,7 @@ fun ApartmentsScreen(
           if (floorApts.isNotEmpty()) {
             item(key = "grid_floor_$floor") {
               val subtotal = floorApts.sumOf { it.totalForConfig(cfg) }
+              AdaptiveContentBox(maxWidth = gridMaxWidth) {
               Row(
                 modifier = Modifier
                   .fillMaxWidth()
@@ -750,12 +779,21 @@ fun ApartmentsScreen(
                   color = tokens.positiveDeep,
                 )
               }
+              }
             }
 
+            val chunkedFloorApts = floorApts.chunked(gridCols)
             items(
-              items = floorApts,
-              key = { "grid_row_${it.id.ifBlank { it.number.toString() }}" },
-            ) { apt ->
+              items = chunkedFloorApts,
+              key = { chunk -> "grid_row_${chunk.first().id.ifBlank { chunk.first().number.toString() }}" },
+            ) { rowApts ->
+              AdaptiveContentBox(maxWidth = gridMaxWidth) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+              ) {
+              rowApts.forEach { apt ->
               val rawOwnerLabel = apt.displayOwner(isAr).ifBlank { "${strings.colAppt} ${apt.displayNumber}" }
               val ownerLabel = maskSensitiveName(rawOwnerLabel, isPrivacy)
               val isVacant = apt.isVacantForConfig(cfg)
@@ -766,7 +804,7 @@ fun ApartmentsScreen(
                 border = BorderStroke(1.dp, tokens.cardBorder),
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.weight(1f),
               ) {
                 Column(
                   modifier = Modifier
@@ -822,7 +860,7 @@ fun ApartmentsScreen(
 
                     Row(
                       verticalAlignment = Alignment.CenterVertically,
-                      horizontalArrangement = Arrangement.spacedBy(8.dp),
+                      horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                       StatusPillBadge(status = apt.badgeStatus(cfg))
                       Text(
@@ -844,6 +882,14 @@ fun ApartmentsScreen(
                     onMonthClick = { m -> if (!isReadOnlyMode) quickCellTarget = apt to m },
                   )
                 }
+              }
+              }
+              if (rowApts.size < gridCols) {
+                repeat(gridCols - rowApts.size) {
+                  Spacer(modifier = Modifier.weight(1f))
+                }
+              }
+              }
               }
             }
           }

@@ -40,6 +40,7 @@ import com.example.data.local.IncidentSeverity
 import com.example.data.local.IncidentStatus
 import com.example.ui.components.FintechTextField
 import com.example.ui.components.FintechWhiteCard
+import com.example.ui.components.LocalSyndicatAdaptiveSpec
 import com.example.ui.components.MetaCobaltBuyButton
 import com.example.ui.components.SageSecondaryButton
 import com.example.ui.components.SyndicatDialog
@@ -47,6 +48,7 @@ import com.example.ui.components.SyndicatFilterChip
 import com.example.ui.i18n.LocalStrings
 import com.example.ui.theme.LocalSyndicatTokens
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun IncidentItemCard(
   incident: IncidentRecord,
@@ -54,9 +56,11 @@ fun IncidentItemCard(
   onCycleStatus: () -> Unit,
   onConvertToExpense: () -> Unit,
   onDelete: () -> Unit,
+  modifier: Modifier = Modifier,
 ) {
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
 
   val sevLabel = when (incident.severity) {
     IncidentSeverity.LOW -> strings.incidentSeverityLow
@@ -85,16 +89,16 @@ fun IncidentItemCard(
   }
 
   FintechWhiteCard(
-    modifier = Modifier
+    modifier = modifier
       .fillMaxWidth()
       .testTag("incident_card_${incident.id}"),
-    padding = 16.dp,
+    padding = adaptive.cardPadding,
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-      Row(
+      FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
       ) {
         Row(
           verticalAlignment = Alignment.CenterVertically,

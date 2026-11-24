@@ -57,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.data.model.ApartmentRecord
 import com.example.data.model.ExpenseRecord
 import com.example.data.model.ProjectRecord
@@ -92,7 +93,9 @@ fun TreasuryPortfolioHeroCard(
 ) {
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
   val isPrivacy = LocalPrivacyMode.current
+  val isNarrow = adaptive.isNarrowPhone
   val cfg = data.config
   val cur = cfg.currency
   val dig = cfg.digitsAr
@@ -125,8 +128,8 @@ fun TreasuryPortfolioHeroCard(
             strokeWidth = 2.dp.toPx(),
           )
         }
-        .padding(22.dp),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
+        .padding(if (isNarrow) 16.dp else 22.dp),
+      verticalArrangement = Arrangement.spacedBy(if (isNarrow) 12.dp else 16.dp),
     ) {
       Row(
         modifier = Modifier.fillMaxWidth(),
@@ -138,8 +141,11 @@ fun TreasuryPortfolioHeroCard(
           style = MaterialTheme.typography.labelLarge,
           fontWeight = FontWeight.Medium,
           color = CoinbaseOnDarkSoft,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.weight(1f),
         )
-
+        Spacer(modifier = Modifier.width(6.dp))
         Surface(
           shape = RoundedCornerShape(100.dp),
           color = CoinbaseSurfaceDarkElevated,
@@ -150,19 +156,27 @@ fun TreasuryPortfolioHeroCard(
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Medium,
             color = Color.White.copy(alpha = 0.88f),
+            maxLines = 1,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
           )
         }
       }
 
+      val heroMoneyStyle = when {
+        adaptive.isVeryNarrowPhone -> MaterialTheme.typography.headlineLarge
+        isNarrow -> MaterialTheme.typography.displayMedium
+        else -> MaterialTheme.typography.displayLarge
+      }
       Text(
         text = cashDisplay,
-        style = MaterialTheme.typography.displayLarge.copy(
+        style = heroMoneyStyle.copy(
           fontFamily = numericFont,
           fontFeatureSettings = "tnum",
         ),
         fontWeight = FontWeight.Medium,
         color = Color.White,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
         modifier = Modifier.testTag("cash_now_value"),
       )
 
@@ -175,7 +189,7 @@ fun TreasuryPortfolioHeroCard(
         Row(
           modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = if (isNarrow) 8.dp else 14.dp, vertical = 12.dp),
           horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -417,23 +431,33 @@ fun CoinbaseKpiMetricCard(
   modifier: Modifier = Modifier,
 ) {
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
+  val isNarrow = adaptive.isNarrowPhone
   val shape = RoundedCornerShape(20.dp)
+  val (hoverInteraction, hoverBorder) = rememberSyndicatHoverBorder(
+    baseBorder = BorderStroke(1.dp, tokens.cardBorder),
+  )
 
   Surface(
     shape = shape,
     color = tokens.cardBg,
-    border = BorderStroke(1.dp, tokens.cardBorder),
+    border = hoverBorder,
     tonalElevation = 0.dp,
     shadowElevation = 0.dp,
     modifier = modifier
-      .heightIn(min = 132.dp)
+      .heightIn(min = if (isNarrow) 118.dp else 132.dp)
       .clip(shape)
-      .clickable(onClick = onClick),
+      .syndicatPointerHover(hoverInteraction)
+      .clickable(
+        interactionSource = hoverInteraction,
+        indication = androidx.compose.material3.ripple(),
+        onClick = onClick,
+      ),
   ) {
     Column(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(16.dp),
+        .padding(if (isNarrow) 12.dp else 16.dp),
       verticalArrangement = Arrangement.SpaceBetween,
     ) {
       Row(
@@ -463,7 +487,7 @@ fun CoinbaseKpiMetricCard(
         )
       }
 
-      Spacer(modifier = Modifier.height(12.dp))
+      Spacer(modifier = Modifier.height(if (isNarrow) 8.dp else 12.dp))
 
       Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Text(
@@ -475,7 +499,7 @@ fun CoinbaseKpiMetricCard(
         )
         Text(
           text = valueText,
-          style = MaterialTheme.typography.titleLarge.copy(
+          style = (if (isNarrow) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge).copy(
             fontFamily = numericFont,
             fontFeatureSettings = "tnum",
           ),
@@ -511,6 +535,8 @@ fun CollectionRateRingCard(
 ) {
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
+  val isNarrow = adaptive.isNarrowPhone
   val shape = RoundedCornerShape(20.dp)
   val clamped = ratePercent.coerceIn(0, 100)
   val animatedSweepFraction = androidx.compose.runtime.remember(clamped) { clamped / 100f }
@@ -525,22 +551,30 @@ fun CollectionRateRingCard(
     else -> tokens.warning
   }
   val trackColor = tokens.divider
+  val (hoverInteraction, hoverBorder) = rememberSyndicatHoverBorder(
+    baseBorder = BorderStroke(tokens.borderStrokeDp.dp, tokens.cardBorder),
+  )
 
   Surface(
     shape = shape,
     color = tokens.cardBg,
-    border = BorderStroke(tokens.borderStrokeDp.dp, tokens.cardBorder),
+    border = hoverBorder,
     tonalElevation = 0.dp,
     shadowElevation = 0.dp,
     modifier = modifier
-      .heightIn(min = 132.dp)
+      .heightIn(min = if (isNarrow) 118.dp else 132.dp)
       .clip(shape)
-      .clickable(onClick = onClick),
+      .syndicatPointerHover(hoverInteraction)
+      .clickable(
+        interactionSource = hoverInteraction,
+        indication = androidx.compose.material3.ripple(),
+        onClick = onClick,
+      ),
   ) {
     Column(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(16.dp),
+        .padding(if (isNarrow) 12.dp else 16.dp),
       verticalArrangement = Arrangement.SpaceBetween,
     ) {
       Row(
@@ -549,7 +583,7 @@ fun CollectionRateRingCard(
         verticalAlignment = Alignment.CenterVertically,
       ) {
         Box(
-          modifier = Modifier.size(38.dp),
+          modifier = Modifier.size(if (isNarrow) 34.dp else 38.dp),
           contentAlignment = Alignment.Center,
         ) {
           Canvas(modifier = Modifier.fillMaxSize()) {
@@ -584,7 +618,7 @@ fun CollectionRateRingCard(
         )
       }
 
-      Spacer(modifier = Modifier.height(10.dp))
+      Spacer(modifier = Modifier.height(if (isNarrow) 8.dp else 10.dp))
 
       Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Text(
@@ -596,7 +630,7 @@ fun CollectionRateRingCard(
         )
         Text(
           text = bidiLtr("${localizeDigits(clamped.toString(), digitsAr)}%"),
-          style = MaterialTheme.typography.titleLarge.copy(
+          style = (if (isNarrow) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge).copy(
             fontFamily = numericFont,
             fontFeatureSettings = "tnum",
           ),
@@ -630,6 +664,8 @@ fun MonthlyCollectionsChartCard(
 ) {
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
+  val isNarrow = adaptive.isNarrowPhone
   val cfg = data.config
   val cur = cfg.currency
   val dig = cfg.digitsAr
@@ -642,7 +678,7 @@ fun MonthlyCollectionsChartCard(
     modifier = Modifier
       .fillMaxWidth()
       .testTag("dash_monthly_chart_card"),
-    padding = 20.dp,
+    padding = if (isNarrow) 14.dp else 20.dp,
     onClick = onClick,
   ) {
     Row(
@@ -722,6 +758,7 @@ fun MonthlyCollectionsChartCard(
     if (activeMonths.isNotEmpty()) {
       Spacer(modifier = Modifier.height(18.dp))
 
+      val denseCols = isNarrow && activeMonths.size >= 8
       val guideLineColor = tokens.divider
       Surface(
         shape = RoundedCornerShape(14.dp),
@@ -749,8 +786,11 @@ fun MonthlyCollectionsChartCard(
                 strokeWidth = 0.75.dp.toPx(),
               )
             }
-            .padding(horizontal = 10.dp, vertical = 14.dp),
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(
+              horizontal = if (denseCols) 6.dp else 10.dp,
+              vertical = 14.dp,
+            ),
+          horizontalArrangement = Arrangement.spacedBy(if (denseCols) 2.dp else 6.dp),
           verticalAlignment = Alignment.Bottom,
         ) {
           activeMonths.forEach { month ->
@@ -775,14 +815,34 @@ fun MonthlyCollectionsChartCard(
               label = "chart_prev_bar_${month.key}",
             )
 
+            val valueDisplay = when {
+              collected <= 0L -> "0"
+              denseCols && collected >= 1000L -> {
+                val thousands = collected / 1000L
+                val tenths = (collected % 1000L) / 100L
+                val raw = if (tenths > 0L && thousands < 10L) "${thousands}.${tenths}k" else "${thousands}k"
+                localizeDigits(raw, dig)
+              }
+              else -> formatNumber(collected, dig)
+            }
+            val monthLabelText = if (denseCols) {
+              strings.monthShort(month).take(3)
+            } else {
+              strings.monthShort(month).take(4)
+            }
+
             Column(
               modifier = Modifier.weight(1f),
               horizontalAlignment = Alignment.CenterHorizontally,
               verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
               Text(
-                text = if (collected > 0L) formatNumber(collected, dig) else "0",
-                style = MaterialTheme.typography.labelSmall,
+                text = valueDisplay,
+                style = if (denseCols) {
+                  MaterialTheme.typography.labelSmall.copy(fontSize = 8.5.sp, lineHeight = 10.sp)
+                } else {
+                  MaterialTheme.typography.labelSmall
+                },
                 fontFamily = numericFont,
                 fontWeight = if (collected > 0L) FontWeight.SemiBold else FontWeight.Normal,
                 color = if (collected > 0L) tokens.inkDeep else tokens.mute,
@@ -821,8 +881,12 @@ fun MonthlyCollectionsChartCard(
                 }
               }
               Text(
-                text = strings.monthShort(month).take(4),
-                style = MaterialTheme.typography.labelSmall,
+                text = monthLabelText,
+                style = if (denseCols) {
+                  MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, lineHeight = 10.sp)
+                } else {
+                  MaterialTheme.typography.labelSmall
+                },
                 fontWeight = FontWeight.Medium,
                 color = tokens.body,
                 maxLines = 1,

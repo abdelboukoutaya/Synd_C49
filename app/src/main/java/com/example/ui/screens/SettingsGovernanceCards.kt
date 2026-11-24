@@ -59,6 +59,7 @@ import com.example.data.local.SyndicatRoleMode
 import com.example.ui.components.AirtableSoftCard
 import com.example.ui.components.FintechTextField
 import com.example.ui.components.FintechWhiteCard
+import com.example.ui.components.LocalSyndicatAdaptiveSpec
 import com.example.ui.components.MetaCobaltBuyButton
 import com.example.ui.components.SageSecondaryButton
 import com.example.ui.components.SyndicatDialog
@@ -85,13 +86,14 @@ fun MultiBuildingManagementCard(
 ) {
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
   var showAddDialog by remember { mutableStateOf(false) }
 
   AirtableSoftCard(
     modifier = Modifier
       .fillMaxWidth()
       .testTag("settings_multi_building_card"),
-    padding = 24.dp,
+    padding = if (adaptive.isNarrowPhone) 16.dp else 22.dp,
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
       Text(
@@ -267,6 +269,7 @@ fun CouncilShareCard(
   val context = LocalContext.current
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
   val scope = rememberCoroutineScope()
 
   var generatedQrState by remember { mutableStateOf<CouncilQrDisplayState?>(null) }
@@ -338,7 +341,7 @@ fun CouncilShareCard(
     modifier = Modifier
       .fillMaxWidth()
       .testTag("settings_council_share_card"),
-    padding = 24.dp,
+    padding = if (adaptive.isNarrowPhone) 16.dp else 22.dp,
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
       Text(
@@ -371,36 +374,67 @@ fun CouncilShareCard(
         )
       }
 
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
-        SageSecondaryButton(
-          text = strings.councilGenerateCodeBtn,
-          icon = Icons.Default.QrCode2,
-          compact = true,
-          onClick = {
-            runCatching {
-              val payload = SyndicatCouncilShareCodec.encodeShareCode(data, specialCalls)
-              val qrBitmap = CouncilQrCodeHelper.encodeShareQrBitmap(payload)
-              val cashText = formatDh(data.cashNowDh, data.config.currency, data.config.digitsAr)
-              val summary = "${strings.dashUnitsSummary(data.upToDateCount, data.occupiedCount)} · $cashText"
-              CouncilQrDisplayState(qrBitmap = qrBitmap, summaryText = summary)
-            }.onSuccess { qrState ->
-              generatedQrState = qrState
-            }.onFailure { err ->
-              onMessage(err.localizedMessage ?: "Erreur QR Code")
-            }
-          },
-          modifier = Modifier.weight(1f).testTag("generate_council_code_btn"),
-        )
-        SageSecondaryButton(
-          text = strings.councilImportCodeBtn,
-          icon = Icons.Default.QrCodeScanner,
-          compact = true,
-          onClick = { showImportDialog = true },
-          modifier = Modifier.weight(1f).testTag("import_council_code_btn"),
-        )
+      if (adaptive.isVeryNarrowPhone) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          SageSecondaryButton(
+            text = strings.councilGenerateCodeBtn,
+            icon = Icons.Default.QrCode2,
+            compact = true,
+            onClick = {
+              runCatching {
+                val payload = SyndicatCouncilShareCodec.encodeShareCode(data, specialCalls)
+                val qrBitmap = CouncilQrCodeHelper.encodeShareQrBitmap(payload)
+                val cashText = formatDh(data.cashNowDh, data.config.currency, data.config.digitsAr)
+                val summary = "${strings.dashUnitsSummary(data.upToDateCount, data.occupiedCount)} · $cashText"
+                CouncilQrDisplayState(qrBitmap = qrBitmap, summaryText = summary)
+              }.onSuccess { qrState ->
+                generatedQrState = qrState
+              }.onFailure { err ->
+                onMessage(err.localizedMessage ?: "Erreur QR Code")
+              }
+            },
+            modifier = Modifier.fillMaxWidth().testTag("generate_council_code_btn"),
+          )
+          SageSecondaryButton(
+            text = strings.councilImportCodeBtn,
+            icon = Icons.Default.QrCodeScanner,
+            compact = true,
+            onClick = { showImportDialog = true },
+            modifier = Modifier.fillMaxWidth().testTag("import_council_code_btn"),
+          )
+        }
+      } else {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          SageSecondaryButton(
+            text = strings.councilGenerateCodeBtn,
+            icon = Icons.Default.QrCode2,
+            compact = true,
+            onClick = {
+              runCatching {
+                val payload = SyndicatCouncilShareCodec.encodeShareCode(data, specialCalls)
+                val qrBitmap = CouncilQrCodeHelper.encodeShareQrBitmap(payload)
+                val cashText = formatDh(data.cashNowDh, data.config.currency, data.config.digitsAr)
+                val summary = "${strings.dashUnitsSummary(data.upToDateCount, data.occupiedCount)} · $cashText"
+                CouncilQrDisplayState(qrBitmap = qrBitmap, summaryText = summary)
+              }.onSuccess { qrState ->
+                generatedQrState = qrState
+              }.onFailure { err ->
+                onMessage(err.localizedMessage ?: "Erreur QR Code")
+              }
+            },
+            modifier = Modifier.weight(1f).testTag("generate_council_code_btn"),
+          )
+          SageSecondaryButton(
+            text = strings.councilImportCodeBtn,
+            icon = Icons.Default.QrCodeScanner,
+            compact = true,
+            onClick = { showImportDialog = true },
+            modifier = Modifier.weight(1f).testTag("import_council_code_btn"),
+          )
+        }
       }
     }
   }
@@ -475,7 +509,7 @@ fun CouncilShareCard(
                 contentDescription = strings.councilQrImageDesc,
                 filterQuality = FilterQuality.None,
                 modifier = Modifier
-                  .size(228.dp)
+                  .size(if (adaptive.isNarrowPhone) 184.dp else 228.dp)
                   .testTag("council_qr_image"),
               )
             }

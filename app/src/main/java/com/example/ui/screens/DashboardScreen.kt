@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -82,6 +83,7 @@ import com.example.data.local.SpecialCallRecord
 import com.example.data.model.ApartmentRecord
 import com.example.data.model.ExpenseRecord
 import com.example.data.model.ProjectRecord
+import com.example.ui.components.AdaptiveContentBox
 import com.example.ui.components.CoinbaseKpiMetricCard
 import com.example.ui.components.CollectionRateRingCard
 import com.example.ui.components.DashboardQuickActionButton
@@ -89,6 +91,7 @@ import com.example.ui.components.FintechWhiteCard
 import com.example.ui.components.GlobalSearchDialog
 import com.example.ui.components.HeroOverlayCircleButton
 import com.example.ui.components.LocalPrivacyMode
+import com.example.ui.components.LocalSyndicatAdaptiveSpec
 import com.example.ui.components.MetaCobaltBuyButton
 import com.example.ui.components.MonthlyCollectionsChartCard
 import com.example.ui.components.ReadOnlyCouncilBanner
@@ -168,12 +171,14 @@ fun DashboardScreen(
 ) {
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
   val isPrivacy = LocalPrivacyMode.current || isPrivacyMode
   val cfg = data.config
   val cur = cfg.currency
   val dig = cfg.digitsAr
   val isAr = strings.language == AppLanguage.AR
   val numericFont = tokens.numericFontFamily
+  val maxContentWidth = if (adaptive.isExpanded) adaptive.wideContainerMaxWidth else adaptive.readableMaxWidth
 
   val listState = rememberLazyListState()
   val showStickyTreasuryBar by remember {
@@ -249,17 +254,18 @@ fun DashboardScreen(
         .fillMaxSize()
         .testTag("dashboard_screen"),
       contentPadding = PaddingValues(
-        start = 16.dp,
-        end = 16.dp,
+        start = adaptive.horizontalPadding,
+        end = adaptive.horizontalPadding,
         top = 14.dp,
-        bottom = 96.dp,
+        bottom = adaptive.listBottomPadding,
       ),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
+      verticalArrangement = Arrangement.spacedBy(adaptive.sectionSpacing),
     ) {
       // =========================================================================
       // 1. BANNIÈRE PHOTO PERSONNALISÉE DE LA RÉSIDENCE (avec léger parallaxe au scroll)
       // =========================================================================
       item(key = "dash_hero_residence") {
+        AdaptiveContentBox(maxWidth = maxContentWidth) {
         val cityPart = if (cfg.city.isNotBlank()) " · ${cfg.city}" else ""
         val addrPart = if (cfg.address.isNotBlank()) " · ${cfg.address}" else ""
         val subText = "${cfg.syndicatName.ifBlank { strings.authTitle }}$cityPart$addrPart"
@@ -332,73 +338,109 @@ fun DashboardScreen(
             },
           )
         }
+        }
       }
 
-      // =========================================================================
-      // 2. CARTE PORTEFEUILLE DE TRÉSORERIE EN DIRECT (Coinbase Editorial Dark)
-      // =========================================================================
-      item(key = "dash_treasury_portfolio") {
-        TreasuryPortfolioHeroCard(
-          data = data,
-          numericFont = numericFont,
-          onUnpaidExpensesClick = onNavigateToUnpaidExpenses,
-        )
+      val quickActionsBlock: @Composable () -> Unit = {
+        if (adaptive.isVeryNarrowPhone) {
+          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              DashboardQuickActionButton(
+                icon = Icons.Default.Payments,
+                label = strings.dashQuickCotisations,
+                isPrimary = true,
+                onClick = onNavigateToApartments,
+                modifier = Modifier
+                  .weight(1f)
+                  .testTag("dash_quick_cotisations_btn"),
+              )
+              DashboardQuickActionButton(
+                icon = Icons.AutoMirrored.Filled.ReceiptLong,
+                label = strings.dashQuickExpenses,
+                isPrimary = false,
+                onClick = onNavigateToExpenses,
+                modifier = Modifier
+                  .weight(1f)
+                  .testTag("dash_quick_expenses_btn"),
+              )
+            }
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              DashboardQuickActionButton(
+                icon = Icons.AutoMirrored.Filled.Send,
+                label = strings.dashQuickRemind,
+                isPrimary = false,
+                badgeCount = data.reminderQueueApartments.size,
+                digitsAr = dig,
+                onClick = triggerSendReminders,
+                modifier = Modifier
+                  .weight(1f)
+                  .testTag("dash_quick_remind_btn"),
+              )
+              DashboardQuickActionButton(
+                icon = Icons.Default.PictureAsPdf,
+                label = strings.dashQuickExports,
+                isPrimary = false,
+                onClick = onNavigateToPosters,
+                modifier = Modifier
+                  .weight(1f)
+                  .testTag("dash_quick_posters_btn"),
+              )
+            }
+          }
+        } else {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(if (adaptive.isNarrowPhone) 6.dp else 10.dp),
+          ) {
+            DashboardQuickActionButton(
+              icon = Icons.Default.Payments,
+              label = strings.dashQuickCotisations,
+              isPrimary = true,
+              onClick = onNavigateToApartments,
+              modifier = Modifier
+                .weight(1f)
+                .testTag("dash_quick_cotisations_btn"),
+            )
+            DashboardQuickActionButton(
+              icon = Icons.AutoMirrored.Filled.ReceiptLong,
+              label = strings.dashQuickExpenses,
+              isPrimary = false,
+              onClick = onNavigateToExpenses,
+              modifier = Modifier
+                .weight(1f)
+                .testTag("dash_quick_expenses_btn"),
+            )
+            DashboardQuickActionButton(
+              icon = Icons.AutoMirrored.Filled.Send,
+              label = strings.dashQuickRemind,
+              isPrimary = false,
+              badgeCount = data.reminderQueueApartments.size,
+              digitsAr = dig,
+              onClick = triggerSendReminders,
+              modifier = Modifier
+                .weight(1f)
+                .testTag("dash_quick_remind_btn"),
+            )
+            DashboardQuickActionButton(
+              icon = Icons.Default.PictureAsPdf,
+              label = strings.dashQuickExports,
+              isPrimary = false,
+              onClick = onNavigateToPosters,
+              modifier = Modifier
+                .weight(1f)
+                .testTag("dash_quick_posters_btn"),
+            )
+          }
+        }
       }
 
-    // =========================================================================
-    // 3. BARRE DE 4 ACTIONS RAPIDES (Style Coinbase Portfolio Actions)
-    // =========================================================================
-    item(key = "dash_quick_actions_row") {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-      ) {
-        DashboardQuickActionButton(
-          icon = Icons.Default.Payments,
-          label = strings.dashQuickCotisations,
-          isPrimary = true,
-          onClick = onNavigateToApartments,
-          modifier = Modifier
-            .weight(1f)
-            .testTag("dash_quick_cotisations_btn"),
-        )
-        DashboardQuickActionButton(
-          icon = Icons.AutoMirrored.Filled.ReceiptLong,
-          label = strings.dashQuickExpenses,
-          isPrimary = false,
-          onClick = onNavigateToExpenses,
-          modifier = Modifier
-            .weight(1f)
-            .testTag("dash_quick_expenses_btn"),
-        )
-        DashboardQuickActionButton(
-          icon = Icons.AutoMirrored.Filled.Send,
-          label = strings.dashQuickRemind,
-          isPrimary = false,
-          badgeCount = data.reminderQueueApartments.size,
-          digitsAr = dig,
-          onClick = triggerSendReminders,
-          modifier = Modifier
-            .weight(1f)
-            .testTag("dash_quick_remind_btn"),
-        )
-        DashboardQuickActionButton(
-          icon = Icons.Default.PictureAsPdf,
-          label = strings.dashQuickExports,
-          isPrimary = false,
-          onClick = onNavigateToPosters,
-          modifier = Modifier
-            .weight(1f)
-            .testTag("dash_quick_posters_btn"),
-        )
-      }
-    }
-
-    // =========================================================================
-    // 4. ALERTE SAUVEGARDE JSON (uniquement mise en avant lorsqu'en retard)
-    // =========================================================================
-    if (isBackupOverdue) {
-      item(key = "dash_backup_banner") {
+      val backupBannerBlock: @Composable () -> Unit = {
         val warnBg = if (tokens.isDark) Color(0xFF2B2209) else CoinbaseWarningTintLight
         Surface(
           shape = RoundedCornerShape(16.dp),
@@ -410,15 +452,17 @@ fun DashboardScreen(
             .fillMaxWidth()
             .testTag("backup_reminder_banner"),
         ) {
-          Row(
+          FlowRow(
             modifier = Modifier
               .fillMaxWidth()
-              .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+              .padding(horizontal = if (adaptive.isNarrowPhone) 12.dp else 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
           ) {
             Row(
-              modifier = Modifier.weight(1f),
+              modifier = Modifier
+                .weight(1f, fill = false)
+                .align(Alignment.CenterVertically),
               verticalAlignment = Alignment.CenterVertically,
               horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -435,393 +479,386 @@ fun DashboardScreen(
                 color = tokens.inkDeep,
               )
             }
-            Spacer(modifier = Modifier.width(10.dp))
             SageSecondaryButton(
               text = strings.dashBackupNowBtn,
               icon = Icons.Default.Backup,
               compact = true,
               onClick = onTriggerBackupJson,
-              modifier = Modifier.testTag("dash_backup_now_btn"),
+              modifier = Modifier
+                .align(Alignment.CenterVertically)
+                .testTag("dash_backup_now_btn"),
             )
           }
         }
       }
-    }
 
-    // =========================================================================
-    // 5. GRILLE 2×2 DES INDICATEURS CLÉS (Cartes Coinbase épurées + Anneau %)
-    // =========================================================================
-    item(key = "dash_kpi_grid") {
-      val balanceText = formatDh(data.balanceDh, cur, dig)
-      val posBg = if (tokens.isDark) Color(0xFF0A2E1F) else CoinbaseSuccessTintLight
-      val negBg = if (tokens.isDark) CoinbaseDarkErrorContainer else CoinbaseErrorTintLight
-      val blueBg = if (tokens.isDark) CoinbaseDarkBlueContainer else CoinbasePrimaryTintLight
+      val kpiGridBlock: @Composable () -> Unit = {
+        val balanceText = formatDh(data.balanceDh, cur, dig)
+        val posBg = if (tokens.isDark) Color(0xFF0A2E1F) else CoinbaseSuccessTintLight
+        val negBg = if (tokens.isDark) CoinbaseDarkErrorContainer else CoinbaseErrorTintLight
+        val blueBg = if (tokens.isDark) CoinbaseDarkBlueContainer else CoinbasePrimaryTintLight
+        val kpiGap = if (adaptive.isNarrowPhone) 8.dp else 12.dp
 
-      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-          CoinbaseKpiMetricCard(
-            icon = Icons.AutoMirrored.Filled.TrendingUp,
-            iconTint = tokens.positiveDeep,
-            iconContainer = posBg,
-            label = strings.dashCollectedLabel,
-            valueText = maskSensitiveDh(formatDh(data.totalCaisseDh, cur, dig), isPrivacy),
-            valueColor = tokens.positiveDeep,
-            subtitle = "${formatNumber(cfg.activeMonthColumns.size.toLong(), dig)} ${if (isAr) "أشهر نشطة" else "mois actifs"}",
-            numericFont = numericFont,
-            onClick = onNavigateToApartments,
-            modifier = Modifier
-              .weight(1f)
-              .testTag("kpi_collected_card"),
-          )
-          CoinbaseKpiMetricCard(
-            icon = Icons.AutoMirrored.Filled.TrendingDown,
-            iconTint = tokens.negativeDeep,
-            iconContainer = negBg,
-            label = strings.dashExpensesLabel,
-            valueText = maskSensitiveDh(formatDh(data.totalExpensesDh, cur, dig), isPrivacy),
-            valueColor = tokens.inkDeep,
-            subtitle = "${formatNumber(data.expenses.size.toLong(), dig)} ${if (isAr) "عمليات" else "opérations"}",
-            numericFont = numericFont,
-            onClick = onNavigateToExpenses,
-            modifier = Modifier
-              .weight(1f)
-              .testTag("kpi_expenses_card"),
-          )
-        }
+        Column(verticalArrangement = Arrangement.spacedBy(kpiGap)) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(kpiGap),
+          ) {
+            CoinbaseKpiMetricCard(
+              icon = Icons.AutoMirrored.Filled.TrendingUp,
+              iconTint = tokens.positiveDeep,
+              iconContainer = posBg,
+              label = strings.dashCollectedLabel,
+              valueText = maskSensitiveDh(formatDh(data.totalCaisseDh, cur, dig), isPrivacy),
+              valueColor = tokens.positiveDeep,
+              subtitle = "${formatNumber(cfg.activeMonthColumns.size.toLong(), dig)} ${if (isAr) "أشهر نشطة" else "mois actifs"}",
+              numericFont = numericFont,
+              onClick = onNavigateToApartments,
+              modifier = Modifier
+                .weight(1f)
+                .testTag("kpi_collected_card"),
+            )
+            CoinbaseKpiMetricCard(
+              icon = Icons.AutoMirrored.Filled.TrendingDown,
+              iconTint = tokens.negativeDeep,
+              iconContainer = negBg,
+              label = strings.dashExpensesLabel,
+              valueText = maskSensitiveDh(formatDh(data.totalExpensesDh, cur, dig), isPrivacy),
+              valueColor = tokens.inkDeep,
+              subtitle = "${formatNumber(data.expenses.size.toLong(), dig)} ${if (isAr) "عمليات" else "opérations"}",
+              numericFont = numericFont,
+              onClick = onNavigateToExpenses,
+              modifier = Modifier
+                .weight(1f)
+                .testTag("kpi_expenses_card"),
+            )
+          }
 
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-          // Carte Taux de recouvrement avec anneau circulaire Canvas
-          CollectionRateRingCard(
-            ratePercent = data.collectionRatePercent,
-            upToDateCount = data.upToDateCount,
-            occupiedCount = data.occupiedCount,
-            digitsAr = dig,
-            numericFont = numericFont,
-            onClick = onNavigateToApartments,
-            modifier = Modifier
-              .weight(1f)
-              .testTag("kpi_rate_card"),
-          )
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(kpiGap),
+          ) {
+            CollectionRateRingCard(
+              ratePercent = data.collectionRatePercent,
+              upToDateCount = data.upToDateCount,
+              occupiedCount = data.occupiedCount,
+              digitsAr = dig,
+              numericFont = numericFont,
+              onClick = onNavigateToApartments,
+              modifier = Modifier
+                .weight(1f)
+                .testTag("kpi_rate_card"),
+            )
 
-          CoinbaseKpiMetricCard(
-            icon = Icons.Default.AccountBalanceWallet,
-            iconTint = tokens.linkColor,
-            iconContainer = blueBg,
-            label = strings.dashNetBalanceLabel,
-            valueText = maskSensitiveDh(balanceText, isPrivacy),
-            valueColor = if (data.balanceDh >= 0L) tokens.inkDeep else tokens.negativeDeep,
-            subtitle = if (isAr) "المداخيل − المصاريف" else "Recettes − Dépenses",
-            numericFont = numericFont,
-            onClick = if (data.unpaidExpensesDh > 0L) onNavigateToUnpaidExpenses else onNavigateToExpenses,
-            modifier = Modifier
-              .weight(1f)
-              .testTag("kpi_balance_card"),
-          )
+            CoinbaseKpiMetricCard(
+              icon = Icons.Default.AccountBalanceWallet,
+              iconTint = tokens.linkColor,
+              iconContainer = blueBg,
+              label = strings.dashNetBalanceLabel,
+              valueText = maskSensitiveDh(balanceText, isPrivacy),
+              valueColor = if (data.balanceDh >= 0L) tokens.inkDeep else tokens.negativeDeep,
+              subtitle = if (isAr) "المداخيل − المصاريف" else "Recettes − Dépenses",
+              numericFont = numericFont,
+              onClick = if (data.unpaidExpensesDh > 0L) onNavigateToUnpaidExpenses else onNavigateToExpenses,
+              modifier = Modifier
+                .weight(1f)
+                .testTag("kpi_balance_card"),
+            )
+          }
         }
       }
-    }
 
-    // =========================================================================
-    // 6. CARROUSEL ÉCHÉANCES & PRIORITÉS + CENTRE DE RECOUVREMENT WHATSAPP
-    // =========================================================================
-    item(key = "dash_collection_action_center") {
-      Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        UpcomingPrioritiesCarousel(
-          data = data,
-          specialCalls = specialCalls,
-          isBackupOverdue = isBackupOverdue,
-          isAr = isAr,
-          numericFont = numericFont,
-          onLateClick = onNavigateToLateApartments,
-          onUnpaidExpensesClick = onNavigateToUnpaidExpenses,
-          onSpecialCallsClick = onNavigateToSpecialCalls,
-          onBackupClick = onTriggerBackupJson,
-        )
-      if (data.lateApartments.isEmpty()) {
-        val okBg = if (tokens.isDark) Color(0xFF0A2E1F) else CoinbaseSuccessTintLight
-        Surface(
-          shape = RoundedCornerShape(tokens.cardRadiusDp.dp),
-          color = okBg,
-          border = BorderStroke(1.dp, tokens.positive.copy(alpha = 0.35f)),
-          tonalElevation = 0.dp,
-          shadowElevation = 0.dp,
-          modifier = Modifier
-            .fillMaxWidth()
-            .testTag("all_paid_card"),
-        ) {
-          Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-          ) {
-            Row(
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-              Surface(
-                shape = CircleShape,
-                color = tokens.positive.copy(alpha = 0.18f),
-                modifier = Modifier.size(44.dp),
-              ) {
-                Box(contentAlignment = Alignment.Center) {
-                  Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = null,
-                    tint = tokens.positiveDeep,
-                    modifier = Modifier.size(24.dp),
-                  )
-                }
-              }
-              Column(modifier = Modifier.weight(1f)) {
-                Text(
-                  text = strings.dashAllPaidTitle,
-                  style = MaterialTheme.typography.titleMedium,
-                  fontWeight = FontWeight.SemiBold,
-                  color = tokens.inkDeep,
-                )
-                Text(
-                  text = strings.dashAllPaidSub,
-                  style = MaterialTheme.typography.bodySmall,
-                  color = tokens.body,
-                )
-              }
-            }
-            SageSecondaryButton(
-              text = strings.dashSendRemindersBtn,
-              icon = Icons.AutoMirrored.Filled.Send,
-              compact = true,
-              onClick = triggerSendReminders,
+      val collectionActionCenterBlock: @Composable () -> Unit = {
+        Column(verticalArrangement = Arrangement.spacedBy(adaptive.sectionSpacing)) {
+          UpcomingPrioritiesCarousel(
+            data = data,
+            specialCalls = specialCalls,
+            isBackupOverdue = isBackupOverdue,
+            isAr = isAr,
+            numericFont = numericFont,
+            onLateClick = onNavigateToLateApartments,
+            onUnpaidExpensesClick = onNavigateToUnpaidExpenses,
+            onSpecialCallsClick = onNavigateToSpecialCalls,
+            onBackupClick = onTriggerBackupJson,
+          )
+          if (data.lateApartments.isEmpty()) {
+            val okBg = if (tokens.isDark) Color(0xFF0A2E1F) else CoinbaseSuccessTintLight
+            Surface(
+              shape = RoundedCornerShape(tokens.cardRadiusDp.dp),
+              color = okBg,
+              border = BorderStroke(1.dp, tokens.positive.copy(alpha = 0.35f)),
+              tonalElevation = 0.dp,
+              shadowElevation = 0.dp,
               modifier = Modifier
                 .fillMaxWidth()
-                .testTag("dash_send_reminders_cta"),
-            )
-          }
-        }
-      } else {
-        // Carte Recouvrement & Relances WhatsApp (Coinbase crisp white/dark card + Primary Blue CTA)
-        Surface(
-          shape = RoundedCornerShape(tokens.cardRadiusDp.dp),
-          color = tokens.cardBg,
-          border = BorderStroke(1.dp, tokens.cardBorder),
-          tonalElevation = 0.dp,
-          shadowElevation = 0.dp,
-          modifier = Modifier
-            .fillMaxWidth()
-            .testTag("unpaid_feature_dark_card"),
-        ) {
-          Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-          ) {
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically,
+                .testTag("all_paid_card"),
             ) {
-              val errTint = if (tokens.isDark) CoinbaseDarkErrorContainer else CoinbaseErrorTintLight
-              Surface(
-                shape = RoundedCornerShape(100.dp),
-                color = errTint,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
+              Column(
+                modifier = Modifier.padding(adaptive.cardPadding),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
               ) {
                 Row(
                   verticalAlignment = Alignment.CenterVertically,
-                  horizontalArrangement = Arrangement.spacedBy(6.dp),
-                  modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                  horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                  Box(
-                    modifier = Modifier
-                      .size(6.dp)
-                      .clip(CircleShape)
-                      .background(tokens.statusLateText),
+                  Surface(
+                    shape = CircleShape,
+                    color = tokens.positive.copy(alpha = 0.18f),
+                    modifier = Modifier.size(44.dp),
+                  ) {
+                    Box(contentAlignment = Alignment.Center) {
+                      Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = tokens.positiveDeep,
+                        modifier = Modifier.size(24.dp),
+                      )
+                    }
+                  }
+                  Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                      text = strings.dashAllPaidTitle,
+                      style = MaterialTheme.typography.titleMedium,
+                      fontWeight = FontWeight.SemiBold,
+                      color = tokens.inkDeep,
+                    )
+                    Text(
+                      text = strings.dashAllPaidSub,
+                      style = MaterialTheme.typography.bodySmall,
+                      color = tokens.body,
+                    )
+                  }
+                }
+                SageSecondaryButton(
+                  text = strings.dashSendRemindersBtn,
+                  icon = Icons.AutoMirrored.Filled.Send,
+                  compact = true,
+                  onClick = triggerSendReminders,
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("dash_send_reminders_cta"),
+                )
+              }
+            }
+          } else {
+            Surface(
+              shape = RoundedCornerShape(tokens.cardRadiusDp.dp),
+              color = tokens.cardBg,
+              border = BorderStroke(1.dp, tokens.cardBorder),
+              tonalElevation = 0.dp,
+              shadowElevation = 0.dp,
+              modifier = Modifier
+                .fillMaxWidth()
+                .testTag("unpaid_feature_dark_card"),
+            ) {
+              Column(
+                modifier = Modifier.padding(adaptive.cardPadding),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+              ) {
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.CenterVertically,
+                ) {
+                  val errTint = if (tokens.isDark) CoinbaseDarkErrorContainer else CoinbaseErrorTintLight
+                  Surface(
+                    shape = RoundedCornerShape(100.dp),
+                    color = errTint,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
+                  ) {
+                    Row(
+                      verticalAlignment = Alignment.CenterVertically,
+                      horizontalArrangement = Arrangement.spacedBy(6.dp),
+                      modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                      Box(
+                        modifier = Modifier
+                          .size(6.dp)
+                          .clip(CircleShape)
+                          .background(tokens.statusLateText),
+                      )
+                      Text(
+                        text = strings.dashUnpaidSub(data.lateApartments.size),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = tokens.statusLateText,
+                      )
+                    }
+                  }
+
+                  Text(
+                    text = "${strings.monthShort(data.cutoffMonthColumn)} ${bidiLtr(localizeDigits(cfg.year.toString(), dig))}",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = tokens.mute,
+                  )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                  Text(
+                    text = strings.dashUnpaidTitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = tokens.body,
                   )
                   Text(
-                    text = strings.dashUnpaidSub(data.lateApartments.size),
-                    style = MaterialTheme.typography.labelMedium,
+                    text = maskSensitiveDh(formatDh(data.totalRemainingToCollectDh, cur, dig), isPrivacy),
+                    style = (if (adaptive.isNarrowPhone) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.headlineLarge).copy(
+                      fontFamily = numericFont,
+                      fontFeatureSettings = "tnum",
+                    ),
                     fontWeight = FontWeight.SemiBold,
                     color = tokens.statusLateText,
                   )
                 }
-              }
 
-              Text(
-                text = "${strings.monthShort(data.cutoffMonthColumn)} ${bidiLtr(localizeDigits(cfg.year.toString(), dig))}",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Medium,
-                color = tokens.mute,
-              )
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-              Text(
-                text = strings.dashUnpaidTitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = tokens.body,
-              )
-              Text(
-                text = maskSensitiveDh(formatDh(data.totalRemainingToCollectDh, cur, dig), isPrivacy),
-                style = MaterialTheme.typography.headlineLarge.copy(
-                  fontFamily = numericFont,
-                  fontFeatureSettings = "tnum",
-                ),
-                fontWeight = FontWeight.SemiBold,
-                color = tokens.statusLateText,
-              )
-            }
-
-            // Bouton primaire Bleu Coinbase (#0052FF) + bouton secondaire vers la liste filtrée
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-              MetaCobaltBuyButton(
-                text = strings.dashSendRemindersBtn,
-                icon = Icons.AutoMirrored.Filled.Send,
-                onClick = triggerSendReminders,
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .testTag("dash_send_reminders_cta"),
-              )
-              SageSecondaryButton(
-                text = strings.dashViewLateBtn,
-                compact = true,
-                onClick = onNavigateToLateApartments,
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .testTag("dash_view_late_btn"),
-              )
-            }
-
-            // File prioritaire intégrée (jusqu'à 5 appartements à relancer immédiatement)
-            if (data.reminderQueueApartments.isNotEmpty()) {
-              HorizontalDivider(color = tokens.divider)
-              Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-              ) {
-                Text(
-                  text = strings.dashRelanceQueueTitle,
-                  style = MaterialTheme.typography.titleSmall,
-                  fontWeight = FontWeight.SemiBold,
-                  color = tokens.inkDeep,
-                )
-                Surface(
-                  shape = RoundedCornerShape(100.dp),
-                  color = tokens.surfaceStrong,
-                  tonalElevation = 0.dp,
-                  shadowElevation = 0.dp,
-                ) {
-                  Text(
-                    text = formatNumber(data.reminderQueueApartments.size.toLong(), dig),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontFamily = numericFont,
-                    fontWeight = FontWeight.SemiBold,
-                    color = tokens.inkDeep,
-                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                  MetaCobaltBuyButton(
+                    text = strings.dashSendRemindersBtn,
+                    icon = Icons.AutoMirrored.Filled.Send,
+                    onClick = triggerSendReminders,
+                    modifier = Modifier
+                      .fillMaxWidth()
+                      .testTag("dash_send_reminders_cta"),
+                  )
+                  SageSecondaryButton(
+                    text = strings.dashViewLateBtn,
+                    compact = true,
+                    onClick = onNavigateToLateApartments,
+                    modifier = Modifier
+                      .fillMaxWidth()
+                      .testTag("dash_view_late_btn"),
                   )
                 }
-              }
 
-              Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                data.reminderQueueApartments.take(5).forEach { apt ->
-                  val rem = apt.remainingDh(cfg)
-                  val missingLabels = apt.missingMonths(cfg).joinToString(" · ") { strings.monthShort(it) }
-                  val rawOwnerLabel = apt.displayOwner(isAr).ifBlank { "${strings.colAppt} ${apt.displayNumber}" }
-                  val ownerLabel = maskSensitiveName(rawOwnerLabel, isPrivacy)
-
-                  Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = tokens.surfaceSoft,
-                    border = BorderStroke(1.dp, tokens.divider),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp,
+                if (data.reminderQueueApartments.isNotEmpty()) {
+                  HorizontalDivider(color = tokens.divider)
+                  Row(
                     modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                   ) {
-                    Row(
-                      modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                      verticalAlignment = Alignment.CenterVertically,
-                      horizontalArrangement = Arrangement.SpaceBetween,
+                    Text(
+                      text = strings.dashRelanceQueueTitle,
+                      style = MaterialTheme.typography.titleSmall,
+                      fontWeight = FontWeight.SemiBold,
+                      color = tokens.inkDeep,
+                    )
+                    Surface(
+                      shape = RoundedCornerShape(100.dp),
+                      color = tokens.surfaceStrong,
+                      tonalElevation = 0.dp,
+                      shadowElevation = 0.dp,
                     ) {
-                      Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                      Text(
+                        text = formatNumber(data.reminderQueueApartments.size.toLong(), dig),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = numericFont,
+                        fontWeight = FontWeight.SemiBold,
+                        color = tokens.inkDeep,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+                      )
+                    }
+                  }
+
+                  Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    data.reminderQueueApartments.take(5).forEach { apt ->
+                      val rem = apt.remainingDh(cfg)
+                      val missingLabels = apt.missingMonths(cfg).joinToString(" · ") { strings.monthShort(it) }
+                      val rawOwnerLabel = apt.displayOwner(isAr).ifBlank { "${strings.colAppt} ${apt.displayNumber}" }
+                      val ownerLabel = maskSensitiveName(rawOwnerLabel, isPrivacy)
+
+                      Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = tokens.surfaceSoft,
+                        border = BorderStroke(1.dp, tokens.divider),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
+                        modifier = Modifier.fillMaxWidth(),
                       ) {
-                        Surface(
-                          shape = CircleShape,
-                          color = tokens.cardBg,
-                          border = BorderStroke(1.dp, tokens.cardBorder),
-                          modifier = Modifier.size(38.dp),
+                        Row(
+                          modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = if (adaptive.isNarrowPhone) 10.dp else 12.dp, vertical = 10.dp),
+                          verticalAlignment = Alignment.CenterVertically,
+                          horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
-                          Box(contentAlignment = Alignment.Center) {
-                            Text(
-                              text = localizeDigits(apt.displayNumber, dig),
-                              style = MaterialTheme.typography.labelLarge,
-                              fontFamily = numericFont,
-                              fontWeight = FontWeight.SemiBold,
-                              color = tokens.inkDeep,
-                            )
-                          }
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
                           Row(
+                            modifier = Modifier.weight(1f),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(if (adaptive.isNarrowPhone) 8.dp else 10.dp),
                           ) {
-                            Text(
-                              text = ownerLabel,
-                              style = MaterialTheme.typography.titleSmall,
-                              fontWeight = FontWeight.SemiBold,
-                              color = tokens.inkDeep,
-                              maxLines = 1,
-                              overflow = TextOverflow.Ellipsis,
-                              modifier = Modifier.weight(1f, fill = false),
-                            )
-                            if (apt.lastReminderAt > 0L) {
-                              val dateFmt = bidiLtr(
-                                localizeDigits(
-                                  SimpleDateFormat("dd/MM", Locale.US).format(Date(apt.lastReminderAt)),
-                                  dig,
+                            Surface(
+                              shape = CircleShape,
+                              color = tokens.cardBg,
+                              border = BorderStroke(1.dp, tokens.cardBorder),
+                              modifier = Modifier.size(if (adaptive.isNarrowPhone) 34.dp else 38.dp),
+                            ) {
+                              Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                  text = localizeDigits(apt.displayNumber, dig),
+                                  style = MaterialTheme.typography.labelLarge,
+                                  fontFamily = numericFont,
+                                  fontWeight = FontWeight.SemiBold,
+                                  color = tokens.inkDeep,
                                 )
+                              }
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                              Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                              ) {
+                                Text(
+                                  text = ownerLabel,
+                                  style = MaterialTheme.typography.titleSmall,
+                                  fontWeight = FontWeight.SemiBold,
+                                  color = tokens.inkDeep,
+                                  maxLines = 1,
+                                  overflow = TextOverflow.Ellipsis,
+                                  modifier = Modifier.weight(1f, fill = false),
+                                )
+                                if (apt.lastReminderAt > 0L) {
+                                  val dateFmt = bidiLtr(
+                                    localizeDigits(
+                                      SimpleDateFormat("dd/MM", Locale.US).format(Date(apt.lastReminderAt)),
+                                      dig,
+                                    )
+                                  )
+                                  RemindedPillBadge(label = "${strings.badgeReminded} $dateFmt")
+                                }
+                              }
+                              Text(
+                                text = "${strings.floorDisplay(apt.floor)} · $missingLabels",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = tokens.body,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                               )
-                              RemindedPillBadge(label = "${strings.badgeReminded} $dateFmt")
+                              Text(
+                                text = maskSensitiveDh(formatDh(rem, cur, dig), isPrivacy),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontFamily = numericFont,
+                                fontWeight = FontWeight.SemiBold,
+                                color = tokens.statusLateText,
+                              )
                             }
                           }
-                          Text(
-                            text = "${strings.floorDisplay(apt.floor)} · $missingLabels",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = tokens.body,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                          )
-                          Text(
-                            text = maskSensitiveDh(formatDh(rem, cur, dig), isPrivacy),
-                            style = MaterialTheme.typography.labelLarge,
-                            fontFamily = numericFont,
-                            fontWeight = FontWeight.SemiBold,
-                            color = tokens.statusLateText,
+
+                          Spacer(modifier = Modifier.width(6.dp))
+
+                          SageSecondaryButton(
+                            text = strings.dashRemindBtn,
+                            icon = if (adaptive.isVeryNarrowPhone) null else Icons.AutoMirrored.Filled.Send,
+                            compact = true,
+                            onClick = {
+                              selectedSingleReminderApt = apt
+                              showCampaignDialog = true
+                            },
+                            modifier = Modifier.testTag("dash_remind_apt_${apt.number}"),
                           )
                         }
                       }
-
-                      Spacer(modifier = Modifier.width(8.dp))
-
-                      SageSecondaryButton(
-                        text = strings.dashRemindBtn,
-                        icon = Icons.AutoMirrored.Filled.Send,
-                        compact = true,
-                        onClick = {
-                          selectedSingleReminderApt = apt
-                          showCampaignDialog = true
-                        },
-                        modifier = Modifier.testTag("dash_remind_apt_${apt.number}"),
-                      )
                     }
                   }
                 }
@@ -830,277 +867,386 @@ fun DashboardScreen(
           }
         }
       }
-      }
-    }
 
-    // =========================================================================
-    // 7. PROJETS & TRAVAUX DE L'IMMEUBLE (Chantier en cours + Avance Caisse)
-    // =========================================================================
-    item(key = "dash_projects_overview") {
-      FintechWhiteCard(
-        modifier = Modifier
-          .fillMaxWidth()
-          .testTag("dash_projects_summary_card"),
-        padding = 20.dp,
-        onClick = onNavigateToProjects,
-      ) {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically,
+      val projectsOverviewBlock: @Composable () -> Unit = {
+        FintechWhiteCard(
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("dash_projects_summary_card"),
+          padding = adaptive.cardPadding,
+          onClick = onNavigateToProjects,
         ) {
           Row(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
           ) {
-            Icon(
-              imageVector = Icons.Default.Construction,
-              contentDescription = null,
-              tint = tokens.linkColor,
-              modifier = Modifier.size(20.dp),
+            Row(
+              modifier = Modifier.weight(1f),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+              Icon(
+                imageVector = Icons.Default.Construction,
+                contentDescription = null,
+                tint = tokens.linkColor,
+                modifier = Modifier.size(20.dp),
+              )
+              Column(modifier = Modifier.weight(1f)) {
+                Text(
+                  text = strings.dashProjectsCardTitle,
+                  style = MaterialTheme.typography.titleMedium,
+                  fontWeight = FontWeight.SemiBold,
+                  color = tokens.inkDeep,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis,
+                )
+                if (data.plannedProjects.isNotEmpty()) {
+                  Text(
+                    text = "${strings.projectsKpiReadyLabel}: ${formatNumber(data.readyToStartProjectsCount.toLong(), dig)} / ${formatNumber(data.plannedProjects.size.toLong(), dig)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = tokens.body,
+                  )
+                }
+              }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            SageSecondaryButton(
+              text = strings.dashProjectsOpenBtn,
+              compact = true,
+              onClick = onNavigateToProjects,
+              modifier = Modifier.testTag("dash_open_projects_btn"),
             )
-            Column(modifier = Modifier.weight(1f)) {
+          }
+
+          val topOngoing = data.inProgressProjects.firstOrNull()
+          if (topOngoing != null) {
+            Spacer(modifier = Modifier.height(14.dp))
+            Surface(
+              shape = RoundedCornerShape(12.dp),
+              color = tokens.surfaceSoft,
+              border = BorderStroke(1.dp, tokens.divider),
+              modifier = Modifier.fillMaxWidth(),
+            ) {
+              Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+              ) {
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.CenterVertically,
+                ) {
+                  Text(
+                    text = topOngoing.displayTitle(isAr),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = tokens.inkDeep,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                  )
+                  Spacer(modifier = Modifier.width(8.dp))
+                  Text(
+                    text = bidiLtr("${localizeDigits(topOngoing.clampedProgressPercent.toString(), dig)}%"),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontFamily = numericFont,
+                    fontWeight = FontWeight.SemiBold,
+                    color = tokens.positiveDeep,
+                  )
+                }
+                SyndicatProgressBar(
+                  progress = topOngoing.clampedProgressPercent / 100f,
+                  modifier = Modifier.fillMaxWidth(),
+                )
+              }
+            }
+          } else if (data.projects.isEmpty()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+              text = strings.projectsEmptySub,
+              style = MaterialTheme.typography.bodySmall,
+              color = tokens.mute,
+            )
+          }
+        }
+      }
+
+      val floorsBreakdownBlock: @Composable () -> Unit = {
+        FintechWhiteCard(
+          modifier = Modifier.fillMaxWidth(),
+          padding = adaptive.cardPadding,
+        ) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Row(
+              modifier = Modifier.weight(1f),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+              Icon(
+                imageVector = Icons.Default.Apartment,
+                contentDescription = null,
+                tint = tokens.linkColor,
+                modifier = Modifier.size(20.dp),
+              )
               Text(
-                text = strings.dashProjectsCardTitle,
+                text = strings.dashFloorsSection,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = tokens.inkDeep,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
               )
-              if (data.plannedProjects.isNotEmpty()) {
-                Text(
-                  text = "${strings.projectsKpiReadyLabel}: ${formatNumber(data.readyToStartProjectsCount.toLong(), dig)} / ${formatNumber(data.plannedProjects.size.toLong(), dig)}",
-                  style = MaterialTheme.typography.labelSmall,
-                  color = tokens.body,
-                )
-              }
             }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = strings.dashUnitsSummary(data.upToDateCount, data.occupiedCount),
+              style = MaterialTheme.typography.labelSmall,
+              color = tokens.mute,
+            )
           }
-          Spacer(modifier = Modifier.width(8.dp))
-          SageSecondaryButton(
-            text = strings.dashProjectsOpenBtn,
-            compact = true,
-            onClick = onNavigateToProjects,
-            modifier = Modifier.testTag("dash_open_projects_btn"),
-          )
-        }
 
-        val topOngoing = data.inProgressProjects.firstOrNull()
-        if (topOngoing != null) {
           Spacer(modifier = Modifier.height(14.dp))
-          Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = tokens.surfaceSoft,
-            border = BorderStroke(1.dp, tokens.divider),
-            modifier = Modifier.fillMaxWidth(),
-          ) {
-            Column(
-              modifier = Modifier.padding(12.dp),
-              verticalArrangement = Arrangement.spacedBy(8.dp),
+
+          data.orderedFloors.forEachIndexed { idx, floor ->
+            val floorApts = data.apartments.filter { it.floor == floor }
+            val occ = floorApts.count { !it.isVacantForConfig(cfg) }
+            val totalFloorDh = floorApts.sumOf { it.totalForConfig(cfg) }
+            val dueFloorDh = floorApts.sumOf { it.dueAtCutoffDh(cfg) }
+            val pct = if (dueFloorDh > 0L) {
+              ((totalFloorDh.toFloat() / dueFloorDh.toFloat()) * 100f).toInt().coerceIn(0, 100)
+            } else {
+              100
+            }
+
+            if (idx > 0) {
+              HorizontalDivider(
+                modifier = Modifier.padding(vertical = 12.dp),
+                color = tokens.divider,
+              )
+            }
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically,
             ) {
-              Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-              ) {
+              Column(modifier = Modifier.weight(1f)) {
                 Text(
-                  text = topOngoing.displayTitle(isAr),
-                  style = MaterialTheme.typography.bodyMedium,
+                  text = strings.dashFloorRowTitle(strings.floorWithPrefix(floor), occ, floorApts.size),
+                  style = MaterialTheme.typography.titleSmall,
                   fontWeight = FontWeight.SemiBold,
                   color = tokens.inkDeep,
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis,
-                  modifier = Modifier.weight(1f),
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
+                SyndicatProgressBar(
+                  progress = pct / 100f,
+                  modifier = Modifier.fillMaxWidth(0.88f),
+                )
+              }
+              Spacer(modifier = Modifier.width(12.dp))
+              Column(horizontalAlignment = Alignment.End) {
                 Text(
-                  text = bidiLtr("${localizeDigits(topOngoing.clampedProgressPercent.toString(), dig)}%"),
+                  text = maskSensitiveDh(formatDh(totalFloorDh, cur, dig), isPrivacy),
                   style = MaterialTheme.typography.titleSmall,
                   fontFamily = numericFont,
                   fontWeight = FontWeight.SemiBold,
                   color = tokens.positiveDeep,
                 )
+                Text(
+                  text = bidiLtr("${localizeDigits(pct.toString(), dig)}%"),
+                  style = MaterialTheme.typography.labelSmall,
+                  fontFamily = numericFont,
+                  color = tokens.mute,
+                )
               }
-              SyndicatProgressBar(
-                progress = topOngoing.clampedProgressPercent / 100f,
-                modifier = Modifier.fillMaxWidth(),
-              )
             }
           }
-        } else if (data.projects.isEmpty()) {
-          Spacer(modifier = Modifier.height(10.dp))
-          Text(
-            text = strings.projectsEmptySub,
-            style = MaterialTheme.typography.bodySmall,
-            color = tokens.mute,
-          )
         }
       }
-    }
 
-    // =========================================================================
-    // 8. GRAPHIQUE MENSUEL DES ENCAISSEMENTS (100 % largeur portrait, sans slider)
-    // =========================================================================
-    item(key = "dash_monthly_chart") {
-      MonthlyCollectionsChartCard(
-        data = data,
-        isAr = isAr,
-        numericFont = numericFont,
-        onClick = onNavigateToApartments,
-      )
-    }
-
-    // =========================================================================
-    // 9. PERFORMANCE DE RECOUVREMENT PAR ÉTAGE
-    // =========================================================================
-    item(key = "dash_floors_breakdown") {
-      FintechWhiteCard(
-        modifier = Modifier.fillMaxWidth(),
-        padding = 20.dp,
-      ) {
-        Row(
+      val adminShortcutsBlock: @Composable () -> Unit = {
+        Surface(
+          shape = RoundedCornerShape(tokens.cardRadiusDp.dp),
+          color = tokens.surfaceSoft,
+          border = BorderStroke(1.dp, tokens.divider),
+          tonalElevation = 0.dp,
+          shadowElevation = 0.dp,
           modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically,
         ) {
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+          Column(
+            modifier = Modifier.padding(adaptive.cardPadding),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
           ) {
-            Icon(
-              imageVector = Icons.Default.Apartment,
-              contentDescription = null,
-              tint = tokens.linkColor,
-              modifier = Modifier.size(20.dp),
-            )
             Text(
-              text = strings.dashFloorsSection,
+              text = strings.dashExportShortcutsTitle,
               style = MaterialTheme.typography.titleMedium,
               fontWeight = FontWeight.SemiBold,
               color = tokens.inkDeep,
             )
-          }
-          Text(
-            text = strings.dashUnitsSummary(data.upToDateCount, data.occupiedCount),
-            style = MaterialTheme.typography.labelSmall,
-            color = tokens.mute,
-          )
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        data.orderedFloors.forEachIndexed { idx, floor ->
-          val floorApts = data.apartments.filter { it.floor == floor }
-          val occ = floorApts.count { !it.isVacantForConfig(cfg) }
-          val totalFloorDh = floorApts.sumOf { it.totalForConfig(cfg) }
-          val dueFloorDh = floorApts.sumOf { it.dueAtCutoffDh(cfg) }
-          val pct = if (dueFloorDh > 0L) {
-            ((totalFloorDh.toFloat() / dueFloorDh.toFloat()) * 100f).toInt().coerceIn(0, 100)
-          } else {
-            100
-          }
-
-          if (idx > 0) {
-            HorizontalDivider(
-              modifier = Modifier.padding(vertical = 12.dp),
-              color = tokens.divider,
+            if (adaptive.isVeryNarrowPhone) {
+              Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SageSecondaryButton(
+                  text = strings.navPoster,
+                  icon = Icons.Default.PictureAsPdf,
+                  compact = true,
+                  onClick = onNavigateToPosters,
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("dash_shortcut_posters"),
+                )
+                SageSecondaryButton(
+                  text = strings.dashBackupNowBtn,
+                  icon = Icons.Default.Backup,
+                  compact = true,
+                  onClick = onTriggerBackupJson,
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("dash_shortcut_backup"),
+                )
+              }
+            } else {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+              ) {
+                SageSecondaryButton(
+                  text = strings.navPoster,
+                  icon = Icons.Default.PictureAsPdf,
+                  compact = adaptive.isNarrowPhone,
+                  onClick = onNavigateToPosters,
+                  modifier = Modifier
+                    .weight(1f)
+                    .testTag("dash_shortcut_posters"),
+                )
+                SageSecondaryButton(
+                  text = strings.dashBackupNowBtn,
+                  icon = Icons.Default.Backup,
+                  compact = adaptive.isNarrowPhone,
+                  onClick = onTriggerBackupJson,
+                  modifier = Modifier
+                    .weight(1f)
+                    .testTag("dash_shortcut_backup"),
+                )
+              }
+            }
+            SageSecondaryButton(
+              text = strings.dashLaunchWizardBtn,
+              icon = Icons.Default.Tune,
+              compact = adaptive.isNarrowPhone,
+              onClick = onOpenWizard,
+              modifier = Modifier
+                .fillMaxWidth()
+                .testTag("dash_bottom_wizard_btn"),
             )
-          }
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            Column(modifier = Modifier.weight(1f)) {
-              Text(
-                text = strings.dashFloorRowTitle(strings.floorWithPrefix(floor), occ, floorApts.size),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = tokens.inkDeep,
-              )
-              Spacer(modifier = Modifier.height(6.dp))
-              SyndicatProgressBar(
-                progress = pct / 100f,
-                modifier = Modifier.fillMaxWidth(0.88f),
-              )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(horizontalAlignment = Alignment.End) {
-              Text(
-                text = maskSensitiveDh(formatDh(totalFloorDh, cur, dig), isPrivacy),
-                style = MaterialTheme.typography.titleSmall,
-                fontFamily = numericFont,
-                fontWeight = FontWeight.SemiBold,
-                color = tokens.positiveDeep,
-              )
-              Text(
-                text = bidiLtr("${localizeDigits(pct.toString(), dig)}%"),
-                style = MaterialTheme.typography.labelSmall,
-                fontFamily = numericFont,
-                color = tokens.mute,
-              )
-            }
           }
         }
       }
-    }
 
-    // =========================================================================
-    // 10. OUTILS D'ADMINISTRATION, EXPORT PDF A4 & SAUVEGARDE JSON
-    // =========================================================================
-    item(key = "dash_admin_shortcuts") {
-      Surface(
-        shape = RoundedCornerShape(tokens.cardRadiusDp.dp),
-        color = tokens.surfaceSoft,
-        border = BorderStroke(1.dp, tokens.divider),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        modifier = Modifier.fillMaxWidth(),
-      ) {
-        Column(
-          modifier = Modifier.padding(20.dp),
-          verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-          Text(
-            text = strings.dashExportShortcutsTitle,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = tokens.inkDeep,
-          )
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-          ) {
-            SageSecondaryButton(
-              text = strings.navPoster,
-              icon = Icons.Default.PictureAsPdf,
-              onClick = onNavigateToPosters,
+      if (adaptive.isExpanded) {
+        item(key = "dash_expanded_two_pane") {
+          AdaptiveContentBox(maxWidth = adaptive.wideContainerMaxWidth) {
+            Row(
               modifier = Modifier
-                .weight(1f)
-                .testTag("dash_shortcut_posters"),
-            )
-            SageSecondaryButton(
-              text = strings.dashBackupNowBtn,
-              icon = Icons.Default.Backup,
-              onClick = onTriggerBackupJson,
-              modifier = Modifier
-                .weight(1f)
-                .testTag("dash_shortcut_backup"),
+                .fillMaxWidth()
+                .testTag("dash_expanded_two_pane"),
+              horizontalArrangement = Arrangement.spacedBy(20.dp),
+              verticalAlignment = Alignment.Top,
+            ) {
+              Column(
+                modifier = Modifier.weight(0.48f),
+                verticalArrangement = Arrangement.spacedBy(adaptive.sectionSpacing),
+              ) {
+                TreasuryPortfolioHeroCard(
+                  data = data,
+                  numericFont = numericFont,
+                  onUnpaidExpensesClick = onNavigateToUnpaidExpenses,
+                )
+                quickActionsBlock()
+                if (isBackupOverdue) {
+                  backupBannerBlock()
+                }
+                collectionActionCenterBlock()
+              }
+              Column(
+                modifier = Modifier.weight(0.52f),
+                verticalArrangement = Arrangement.spacedBy(adaptive.sectionSpacing),
+              ) {
+                kpiGridBlock()
+                MonthlyCollectionsChartCard(
+                  data = data,
+                  isAr = isAr,
+                  numericFont = numericFont,
+                  onClick = onNavigateToApartments,
+                )
+                projectsOverviewBlock()
+                floorsBreakdownBlock()
+                adminShortcutsBlock()
+              }
+            }
+          }
+        }
+      } else {
+        item(key = "dash_treasury_portfolio") {
+          AdaptiveContentBox(maxWidth = adaptive.readableMaxWidth) {
+            TreasuryPortfolioHeroCard(
+              data = data,
+              numericFont = numericFont,
+              onUnpaidExpensesClick = onNavigateToUnpaidExpenses,
             )
           }
-          SageSecondaryButton(
-            text = strings.dashLaunchWizardBtn,
-            icon = Icons.Default.Tune,
-            onClick = onOpenWizard,
-            modifier = Modifier
-              .fillMaxWidth()
-              .testTag("dash_bottom_wizard_btn"),
-          )
+        }
+        item(key = "dash_quick_actions_row") {
+          AdaptiveContentBox(maxWidth = adaptive.readableMaxWidth) {
+            quickActionsBlock()
+          }
+        }
+        if (isBackupOverdue) {
+          item(key = "dash_backup_banner") {
+            AdaptiveContentBox(maxWidth = adaptive.readableMaxWidth) {
+              backupBannerBlock()
+            }
+          }
+        }
+        item(key = "dash_kpi_grid") {
+          AdaptiveContentBox(maxWidth = adaptive.readableMaxWidth) {
+            kpiGridBlock()
+          }
+        }
+        item(key = "dash_collection_action_center") {
+          AdaptiveContentBox(maxWidth = adaptive.readableMaxWidth) {
+            collectionActionCenterBlock()
+          }
+        }
+        item(key = "dash_projects_overview") {
+          AdaptiveContentBox(maxWidth = adaptive.readableMaxWidth) {
+            projectsOverviewBlock()
+          }
+        }
+        item(key = "dash_monthly_chart") {
+          AdaptiveContentBox(maxWidth = adaptive.readableMaxWidth) {
+            MonthlyCollectionsChartCard(
+              data = data,
+              isAr = isAr,
+              numericFont = numericFont,
+              onClick = onNavigateToApartments,
+            )
+          }
+        }
+        item(key = "dash_floors_breakdown") {
+          AdaptiveContentBox(maxWidth = adaptive.readableMaxWidth) {
+            floorsBreakdownBlock()
+          }
+        }
+        item(key = "dash_admin_shortcuts") {
+          AdaptiveContentBox(maxWidth = adaptive.readableMaxWidth) {
+            adminShortcutsBlock()
+          }
         }
       }
-    }
     }
 
     // En-tête compact collant de trésorerie lorsque la hero card défile hors écran
@@ -1110,7 +1256,7 @@ fun DashboardScreen(
       exit = fadeOut() + slideOutVertically { -it },
       modifier = Modifier
         .align(Alignment.TopCenter)
-        .padding(horizontal = 16.dp, vertical = 8.dp),
+        .padding(horizontal = adaptive.horizontalPadding, vertical = 8.dp),
     ) {
       Surface(
         shape = RoundedCornerShape(18.dp),
@@ -1120,24 +1266,30 @@ fun DashboardScreen(
         shadowElevation = 2.dp,
         modifier = Modifier
           .fillMaxWidth()
+          .widthIn(max = maxContentWidth)
           .testTag("dash_sticky_treasury_bar"),
       ) {
         Row(
           modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = if (adaptive.isNarrowPhone) 12.dp else 16.dp, vertical = 10.dp),
           horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically,
         ) {
           Row(
+            modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
           ) {
-            Text(
-              text = strings.dashCashEyebrow,
-              style = MaterialTheme.typography.labelMedium,
-              color = CoinbaseOnDarkSoft,
-            )
+            if (!adaptive.isVeryNarrowPhone) {
+              Text(
+                text = strings.dashCashEyebrow,
+                style = MaterialTheme.typography.labelMedium,
+                color = CoinbaseOnDarkSoft,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+              )
+            }
             Text(
               text = maskSensitiveDh(formatDh(data.cashNowDh, cur, dig), isPrivacy),
               style = MaterialTheme.typography.titleMedium.copy(
@@ -1146,8 +1298,11 @@ fun DashboardScreen(
               ),
               fontWeight = FontWeight.SemiBold,
               color = Color.White,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
             )
           }
+          Spacer(modifier = Modifier.width(8.dp))
           Surface(
             shape = RoundedCornerShape(100.dp),
             color = tokens.primary,

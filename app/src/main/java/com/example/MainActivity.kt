@@ -85,6 +85,7 @@ import com.example.data.repository.SyndicatDataSource
 import com.example.data.repository.SyndicatRepository
 import com.example.ui.components.LimePrimaryButton
 import com.example.ui.components.LocalPrivacyMode
+import com.example.ui.components.LocalSyndicatAdaptiveSpec
 import com.example.ui.components.PinLockGateScreen
 import com.example.ui.components.SageSecondaryButton
 import com.example.ui.components.StatusPillBadge
@@ -94,6 +95,7 @@ import com.example.ui.components.SyndicatNavIcons
 import com.example.ui.components.SyndicatNavItemSpec
 import com.example.ui.components.SyndicatNavigationRailPane
 import com.example.ui.components.SyndicatShimmerLoadingScreen
+import com.example.ui.components.computeSyndicatAdaptiveSpec
 import com.example.ui.components.maskSensitiveDh
 import com.example.ui.components.maskSensitiveName
 import com.example.ui.i18n.AppLanguage
@@ -521,7 +523,8 @@ private fun AuthenticatedSyndicatApp(
       .fillMaxSize()
       .background(tokens.screenBg),
   ) {
-    val useRail = maxWidth >= 720.dp
+    val adaptiveSpec = computeSyndicatAdaptiveSpec(maxWidth = maxWidth, maxHeight = maxHeight)
+    val useRail = adaptiveSpec.useRail
     val navItems = AppDestination.entries.map { dest ->
       val badge = when (dest) {
         AppDestination.APARTMENTS -> lateBadgeCount
@@ -539,6 +542,7 @@ private fun AuthenticatedSyndicatApp(
       )
     }
 
+    CompositionLocalProvider(LocalSyndicatAdaptiveSpec provides adaptiveSpec) {
     Row(modifier = Modifier.fillMaxSize()) {
       if (useRail) {
         SyndicatNavigationRailPane(items = navItems)
@@ -960,6 +964,7 @@ private fun AuthenticatedSyndicatApp(
         } // end when(uiState)
       } // end Scaffold
     } // end Row
+    } // end CompositionLocalProvider(LocalSyndicatAdaptiveSpec)
   } // end BoxWithConstraints
   } // end CompositionLocalProvider(LocalPrivacyMode)
 }

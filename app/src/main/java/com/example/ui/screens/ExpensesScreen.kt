@@ -78,12 +78,14 @@ import com.example.data.local.RecurringExpenseTemplate
 import com.example.data.local.VendorRecord
 import com.example.data.model.EXPENSE_CATEGORIES
 import com.example.data.model.ExpenseRecord
+import com.example.ui.components.AdaptiveContentBox
 import com.example.ui.components.AirtableSignatureCard
 import com.example.ui.components.AirtableSoftCard
 import com.example.ui.components.ExpenseCategoriesBreakdownCard
 import com.example.ui.components.FintechTextField
 import com.example.ui.components.FintechWhiteCard
 import com.example.ui.components.LocalPrivacyMode
+import com.example.ui.components.LocalSyndicatAdaptiveSpec
 import com.example.ui.components.MetaCobaltBuyButton
 import com.example.ui.components.MetaSegmentedThreePillRow
 import com.example.ui.components.ReadOnlyCouncilBanner
@@ -170,12 +172,14 @@ fun ExpensesScreen(
   val scope = rememberCoroutineScope()
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
   val isPrivacy = LocalPrivacyMode.current
   val cfg = data.config
   val cur = cfg.currency
   val dig = cfg.digitsAr
   val isAr = strings.language == AppLanguage.AR
   val numericFont = tokens.numericFontFamily ?: tokens.monoFontFamily
+  val maxHeaderWidth = if (adaptive.isExpanded) adaptive.wideContainerMaxWidth else adaptive.readableMaxWidth
 
   var subTab by rememberSaveable { mutableStateOf(ExpensesSubTab.EXPENSES) }
   var selectedCategory by remember { mutableStateOf<String?>(null) }
@@ -221,15 +225,17 @@ fun ExpensesScreen(
       .testTag("expenses_screen"),
   ) {
     Column(modifier = Modifier.fillMaxSize()) {
+      AdaptiveContentBox(maxWidth = maxHeaderWidth) {
+      Column(modifier = Modifier.fillMaxWidth()) {
       if (isReadOnlyMode) {
-        ReadOnlyCouncilBanner(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+        ReadOnlyCouncilBanner(modifier = Modifier.padding(horizontal = adaptive.horizontalPadding, vertical = 6.dp))
       }
 
       // Header + CSV shortcut + 3-Tab Meta Pill Switcher (Dépenses | Abos & Prestataires | Caisse)
       Column(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(horizontal = 16.dp, vertical = 12.dp),
+          .padding(horizontal = adaptive.horizontalPadding, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
       ) {
         Row(
@@ -243,7 +249,7 @@ fun ExpensesScreen(
               ExpensesSubTab.ABOS_VENDORS -> strings.tabAbosVendorsMode
               ExpensesSubTab.CAISSE -> strings.tabCaisseMode
             },
-            style = MaterialTheme.typography.headlineLarge,
+            style = if (adaptive.isNarrowPhone) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Medium,
             color = tokens.inkDeep,
             maxLines = 1,
@@ -281,15 +287,17 @@ fun ExpensesScreen(
           modifier = Modifier.fillMaxWidth(),
         )
       }
+      }
+      }
 
       when (subTab) {
         ExpensesSubTab.EXPENSES -> {
-        // =========================================================================
-        // MODE المصاريف (§6 : cartes de contenu 10dp bordées, montant Inter 500, barre 4dp ink sur surfaceStrong, 1 seul bouton primaire noir 12dp)
-        // =========================================================================
+        AdaptiveContentBox(maxWidth = maxHeaderWidth) {
         LazyRow(
-          modifier = Modifier.testTag("expenses_filter_row"),
-          contentPadding = PaddingValues(horizontal = 16.dp),
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("expenses_filter_row"),
+          contentPadding = PaddingValues(horizontal = adaptive.horizontalPadding),
           horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
           item {
@@ -343,275 +351,324 @@ fun ExpensesScreen(
             )
           }
         }
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        LazyColumn(
-          modifier = Modifier
-            .fillMaxSize()
-            .testTag("expenses_list"),
-          contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 96.dp),
-          verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-          if (data.expenses.isNotEmpty()) {
-            item(key = "expense_categories_donut") {
-              ExpenseCategoriesBreakdownCard(
-                expenses = data.expenses,
-                currency = cur,
-                digitsAr = dig,
-                selectedCategory = selectedCategory,
-                onSelectCategory = { selectedCategory = it },
-              )
-            }
-          }
-
-          if (filteredExpenses.isEmpty()) {
-            item {
-              SyndicatEmptyStateCard(
-                icon = Icons.AutoMirrored.Filled.ReceiptLong,
-                title = strings.expEmptyTitle,
-                subtitle = strings.expEmptyTip,
-                actionLabel = strings.expEmptyActionBtn,
-                actionIcon = Icons.Default.Add,
-                actionTag = "expenses_empty_add_btn",
-                onAction = { showAddModal = true },
-              )
-            }
-          } else {
-            items(
-              items = filteredExpenses,
-              key = { it.id.ifBlank { "${it.title}_${it.dateLabel}" } },
-            ) { exp ->
-              val paid = exp.effectivePaidDh
-              val rem = exp.remainingToPayDh
-              val ratio = if (exp.amountDh > 0L) {
-                (paid.toFloat() / exp.amountDh.toFloat()).coerceIn(0f, 1f)
-              } else {
-                1f
-              }
-              val isDeleteArmed = armedDeleteId == exp.id
-
-              val thumbBitmap by produceState<ImageBitmap?>(
-                initialValue = null,
-                exp.id,
-                photoRevision,
-              ) {
-                value = if (ExpensePhotoManager.hasPhoto(context, exp.id)) {
-                  ExpensePhotoManager.loadBitmap(context, exp.id)
-                } else {
-                  null
+        val renderExpensesLazyList: @Composable (Modifier, Boolean) -> Unit = { listMod, includeDonutItem ->
+          LazyColumn(
+            modifier = listMod.testTag("expenses_list"),
+            contentPadding = PaddingValues(
+              start = adaptive.horizontalPadding,
+              end = adaptive.horizontalPadding,
+              top = 4.dp,
+              bottom = adaptive.listBottomPadding,
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+          ) {
+            if (includeDonutItem && data.expenses.isNotEmpty()) {
+              item(key = "expense_categories_donut") {
+                AdaptiveContentBox(maxWidth = adaptive.readableMaxWidth) {
+                  ExpenseCategoriesBreakdownCard(
+                    expenses = data.expenses,
+                    currency = cur,
+                    digitsAr = dig,
+                    selectedCategory = selectedCategory,
+                    onSelectCategory = { selectedCategory = it },
+                  )
                 }
               }
+            }
 
-              FintechWhiteCard(
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .testTag("expense_card_${exp.id}"),
-                padding = 16.dp,
-                onClick = { editingExpense = exp },
-              ) {
-                Row(
-                  modifier = Modifier.fillMaxWidth(),
-                  horizontalArrangement = Arrangement.SpaceBetween,
-                  verticalAlignment = Alignment.Top,
+            if (filteredExpenses.isEmpty()) {
+              item {
+                AdaptiveContentBox(maxWidth = adaptive.readableMaxWidth) {
+                  SyndicatEmptyStateCard(
+                    icon = Icons.AutoMirrored.Filled.ReceiptLong,
+                    title = strings.expEmptyTitle,
+                    subtitle = strings.expEmptyTip,
+                    actionLabel = strings.expEmptyActionBtn,
+                    actionIcon = Icons.Default.Add,
+                    actionTag = "expenses_empty_add_btn",
+                    onAction = { showAddModal = true },
+                  )
+                }
+              }
+            } else {
+              items(
+                items = filteredExpenses,
+                key = { it.id.ifBlank { "${it.title}_${it.dateLabel}" } },
+              ) { exp ->
+                val paid = exp.effectivePaidDh
+                val rem = exp.remainingToPayDh
+                val ratio = if (exp.amountDh > 0L) {
+                  (paid.toFloat() / exp.amountDh.toFloat()).coerceIn(0f, 1f)
+                } else {
+                  1f
+                }
+                val isDeleteArmed = armedDeleteId == exp.id
+
+                val thumbBitmap by produceState<ImageBitmap?>(
+                  initialValue = null,
+                  exp.id,
+                  photoRevision,
                 ) {
-                  if (thumbBitmap != null) {
-                    Image(
-                      bitmap = thumbBitmap!!,
-                      contentDescription = strings.expPhotoPreviewTitle,
-                      contentScale = ContentScale.Crop,
-                      modifier = Modifier
-                        .size(54.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable { previewPhotoExpense = exp }
-                        .testTag("expense_thumb_${exp.id}"),
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
+                  value = if (ExpensePhotoManager.hasPhoto(context, exp.id)) {
+                    ExpensePhotoManager.loadBitmap(context, exp.id)
+                  } else {
+                    null
                   }
+                }
 
-                  Column(modifier = Modifier.weight(1f)) {
+                AdaptiveContentBox(maxWidth = adaptive.readableMaxWidth) {
+                FintechWhiteCard(
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("expense_card_${exp.id}"),
+                  padding = adaptive.cardPadding,
+                  onClick = { editingExpense = exp },
+                ) {
+                  Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top,
+                  ) {
+                    if (thumbBitmap != null) {
+                      Image(
+                        bitmap = thumbBitmap!!,
+                        contentDescription = strings.expPhotoPreviewTitle,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                          .size(if (adaptive.isNarrowPhone) 46.dp else 54.dp)
+                          .clip(RoundedCornerShape(10.dp))
+                          .clickable { previewPhotoExpense = exp }
+                          .testTag("expense_thumb_${exp.id}"),
+                      )
+                      Spacer(modifier = Modifier.width(10.dp))
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                      Text(
+                        text = exp.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = tokens.ink,
+                      )
+                      Spacer(modifier = Modifier.height(4.dp))
+                      val meta = buildList {
+                        add(strings.categoryLabel(exp.category))
+                        if (exp.supplier.isNotBlank()) add(exp.supplier)
+                        if (exp.dateLabel.isNotBlank()) add(bidiLtr(localizeDigits(exp.dateLabel, dig)))
+                      }.joinToString(" · ")
+                      Text(
+                        text = meta,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = tokens.body,
+                      )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
                     Text(
-                      text = exp.title,
-                      style = MaterialTheme.typography.titleMedium,
+                      text = maskSensitiveDh(formatDh(exp.amountDh, cur, dig), isPrivacy),
+                      style = if (adaptive.isNarrowPhone) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
+                      fontFamily = numericFont ?: MaterialTheme.typography.titleLarge.fontFamily,
                       fontWeight = FontWeight.Medium,
                       color = tokens.ink,
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    val meta = buildList {
-                      add(strings.categoryLabel(exp.category))
-                      if (exp.supplier.isNotBlank()) add(exp.supplier)
-                      if (exp.dateLabel.isNotBlank()) add(bidiLtr(localizeDigits(exp.dateLabel, dig)))
-                    }.joinToString(" · ")
-                    Text(
-                      text = meta,
-                      style = MaterialTheme.typography.bodySmall,
-                      color = tokens.body,
-                    )
                   }
 
-                  Spacer(modifier = Modifier.width(8.dp))
+                  Spacer(modifier = Modifier.height(14.dp))
 
-                  Text(
-                    text = maskSensitiveDh(formatDh(exp.amountDh, cur, dig), isPrivacy),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontFamily = numericFont ?: MaterialTheme.typography.titleLarge.fontFamily,
-                    fontWeight = FontWeight.Medium,
-                    color = tokens.ink,
+                  SyndicatProgressBar(
+                    progress = ratio,
+                    modifier = Modifier.fillMaxWidth(),
                   )
-                }
 
-                Spacer(modifier = Modifier.height(14.dp))
-
-                SyndicatProgressBar(
-                  progress = ratio,
-                  modifier = Modifier.fillMaxWidth(),
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                  modifier = Modifier.fillMaxWidth(),
-                  horizontalArrangement = Arrangement.SpaceBetween,
-                  verticalAlignment = Alignment.CenterVertically,
-                ) {
-                  Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                      text = strings.expPaidProgressLabel(
-                        maskSensitiveDh(formatDh(paid, cur, dig), isPrivacy),
-                        maskSensitiveDh(formatDh(exp.amountDh, cur, dig), isPrivacy),
-                      ),
-                      style = MaterialTheme.typography.labelSmall,
-                      color = tokens.body,
-                    )
-                    if (rem > 0L) {
-                      Text(
-                        text = strings.expSupplierRemaining(maskSensitiveDh(formatDh(rem, cur, dig), isPrivacy)),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = tokens.negativeDeep,
-                      )
-                    }
-                  }
+                  Spacer(modifier = Modifier.height(8.dp))
 
                   Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                   ) {
-                    val hasPhoto = remember(exp.id, photoRevision) {
-                      ExpensePhotoManager.hasPhoto(context, exp.id)
-                    }
-                    if (hasPhoto) {
-                      Surface(
-                        shape = RoundedCornerShape(100.dp),
-                        color = tokens.surfaceSoft,
-                        border = BorderStroke(1.dp, tokens.divider),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
-                        modifier = Modifier
-                          .minimumInteractiveComponentSize()
-                          .heightIn(min = 48.dp)
-                          .clip(RoundedCornerShape(100.dp))
-                          .clickable { previewPhotoExpense = exp }
-                          .testTag("expense_photo_badge_${exp.id}"),
-                      ) {
-                        Row(
-                          verticalAlignment = Alignment.CenterVertically,
-                          horizontalArrangement = Arrangement.spacedBy(4.dp),
-                          modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        ) {
-                          Icon(
-                            imageVector = Icons.Default.PhotoCamera,
-                            contentDescription = strings.expPhotoBadgeLabel,
-                            tint = tokens.infoColor,
-                            modifier = Modifier.size(16.dp),
-                          )
-                          Text(
-                            text = strings.expPhotoBadgeLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = tokens.infoColor,
-                          )
-                        }
-                      }
-                    }
-                    if (!isReadOnlyMode) {
-                      IconButton(
-                        onClick = { editingExpense = exp },
-                        modifier = Modifier.size(48.dp),
-                      ) {
-                        Icon(
-                          imageVector = Icons.Default.Edit,
-                          contentDescription = strings.expDialogEdit,
-                          tint = tokens.ink,
+                    Column(modifier = Modifier.weight(1f)) {
+                      Text(
+                        text = strings.expPaidProgressLabel(
+                          maskSensitiveDh(formatDh(paid, cur, dig), isPrivacy),
+                          maskSensitiveDh(formatDh(exp.amountDh, cur, dig), isPrivacy),
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = tokens.body,
+                      )
+                      if (rem > 0L) {
+                        Text(
+                          text = strings.expSupplierRemaining(maskSensitiveDh(formatDh(rem, cur, dig), isPrivacy)),
+                          style = MaterialTheme.typography.labelSmall,
+                          fontWeight = FontWeight.SemiBold,
+                          color = tokens.negativeDeep,
                         )
                       }
+                    }
 
-                      if (isDeleteArmed) {
-                        val confirmShape = RoundedCornerShape(tokens.badgeRadiusDp.dp)
+                    Row(
+                      verticalAlignment = Alignment.CenterVertically,
+                      horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                      val hasPhoto = remember(exp.id, photoRevision) {
+                        ExpensePhotoManager.hasPhoto(context, exp.id)
+                      }
+                      if (hasPhoto) {
                         Surface(
-                          shape = confirmShape,
-                          color = tokens.negativeBg,
+                          shape = RoundedCornerShape(100.dp),
+                          color = tokens.surfaceSoft,
+                          border = BorderStroke(1.dp, tokens.divider),
                           tonalElevation = 0.dp,
                           shadowElevation = 0.dp,
                           modifier = Modifier
                             .minimumInteractiveComponentSize()
                             .heightIn(min = 48.dp)
-                            .clip(confirmShape)
-                            .clickable {
-                              armedDeleteId = null
-                              haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                              scope.launch { ExpensePhotoManager.deletePhoto(context, exp.id) }
-                              onDeleteExpense(exp)
-                            }
-                            .testTag("confirm_delete_expense_${exp.id}"),
+                            .clip(RoundedCornerShape(100.dp))
+                            .clickable { previewPhotoExpense = exp }
+                            .testTag("expense_photo_badge_${exp.id}"),
                         ) {
-                          Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                          Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(horizontal = if (adaptive.isNarrowPhone) 8.dp else 10.dp, vertical = 6.dp),
                           ) {
-                            Text(
-                              text = "! ${strings.settingsConfirmBtn}",
-                              style = MaterialTheme.typography.labelSmall,
-                              fontWeight = FontWeight.Medium,
-                              color = Color.White,
+                            Icon(
+                              imageVector = Icons.Default.PhotoCamera,
+                              contentDescription = strings.expPhotoBadgeLabel,
+                              tint = tokens.infoColor,
+                              modifier = Modifier.size(16.dp),
                             )
+                            if (!adaptive.isNarrowPhone) {
+                              Text(
+                                text = strings.expPhotoBadgeLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = tokens.infoColor,
+                              )
+                            }
                           }
                         }
-                      } else {
+                      }
+                      if (!isReadOnlyMode) {
                         IconButton(
-                          onClick = { armedDeleteId = exp.id },
-                          modifier = Modifier
-                            .size(48.dp)
-                            .testTag("delete_expense_${exp.id}"),
+                          onClick = { editingExpense = exp },
+                          modifier = Modifier.size(48.dp),
                         ) {
                           Icon(
-                            imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = strings.expDelete,
-                            tint = tokens.negativeDeep,
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = strings.expDialogEdit,
+                            tint = tokens.ink,
                           )
+                        }
+
+                        if (isDeleteArmed) {
+                          val confirmShape = RoundedCornerShape(tokens.badgeRadiusDp.dp)
+                          Surface(
+                            shape = confirmShape,
+                            color = tokens.negativeBg,
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp,
+                            modifier = Modifier
+                              .minimumInteractiveComponentSize()
+                              .heightIn(min = 48.dp)
+                              .clip(confirmShape)
+                              .clickable {
+                                armedDeleteId = null
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                scope.launch { ExpensePhotoManager.deletePhoto(context, exp.id) }
+                                onDeleteExpense(exp)
+                              }
+                              .testTag("confirm_delete_expense_${exp.id}"),
+                          ) {
+                            Box(
+                              contentAlignment = Alignment.Center,
+                              modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            ) {
+                              Text(
+                                text = "! ${strings.settingsConfirmBtn}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White,
+                              )
+                            }
+                          }
+                        } else {
+                          IconButton(
+                            onClick = { armedDeleteId = exp.id },
+                            modifier = Modifier
+                              .size(48.dp)
+                              .testTag("delete_expense_${exp.id}"),
+                          ) {
+                            Icon(
+                              imageVector = Icons.Default.DeleteOutline,
+                              contentDescription = strings.expDelete,
+                              tint = tokens.negativeDeep,
+                            )
+                          }
                         }
                       }
                     }
                   }
+                  if (rem > 0L && !isReadOnlyMode) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    SageSecondaryButton(
+                      text = "${strings.expSettleRemainingBtn} (${maskSensitiveDh(formatDh(rem, cur, dig), isPrivacy)})",
+                      icon = Icons.Default.DoneAll,
+                      compact = true,
+                      onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onUpdateExpense(exp.copy(paidAmountDh = exp.amountDh))
+                      },
+                      modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("exp_settle_btn_${exp.id}"),
+                    )
+                  }
                 }
-                if (rem > 0L && !isReadOnlyMode) {
-                  Spacer(modifier = Modifier.height(8.dp))
-                  SageSecondaryButton(
-                    text = "${strings.expSettleRemainingBtn} (${maskSensitiveDh(formatDh(rem, cur, dig), isPrivacy)})",
-                    icon = Icons.Default.DoneAll,
-                    compact = true,
-                    onClick = {
-                      haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                      onUpdateExpense(exp.copy(paidAmountDh = exp.amountDh))
-                    },
-                    modifier = Modifier
-                      .fillMaxWidth()
-                      .testTag("exp_settle_btn_${exp.id}"),
-                  )
                 }
               }
             }
           }
+        }
+
+        if (adaptive.isExpanded && data.expenses.isNotEmpty()) {
+          AdaptiveContentBox(
+            maxWidth = adaptive.wideContainerMaxWidth,
+            modifier = Modifier.weight(1f),
+          ) {
+            Row(
+              modifier = Modifier.fillMaxSize(),
+              horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+              Column(
+                modifier = Modifier
+                  .weight(0.40f)
+                  .verticalScroll(rememberScrollState())
+                  .padding(start = adaptive.horizontalPadding, top = 4.dp, bottom = adaptive.listBottomPadding),
+              ) {
+                ExpenseCategoriesBreakdownCard(
+                  expenses = data.expenses,
+                  currency = cur,
+                  digitsAr = dig,
+                  selectedCategory = selectedCategory,
+                  onSelectCategory = { selectedCategory = it },
+                )
+              }
+              renderExpensesLazyList(
+                Modifier
+                  .weight(0.60f)
+                  .fillMaxSize(),
+                false,
+              )
+            }
+          }
+        } else {
+          renderExpensesLazyList(Modifier.fillMaxSize(), true)
         }
         }
 
@@ -656,149 +713,177 @@ fun ExpensesScreen(
         }
 
         ExpensesSubTab.CAISSE -> {
-        // =========================================================================
-        // MODE الصندوق (CAISSE : Carte Forêt #0A2E0E -> AirtableSoftCard #F8FAFC -> FintechWhiteCard)
-        // =========================================================================
+        val caisseSignatureBlock: @Composable () -> Unit = {
+          AirtableSignatureCard(
+            backgroundColor = tokens.signatureForest,
+            modifier = Modifier.fillMaxWidth(),
+            padding = if (adaptive.isNarrowPhone) 18.dp else 24.dp,
+          ) {
+            Text(
+              text = strings.caisseAvailableTitle,
+              style = if (adaptive.isNarrowPhone) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.headlineLarge,
+              fontWeight = FontWeight.Normal,
+              color = Color.White,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            val cashDisp = formatDh(data.cashNowDh, cur, dig)
+            Text(
+              text = maskSensitiveDh(cashDisp, isPrivacy),
+              style = (if (adaptive.isNarrowPhone) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.displayLarge).copy(
+                fontFamily = numericFont ?: MaterialTheme.typography.displayLarge.fontFamily,
+                fontFeatureSettings = "tnum",
+              ),
+              fontWeight = FontWeight.Medium,
+              color = Color.White,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+          }
+        }
+        val caisseLedgerBlock: @Composable () -> Unit = {
+          AirtableSoftCard(
+            modifier = Modifier.fillMaxWidth(),
+            padding = if (adaptive.isNarrowPhone) 16.dp else 24.dp,
+          ) {
+            CaisseLedgerLine(strings.caisseOpeningBalance, maskSensitiveDh(formatDh(cfg.openingBalanceDh, cur, dig), isPrivacy), tokens.ink)
+            CaisseLedgerLine(
+              strings.caisseTotalReceipts,
+              maskSensitiveDh(formatDh(data.totalCaisseDh, cur, dig, explicitPlus = true), isPrivacy),
+              tokens.positiveDeep,
+            )
+            CaisseLedgerLine(
+              strings.caissePaidToSuppliers,
+              maskSensitiveDh(formatDh(-data.totalExpensesPaidDh, cur, dig), isPrivacy),
+              tokens.negativeDeep,
+            )
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = tokens.divider)
+            CaisseLedgerLine(strings.caisseTotalExpenses, maskSensitiveDh(formatDh(data.totalExpensesDh, cur, dig), isPrivacy), tokens.body)
+            CaisseLedgerLine(
+              strings.caisseUnpaidSuppliers,
+              maskSensitiveDh(formatDh(data.unpaidExpensesDh, cur, dig), isPrivacy),
+              if (data.unpaidExpensesDh > 0L) tokens.negativeDeep else tokens.ink,
+            )
+            val balText = formatDh(data.balanceDh, cur, dig)
+            CaisseLedgerLine(
+              strings.caisseAccountingBalance,
+              maskSensitiveDh(balText, isPrivacy),
+              if (data.balanceDh >= 0L) tokens.positiveDeep else tokens.negativeDeep,
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+              MetaCobaltBuyButton(
+                text = strings.exportPdfPrimaryBtn,
+                icon = Icons.Default.PictureAsPdf,
+                compact = true,
+                onClick = {
+                  PdfPosterExporter.shareCaisseReportPdf(context, data, false, onExportError, ExportVariant.PRINT)
+                },
+                modifier = Modifier.weight(1f).testTag("caisse_export_pdf_btn"),
+              )
+              SageSecondaryButton(
+                text = strings.exportPngSecondaryBtn,
+                icon = Icons.Default.Image,
+                compact = true,
+                onClick = {
+                  PdfPosterExporter.shareCaisseReportImage(context, data, false, onExportError, ExportVariant.PRINT)
+                },
+                modifier = Modifier.weight(1f).testTag("caisse_export_png_btn"),
+              )
+            }
+          }
+        }
+        val caisseMovementsBlock: @Composable () -> Unit = {
+          FintechWhiteCard(
+            modifier = Modifier.fillMaxWidth(),
+            padding = if (adaptive.isNarrowPhone) 16.dp else 24.dp,
+          ) {
+            Text(
+              text = strings.caisseMovementsTitle,
+              style = MaterialTheme.typography.titleLarge,
+              fontWeight = FontWeight.Normal,
+              color = tokens.ink,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            val monthTotals = cfg.activeMonthColumns.map { col ->
+              col to data.apartments.sumOf { it.amountFor(col) }
+            }
+            val peak = (monthTotals.maxOfOrNull { it.second } ?: 1L).coerceAtLeast(1L)
+
+            monthTotals.forEach { (col, amt) ->
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+              ) {
+                Text(
+                  text = strings.monthShort(col),
+                  style = MaterialTheme.typography.labelMedium,
+                  fontWeight = FontWeight.Medium,
+                  color = tokens.ink,
+                  maxLines = 1,
+                  modifier = Modifier.width(if (adaptive.isNarrowPhone) 42.dp else 56.dp),
+                )
+                SyndicatProgressBar(
+                  progress = (amt.toFloat() / peak.toFloat()).coerceIn(0f, 1f),
+                  modifier = Modifier.weight(1f),
+                )
+                Text(
+                  text = formatNumber(amt, dig),
+                  style = MaterialTheme.typography.labelMedium,
+                  fontFamily = numericFont ?: MaterialTheme.typography.labelMedium.fontFamily,
+                  fontWeight = FontWeight.Medium,
+                  color = tokens.positiveDeep,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis,
+                  modifier = Modifier.width(if (adaptive.isNarrowPhone) 52.dp else 64.dp),
+                )
+              }
+            }
+          }
+        }
+
         LazyColumn(
           modifier = Modifier.fillMaxSize(),
-          contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 32.dp),
+          contentPadding = PaddingValues(
+            start = adaptive.horizontalPadding,
+            end = adaptive.horizontalPadding,
+            top = 4.dp,
+            bottom = adaptive.listBottomPadding,
+          ),
           verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-          item {
-            AirtableSignatureCard(
-              backgroundColor = tokens.signatureForest,
-              modifier = Modifier.fillMaxWidth(),
-              padding = 24.dp,
-            ) {
-              Text(
-                text = strings.caisseAvailableTitle,
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Normal,
-                color = Color.White,
-              )
-              Spacer(modifier = Modifier.height(8.dp))
-              val cashDisp = formatDh(data.cashNowDh, cur, dig)
-              Text(
-                text = maskSensitiveDh(cashDisp, isPrivacy),
-                style = MaterialTheme.typography.displayLarge.copy(
-                  fontFamily = numericFont ?: MaterialTheme.typography.displayLarge.fontFamily,
-                  fontFeatureSettings = "tnum",
-                ),
-                fontWeight = FontWeight.Medium,
-                color = Color.White,
-              )
-            }
-          }
-
-          item {
-            AirtableSoftCard(
-              modifier = Modifier.fillMaxWidth(),
-              padding = 24.dp,
-            ) {
-              CaisseLedgerLine(strings.caisseOpeningBalance, maskSensitiveDh(formatDh(cfg.openingBalanceDh, cur, dig), isPrivacy), tokens.ink)
-              CaisseLedgerLine(
-                strings.caisseTotalReceipts,
-                maskSensitiveDh(formatDh(data.totalCaisseDh, cur, dig, explicitPlus = true), isPrivacy),
-                tokens.positiveDeep,
-              )
-              CaisseLedgerLine(
-                strings.caissePaidToSuppliers,
-                maskSensitiveDh(formatDh(-data.totalExpensesPaidDh, cur, dig), isPrivacy),
-                tokens.negativeDeep,
-              )
-              HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = tokens.divider)
-              CaisseLedgerLine(strings.caisseTotalExpenses, maskSensitiveDh(formatDh(data.totalExpensesDh, cur, dig), isPrivacy), tokens.body)
-              CaisseLedgerLine(
-                strings.caisseUnpaidSuppliers,
-                maskSensitiveDh(formatDh(data.unpaidExpensesDh, cur, dig), isPrivacy),
-                if (data.unpaidExpensesDh > 0L) tokens.negativeDeep else tokens.ink,
-              )
-              val balText = formatDh(data.balanceDh, cur, dig)
-              CaisseLedgerLine(
-                strings.caisseAccountingBalance,
-                maskSensitiveDh(balText, isPrivacy),
-                if (data.balanceDh >= 0L) tokens.positiveDeep else tokens.negativeDeep,
-              )
-
-              Spacer(modifier = Modifier.height(16.dp))
-              Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-              ) {
-                // Meta button-buy-cta (#0064E0 Cobalt pill for Caisse report export)
-                MetaCobaltBuyButton(
-                  text = strings.exportPdfPrimaryBtn,
-                  icon = Icons.Default.PictureAsPdf,
-                  compact = true,
-                  onClick = {
-                    PdfPosterExporter.shareCaisseReportPdf(context, data, false, onExportError, ExportVariant.PRINT)
-                  },
-                  modifier = Modifier.weight(1f).testTag("caisse_export_pdf_btn"),
-                )
-                SageSecondaryButton(
-                  text = strings.exportPngSecondaryBtn,
-                  icon = Icons.Default.Image,
-                  compact = true,
-                  onClick = {
-                    PdfPosterExporter.shareCaisseReportImage(context, data, false, onExportError, ExportVariant.PRINT)
-                  },
-                  modifier = Modifier.weight(1f).testTag("caisse_export_png_btn"),
-                )
-              }
-            }
-          }
-
-          // Encaissements mensuels (FintechWhiteCard — alternance propre après AirtableSoftCard)
-          item {
-            FintechWhiteCard(
-              modifier = Modifier.fillMaxWidth(),
-              padding = 24.dp,
-            ) {
-              Text(
-                text = strings.caisseMovementsTitle,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Normal,
-                color = tokens.ink,
-              )
-              Spacer(modifier = Modifier.height(12.dp))
-
-              val monthTotals = cfg.activeMonthColumns.map { col ->
-                col to data.apartments.sumOf { it.amountFor(col) }
-              }
-              val peak = (monthTotals.maxOfOrNull { it.second } ?: 1L).coerceAtLeast(1L)
-
-              monthTotals.forEach { (col, amt) ->
+          if (adaptive.isExpanded) {
+            item {
+              AdaptiveContentBox(maxWidth = adaptive.wideContainerMaxWidth) {
                 Row(
-                  modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 5.dp),
-                  verticalAlignment = Alignment.CenterVertically,
-                  horizontalArrangement = Arrangement.spacedBy(10.dp),
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.spacedBy(20.dp),
+                  verticalAlignment = Alignment.Top,
                 ) {
-                  Text(
-                    text = strings.monthShort(col),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = tokens.ink,
-                    modifier = Modifier.width(56.dp),
-                  )
-                  SyndicatProgressBar(
-                    progress = (amt.toFloat() / peak.toFloat()).coerceIn(0f, 1f),
-                    modifier = Modifier.weight(1f),
-                  )
-                  Text(
-                    text = formatNumber(amt, dig),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontFamily = numericFont ?: MaterialTheme.typography.labelMedium.fontFamily,
-                    fontWeight = FontWeight.Medium,
-                    color = tokens.positiveDeep,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.width(64.dp),
-                  )
+                  Column(
+                    modifier = Modifier.weight(0.5f),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                  ) {
+                    caisseSignatureBlock()
+                    caisseLedgerBlock()
+                  }
+                  Box(modifier = Modifier.weight(0.5f)) {
+                    caisseMovementsBlock()
+                  }
                 }
               }
             }
+          } else {
+            item { AdaptiveContentBox(maxWidth = adaptive.readableMaxWidth) { caisseSignatureBlock() } }
+            item { AdaptiveContentBox(maxWidth = adaptive.readableMaxWidth) { caisseLedgerBlock() } }
+            item { AdaptiveContentBox(maxWidth = adaptive.readableMaxWidth) { caisseMovementsBlock() } }
           }
         }
         } // end when subTab

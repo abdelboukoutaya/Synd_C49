@@ -6,9 +6,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -79,6 +81,7 @@ import com.example.util.ExportVariant
 import com.example.util.PdfPosterExporter
 import com.example.util.ProjectsExportOptions
 import com.example.util.SyndicatReportsExporter
+import com.example.ui.components.AdaptiveContentBox
 import com.example.ui.components.AirtableCreamCalloutCard
 import com.example.ui.components.AirtablePastelKpiCard
 import com.example.ui.components.AirtableSignatureCard
@@ -87,6 +90,7 @@ import com.example.ui.components.FintechTextField
 import com.example.ui.components.FintechWhiteCard
 import com.example.ui.components.LimePrimaryButton
 import com.example.ui.components.LocalPrivacyMode
+import com.example.ui.components.LocalSyndicatAdaptiveSpec
 import com.example.ui.components.MetaCobaltBuyButton
 import com.example.ui.components.MetaSegmentedThreePillRow
 import com.example.ui.components.ReadOnlyCouncilBanner
@@ -161,6 +165,8 @@ fun ProjectsScreen(
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
   val isPrivacy = LocalPrivacyMode.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
+  val containerMaxWidth = if (adaptive.isExpanded) adaptive.wideContainerMaxWidth else adaptive.readableMaxWidth
   val cfg = data.config
   val cur = cfg.currency
   val dig = cfg.digitsAr
@@ -323,204 +329,310 @@ fun ProjectsScreen(
       .background(tokens.screenBg)
       .testTag("projects_screen"),
     contentPadding = PaddingValues(
-      start = 16.dp,
-      end = 16.dp,
+      start = adaptive.horizontalPadding,
+      end = adaptive.horizontalPadding,
       top = 16.dp,
-      bottom = 32.dp,
+      bottom = adaptive.listBottomPadding,
     ),
-    verticalArrangement = Arrangement.spacedBy(20.dp),
+    verticalArrangement = Arrangement.spacedBy(if (adaptive.isNarrowPhone) 16.dp else 20.dp),
   ) {
     // 1. Meta Editorial Header + Overview Primary Black Pill (« إضافة مشروع / Nouveau projet »)
     item {
-      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (isReadOnlyMode) {
-          ReadOnlyCouncilBanner()
-        }
-        Text(
-          text = strings.projectsPageTitle,
-          style = MaterialTheme.typography.headlineLarge,
-          fontWeight = FontWeight.Medium,
-          color = tokens.inkDeep,
-        )
-        Text(
-          text = strings.projectsPageSub,
-          style = MaterialTheme.typography.headlineMedium,
-          fontWeight = FontWeight.Light,
-          color = tokens.body,
-        )
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-          if (!isReadOnlyMode) {
-            LimePrimaryButton(
-              text = strings.projectsAddBtn,
-              icon = Icons.Default.Add,
-              onClick = {
-                editingProject = null
-                showEditorDialog = true
-              },
-              modifier = Modifier
-                .weight(1.3f)
-                .testTag("add_project_fab"),
-            )
+      AdaptiveContentBox(maxWidth = containerMaxWidth) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+          if (isReadOnlyMode) {
+            ReadOnlyCouncilBanner()
           }
+          Text(
+            text = strings.projectsPageTitle,
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Medium,
+            color = tokens.inkDeep,
+          )
+          Text(
+            text = strings.projectsPageSub,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Light,
+            color = tokens.body,
+          )
+          if (adaptive.isVeryNarrowPhone && !isReadOnlyMode) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+              LimePrimaryButton(
+                text = strings.projectsAddBtn,
+                icon = Icons.Default.Add,
+                onClick = {
+                  editingProject = null
+                  showEditorDialog = true
+                },
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .testTag("add_project_fab"),
+              )
+              SageSecondaryButton(
+                text = strings.exportPdfPrimaryBtn,
+                icon = Icons.Default.PictureAsPdf,
+                compact = true,
+                onClick = { showExportDialog = true },
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .testTag("export_projects_top_action_pdf"),
+              )
+            }
+          } else {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+              if (!isReadOnlyMode) {
+                LimePrimaryButton(
+                  text = strings.projectsAddBtn,
+                  icon = Icons.Default.Add,
+                  compact = adaptive.isNarrowPhone,
+                  onClick = {
+                    editingProject = null
+                    showEditorDialog = true
+                  },
+                  modifier = Modifier
+                    .weight(1.3f)
+                    .testTag("add_project_fab"),
+                )
+              }
+              SageSecondaryButton(
+                text = strings.exportPdfPrimaryBtn,
+                icon = Icons.Default.PictureAsPdf,
+                compact = adaptive.isNarrowPhone,
+                onClick = { showExportDialog = true },
+                modifier = Modifier
+                  .weight(1f)
+                  .testTag("export_projects_top_action_pdf"),
+              )
+            }
+          }
+          val callsBadgeSuffix = if (specialCalls.isNotEmpty()) {
+            " (${formatNumber(specialCalls.size.toLong(), dig)})"
+          } else {
+            ""
+          }
+          val incBadgeSuffix = if (incidents.isNotEmpty()) {
+            " (${formatNumber(incidents.size.toLong(), dig)})"
+          } else {
+            ""
+          }
+          MetaSegmentedThreePillRow(
+            labels = Triple(
+              strings.projectsViewWorksTab,
+              "${strings.projectsViewCallsTab}$callsBadgeSuffix",
+              "${strings.projectsViewIncidentsTab}$incBadgeSuffix",
+            ),
+            selectedIndex = subTab.ordinal,
+            onSelectIndex = { idx -> subTab = ProjectsSubTab.entries[idx] },
+            tags = Triple("projects_tab_works", "projects_tab_calls", "projects_tab_incidents"),
+            modifier = Modifier.fillMaxWidth(),
+          )
           SageSecondaryButton(
-            text = strings.exportPdfPrimaryBtn,
-            icon = Icons.Default.PictureAsPdf,
-            onClick = { showExportDialog = true },
+            text = strings.agQuorumOpenBtn,
+            icon = Icons.Default.Groups,
+            compact = true,
+            onClick = { showQuorumDialog = true },
             modifier = Modifier
-              .weight(1f)
-              .testTag("export_projects_top_action_pdf"),
+              .fillMaxWidth()
+              .testTag("ag_quorum_btn"),
           )
         }
-        val callsBadgeSuffix = if (specialCalls.isNotEmpty()) {
-          " (${formatNumber(specialCalls.size.toLong(), dig)})"
-        } else {
-          ""
-        }
-        val incBadgeSuffix = if (incidents.isNotEmpty()) {
-          " (${formatNumber(incidents.size.toLong(), dig)})"
-        } else {
-          ""
-        }
-        MetaSegmentedThreePillRow(
-          labels = Triple(
-            strings.projectsViewWorksTab,
-            "${strings.projectsViewCallsTab}$callsBadgeSuffix",
-            "${strings.projectsViewIncidentsTab}$incBadgeSuffix",
-          ),
-          selectedIndex = subTab.ordinal,
-          onSelectIndex = { idx -> subTab = ProjectsSubTab.entries[idx] },
-          tags = Triple("projects_tab_works", "projects_tab_calls", "projects_tab_incidents"),
-          modifier = Modifier.fillMaxWidth(),
-        )
-        SageSecondaryButton(
-          text = strings.agQuorumOpenBtn,
-          icon = Icons.Default.Groups,
-          compact = true,
-          onClick = { showQuorumDialog = true },
-          modifier = Modifier
-            .fillMaxWidth()
-            .testTag("ag_quorum_btn"),
-        )
       }
     }
 
     // 2. Meta Showcase Card (#0A1317 32dp) + 2 Soft Cloud KPI Tiles (24dp)
     if (subTab == ProjectsSubTab.WORKS) {
     item {
-      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        AirtableSignatureCard(
-          backgroundColor = tokens.signatureForest,
-          modifier = Modifier
-            .fillMaxWidth()
-            .testTag("projects_caisse_card"),
-          padding = 24.dp,
-        ) {
-          Text(
-            text = strings.projectsKpiCaisseLabel,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Light,
-            color = Color.White.copy(alpha = 0.90f),
-          )
-          Spacer(modifier = Modifier.height(6.dp))
-          val cashText = formatDh(data.cashNowDh, cur, dig)
-          Text(
-            text = maskSensitiveDh(cashText, isPrivacy),
-            style = MaterialTheme.typography.displayMedium.copy(
-              fontFamily = numericFont,
-              fontFeatureSettings = "tnum, ss01, ss02",
-            ),
-            fontWeight = FontWeight.Medium,
-            color = Color.White,
-            modifier = Modifier.testTag("projects_caisse_value"),
-          )
-        }
-
+      AdaptiveContentBox(maxWidth = containerMaxWidth) {
         val avgOngoingPct = if (ongoingList.isEmpty()) {
           0
         } else {
           ongoingList.map { it.clampedProgressPercent }.average().toInt()
         }
+        val cashText = formatDh(data.cashNowDh, cur, dig)
 
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-          AirtablePastelKpiCard(
-            backgroundColor = MetaPrimaryCobalt,
-            label = strings.projectsKpiOngoingLabel,
-            valueText = formatNumber(ongoingList.size.toLong(), dig),
-            subtitle = if (ongoingList.isNotEmpty()) {
-              "${strings.projectProgressStateLabel}: ${bidiLtr("${localizeDigits(avgOngoingPct.toString(), dig)}%")}"
-            } else {
-              "—"
-            },
+        if (adaptive.isExpanded) {
+          Row(
             modifier = Modifier
-              .weight(1f)
-              .testTag("projects_kpi_ongoing"),
-          )
-          AirtablePastelKpiCard(
-            backgroundColor = MetaSuccess,
-            label = strings.projectsKpiReadyLabel,
-            valueText = formatNumber(data.readyToStartProjectsCount.toLong(), dig),
-            subtitle = strings.projectsKpiPlannedSub(plannedReadiness.size),
-            modifier = Modifier
-              .weight(1f)
-              .testTag("projects_kpi_ready"),
-          )
+              .fillMaxWidth()
+              .height(IntrinsicSize.Max),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+          ) {
+            AirtableSignatureCard(
+              backgroundColor = tokens.signatureForest,
+              modifier = Modifier
+                .weight(0.46f)
+                .fillMaxHeight()
+                .testTag("projects_caisse_card"),
+              padding = adaptive.cardPadding,
+            ) {
+              Text(
+                text = strings.projectsKpiCaisseLabel,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Light,
+                color = Color.White.copy(alpha = 0.90f),
+              )
+              Spacer(modifier = Modifier.height(6.dp))
+              Text(
+                text = maskSensitiveDh(cashText, isPrivacy),
+                style = MaterialTheme.typography.displayMedium.copy(
+                  fontFamily = numericFont,
+                  fontFeatureSettings = "tnum, ss01, ss02",
+                ),
+                fontWeight = FontWeight.Medium,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("projects_caisse_value"),
+              )
+            }
+            Row(
+              modifier = Modifier
+                .weight(0.54f)
+                .fillMaxHeight(),
+              horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+              AirtablePastelKpiCard(
+                backgroundColor = MetaPrimaryCobalt,
+                label = strings.projectsKpiOngoingLabel,
+                valueText = formatNumber(ongoingList.size.toLong(), dig),
+                subtitle = if (ongoingList.isNotEmpty()) {
+                  "${strings.projectProgressStateLabel}: ${bidiLtr("${localizeDigits(avgOngoingPct.toString(), dig)}%")}"
+                } else {
+                  "—"
+                },
+                modifier = Modifier
+                  .weight(1f)
+                  .fillMaxHeight()
+                  .testTag("projects_kpi_ongoing"),
+              )
+              AirtablePastelKpiCard(
+                backgroundColor = MetaSuccess,
+                label = strings.projectsKpiReadyLabel,
+                valueText = formatNumber(data.readyToStartProjectsCount.toLong(), dig),
+                subtitle = strings.projectsKpiPlannedSub(plannedReadiness.size),
+                modifier = Modifier
+                  .weight(1f)
+                  .fillMaxHeight()
+                  .testTag("projects_kpi_ready"),
+              )
+            }
+          }
+        } else {
+          Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            AirtableSignatureCard(
+              backgroundColor = tokens.signatureForest,
+              modifier = Modifier
+                .fillMaxWidth()
+                .testTag("projects_caisse_card"),
+              padding = if (adaptive.isNarrowPhone) 18.dp else 24.dp,
+            ) {
+              Text(
+                text = strings.projectsKpiCaisseLabel,
+                style = if (adaptive.isNarrowPhone) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Light,
+                color = Color.White.copy(alpha = 0.90f),
+              )
+              Spacer(modifier = Modifier.height(6.dp))
+              Text(
+                text = maskSensitiveDh(cashText, isPrivacy),
+                style = (if (adaptive.isNarrowPhone) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.displayMedium).copy(
+                  fontFamily = numericFont,
+                  fontFeatureSettings = "tnum, ss01, ss02",
+                ),
+                fontWeight = FontWeight.Medium,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("projects_caisse_value"),
+              )
+            }
+
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(if (adaptive.isNarrowPhone) 8.dp else 12.dp),
+            ) {
+              AirtablePastelKpiCard(
+                backgroundColor = MetaPrimaryCobalt,
+                label = strings.projectsKpiOngoingLabel,
+                valueText = formatNumber(ongoingList.size.toLong(), dig),
+                subtitle = if (ongoingList.isNotEmpty()) {
+                  "${strings.projectProgressStateLabel}: ${bidiLtr("${localizeDigits(avgOngoingPct.toString(), dig)}%")}"
+                } else {
+                  "—"
+                },
+                modifier = Modifier
+                  .weight(1f)
+                  .testTag("projects_kpi_ongoing"),
+              )
+              AirtablePastelKpiCard(
+                backgroundColor = MetaSuccess,
+                label = strings.projectsKpiReadyLabel,
+                valueText = formatNumber(data.readyToStartProjectsCount.toLong(), dig),
+                subtitle = strings.projectsKpiPlannedSub(plannedReadiness.size),
+                modifier = Modifier
+                  .weight(1f)
+                  .testTag("projects_kpi_ready"),
+              )
+            }
+          }
         }
       }
     }
 
     // 3. Filtres par statut (Tous / En cours / Futurs / Terminés)
     item {
-      FlowRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
-        SyndicatFilterChip(
-          selected = selectedTab == ProjectFilterTab.ALL,
-          onClick = { selectedTab = ProjectFilterTab.ALL },
-          label = strings.projectsFilterAll(data.projects.size),
-          modifier = Modifier.testTag("projects_filter_all"),
-        )
-        SyndicatFilterChip(
-          selected = selectedTab == ProjectFilterTab.IN_PROGRESS,
-          onClick = { selectedTab = ProjectFilterTab.IN_PROGRESS },
-          label = strings.projectsFilterOngoing(ongoingList.size),
-          modifier = Modifier.testTag("projects_filter_ongoing"),
-        )
-        SyndicatFilterChip(
-          selected = selectedTab == ProjectFilterTab.PLANNED,
-          onClick = { selectedTab = ProjectFilterTab.PLANNED },
-          label = strings.projectsFilterPlanned(plannedReadiness.size),
-          modifier = Modifier.testTag("projects_filter_planned"),
-        )
-        SyndicatFilterChip(
-          selected = selectedTab == ProjectFilterTab.COMPLETED,
-          onClick = { selectedTab = ProjectFilterTab.COMPLETED },
-          label = strings.projectsFilterCompleted(completedList.size),
-          modifier = Modifier.testTag("projects_filter_completed"),
-        )
+      AdaptiveContentBox(maxWidth = containerMaxWidth) {
+        FlowRow(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          SyndicatFilterChip(
+            selected = selectedTab == ProjectFilterTab.ALL,
+            onClick = { selectedTab = ProjectFilterTab.ALL },
+            label = strings.projectsFilterAll(data.projects.size),
+            modifier = Modifier.testTag("projects_filter_all"),
+          )
+          SyndicatFilterChip(
+            selected = selectedTab == ProjectFilterTab.IN_PROGRESS,
+            onClick = { selectedTab = ProjectFilterTab.IN_PROGRESS },
+            label = strings.projectsFilterOngoing(ongoingList.size),
+            modifier = Modifier.testTag("projects_filter_ongoing"),
+          )
+          SyndicatFilterChip(
+            selected = selectedTab == ProjectFilterTab.PLANNED,
+            onClick = { selectedTab = ProjectFilterTab.PLANNED },
+            label = strings.projectsFilterPlanned(plannedReadiness.size),
+            modifier = Modifier.testTag("projects_filter_planned"),
+          )
+          SyndicatFilterChip(
+            selected = selectedTab == ProjectFilterTab.COMPLETED,
+            onClick = { selectedTab = ProjectFilterTab.COMPLETED },
+            label = strings.projectsFilterCompleted(completedList.size),
+            modifier = Modifier.testTag("projects_filter_completed"),
+          )
+        }
       }
     }
 
     // État vide si aucun projet
     if (data.projects.isEmpty()) {
       item {
-        SyndicatEmptyStateCard(
-          icon = Icons.Default.Construction,
-          title = strings.projectsEmptyTitle,
-          subtitle = strings.projectsEmptySub,
-          actionLabel = strings.projectsLoadSamplesBtn,
-          actionIcon = Icons.Default.Construction,
-          actionTag = "load_sample_projects_btn",
-          onAction = onLoadStarterProjects,
-          modifier = Modifier.testTag("projects_empty_state"),
-        )
+        AdaptiveContentBox(maxWidth = containerMaxWidth) {
+          SyndicatEmptyStateCard(
+            icon = Icons.Default.Construction,
+            title = strings.projectsEmptyTitle,
+            subtitle = strings.projectsEmptySub,
+            actionLabel = strings.projectsLoadSamplesBtn,
+            actionIcon = Icons.Default.Construction,
+            actionTag = "load_sample_projects_btn",
+            onAction = onLoadStarterProjects,
+            modifier = Modifier.testTag("projects_empty_state"),
+          )
+        }
       }
     }
 
@@ -529,58 +641,126 @@ fun ProjectsScreen(
       ongoingList.isNotEmpty()
     if (showOngoing) {
       item {
-        Text(
-          text = strings.projectsOngoingSectionTitle,
-          style = MaterialTheme.typography.titleLarge,
-          fontWeight = FontWeight.Normal,
-          color = tokens.ink,
-          modifier = Modifier.testTag("ongoing_projects_header"),
-        )
+        AdaptiveContentBox(maxWidth = containerMaxWidth) {
+          Text(
+            text = strings.projectsOngoingSectionTitle,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Normal,
+            color = tokens.ink,
+            modifier = Modifier.testTag("ongoing_projects_header"),
+          )
+        }
       }
 
-      items(
-        items = ongoingList,
-        key = { "ongoing_${it.id}" },
-      ) { proj ->
-        OngoingProjectCard(
-          project = proj,
-          isAr = isAr,
-          currency = cur,
-          digitsAr = dig,
-          onIncrementProgress = {
-            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-            val nextPct = (proj.clampedProgressPercent + 10).coerceAtMost(100)
-            val nextStatus = if (nextPct >= 100) ProjectStatus.COMPLETED.code else ProjectStatus.IN_PROGRESS.code
-            val nextAllocated = if (proj.targetBudgetDh > 0L) {
-              maxOf(proj.allocatedAmountDh, (proj.targetBudgetDh * nextPct.toLong()) / 100L)
-            } else {
-              proj.allocatedAmountDh
+      if (adaptive.isExpanded) {
+        items(
+          items = ongoingList.chunked(2),
+          key = { row -> "ongoing_row_${row.joinToString("_") { it.id }}" },
+        ) { rowProjects ->
+          AdaptiveContentBox(maxWidth = containerMaxWidth) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .then(if (rowProjects.size > 1) Modifier.height(IntrinsicSize.Max) else Modifier),
+              horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+              rowProjects.forEach { proj ->
+                OngoingProjectCard(
+                  project = proj,
+                  isAr = isAr,
+                  currency = cur,
+                  digitsAr = dig,
+                  onIncrementProgress = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    val nextPct = (proj.clampedProgressPercent + 10).coerceAtMost(100)
+                    val nextStatus = if (nextPct >= 100) ProjectStatus.COMPLETED.code else ProjectStatus.IN_PROGRESS.code
+                    val nextAllocated = if (proj.targetBudgetDh > 0L) {
+                      maxOf(proj.allocatedAmountDh, (proj.targetBudgetDh * nextPct.toLong()) / 100L)
+                    } else {
+                      proj.allocatedAmountDh
+                    }
+                    onUpdateProject(
+                      proj.copy(
+                        progressPercent = nextPct.toLong(),
+                        status = nextStatus,
+                        allocatedAmountDh = nextAllocated,
+                      ),
+                      proj,
+                    )
+                  },
+                  onMarkCompleted = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onUpdateProject(
+                      proj.copy(
+                        status = ProjectStatus.COMPLETED.code,
+                        progressPercent = 100L,
+                        allocatedAmountDh = maxOf(proj.allocatedAmountDh, proj.targetBudgetDh),
+                      ),
+                      proj,
+                    )
+                  },
+                  onEdit = {
+                    editingProject = proj
+                    showEditorDialog = true
+                  },
+                  modifier = Modifier
+                    .weight(1f)
+                    .then(if (rowProjects.size > 1) Modifier.fillMaxHeight() else Modifier),
+                )
+              }
+              if (rowProjects.size < 2) {
+                Spacer(modifier = Modifier.weight(1f))
+              }
             }
-            onUpdateProject(
-              proj.copy(
-                progressPercent = nextPct.toLong(),
-                status = nextStatus,
-                allocatedAmountDh = nextAllocated,
-              ),
-              proj,
+          }
+        }
+      } else {
+        items(
+          items = ongoingList,
+          key = { "ongoing_${it.id}" },
+        ) { proj ->
+          AdaptiveContentBox(maxWidth = containerMaxWidth) {
+            OngoingProjectCard(
+              project = proj,
+              isAr = isAr,
+              currency = cur,
+              digitsAr = dig,
+              onIncrementProgress = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                val nextPct = (proj.clampedProgressPercent + 10).coerceAtMost(100)
+                val nextStatus = if (nextPct >= 100) ProjectStatus.COMPLETED.code else ProjectStatus.IN_PROGRESS.code
+                val nextAllocated = if (proj.targetBudgetDh > 0L) {
+                  maxOf(proj.allocatedAmountDh, (proj.targetBudgetDh * nextPct.toLong()) / 100L)
+                } else {
+                  proj.allocatedAmountDh
+                }
+                onUpdateProject(
+                  proj.copy(
+                    progressPercent = nextPct.toLong(),
+                    status = nextStatus,
+                    allocatedAmountDh = nextAllocated,
+                  ),
+                  proj,
+                )
+              },
+              onMarkCompleted = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onUpdateProject(
+                  proj.copy(
+                    status = ProjectStatus.COMPLETED.code,
+                    progressPercent = 100L,
+                    allocatedAmountDh = maxOf(proj.allocatedAmountDh, proj.targetBudgetDh),
+                  ),
+                  proj,
+                )
+              },
+              onEdit = {
+                editingProject = proj
+                showEditorDialog = true
+              },
             )
-          },
-          onMarkCompleted = {
-            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-            onUpdateProject(
-              proj.copy(
-                status = ProjectStatus.COMPLETED.code,
-                progressPercent = 100L,
-                allocatedAmountDh = maxOf(proj.allocatedAmountDh, proj.targetBudgetDh),
-              ),
-              proj,
-            )
-          },
-          onEdit = {
-            editingProject = proj
-            showEditorDialog = true
-          },
-        )
+          }
+        }
       }
     }
 
@@ -589,60 +769,116 @@ fun ProjectsScreen(
       plannedReadiness.isNotEmpty()
     if (showPlanned) {
       item {
-        AirtableCreamCalloutCard(
-          modifier = Modifier
-            .fillMaxWidth()
-            .testTag("planned_projects_header"),
-          padding = 20.dp,
-        ) {
-          Text(
-            text = strings.projectsFutureSectionTitle,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Medium,
-            color = tokens.inkDeep,
-          )
-          Spacer(modifier = Modifier.height(4.dp))
-          Text(
-            text = strings.projectsFutureSectionSub(
-              formatDh(data.expectedMonthlyIncomeDh, cur, dig)
-            ),
-            style = MaterialTheme.typography.bodySmall,
-            color = tokens.body,
-          )
+        AdaptiveContentBox(maxWidth = containerMaxWidth) {
+          AirtableCreamCalloutCard(
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("planned_projects_header"),
+            padding = adaptive.cardPadding,
+          ) {
+            Text(
+              text = strings.projectsFutureSectionTitle,
+              style = MaterialTheme.typography.titleLarge,
+              fontWeight = FontWeight.Medium,
+              color = tokens.inkDeep,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+              text = strings.projectsFutureSectionSub(
+                formatDh(data.expectedMonthlyIncomeDh, cur, dig)
+              ),
+              style = MaterialTheme.typography.bodySmall,
+              color = tokens.body,
+            )
+          }
         }
       }
 
-      items(
-        items = plannedReadiness,
-        key = { "planned_${it.project.id}" },
-      ) { readiness ->
-        val proj = readiness.project
-        FutureProjectCard(
-          readiness = readiness,
-          isAr = isAr,
-          currency = cur,
-          digitsAr = dig,
-          onStartProject = {
-            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-            val initialAdvance = if (proj.allocatedAmountDh > 0L) {
-              proj.allocatedAmountDh
-            } else {
-              minOf(readiness.requiredAdvanceDh, data.cashNowDh.coerceAtLeast(0L))
+      if (adaptive.isExpanded) {
+        items(
+          items = plannedReadiness.chunked(2),
+          key = { row -> "planned_row_${row.joinToString("_") { it.project.id }}" },
+        ) { rowReadiness ->
+          AdaptiveContentBox(maxWidth = containerMaxWidth) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .then(if (rowReadiness.size > 1) Modifier.height(IntrinsicSize.Max) else Modifier),
+              horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+              rowReadiness.forEach { readiness ->
+                val proj = readiness.project
+                FutureProjectCard(
+                  readiness = readiness,
+                  isAr = isAr,
+                  currency = cur,
+                  digitsAr = dig,
+                  onStartProject = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    val initialAdvance = if (proj.allocatedAmountDh > 0L) {
+                      proj.allocatedAmountDh
+                    } else {
+                      minOf(readiness.requiredAdvanceDh, data.cashNowDh.coerceAtLeast(0L))
+                    }
+                    onUpdateProject(
+                      proj.copy(
+                        status = ProjectStatus.IN_PROGRESS.code,
+                        progressPercent = maxOf(proj.progressPercent, 10L),
+                        allocatedAmountDh = initialAdvance,
+                      ),
+                      proj,
+                    )
+                  },
+                  onEdit = {
+                    editingProject = proj
+                    showEditorDialog = true
+                  },
+                  modifier = Modifier
+                    .weight(1f)
+                    .then(if (rowReadiness.size > 1) Modifier.fillMaxHeight() else Modifier),
+                )
+              }
+              if (rowReadiness.size < 2) {
+                Spacer(modifier = Modifier.weight(1f))
+              }
             }
-            onUpdateProject(
-              proj.copy(
-                status = ProjectStatus.IN_PROGRESS.code,
-                progressPercent = maxOf(proj.progressPercent, 10L),
-                allocatedAmountDh = initialAdvance,
-              ),
-              proj,
+          }
+        }
+      } else {
+        items(
+          items = plannedReadiness,
+          key = { "planned_${it.project.id}" },
+        ) { readiness ->
+          val proj = readiness.project
+          AdaptiveContentBox(maxWidth = containerMaxWidth) {
+            FutureProjectCard(
+              readiness = readiness,
+              isAr = isAr,
+              currency = cur,
+              digitsAr = dig,
+              onStartProject = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                val initialAdvance = if (proj.allocatedAmountDh > 0L) {
+                  proj.allocatedAmountDh
+                } else {
+                  minOf(readiness.requiredAdvanceDh, data.cashNowDh.coerceAtLeast(0L))
+                }
+                onUpdateProject(
+                  proj.copy(
+                    status = ProjectStatus.IN_PROGRESS.code,
+                    progressPercent = maxOf(proj.progressPercent, 10L),
+                    allocatedAmountDh = initialAdvance,
+                  ),
+                  proj,
+                )
+              },
+              onEdit = {
+                editingProject = proj
+                showEditorDialog = true
+              },
             )
-          },
-          onEdit = {
-            editingProject = proj
-            showEditorDialog = true
-          },
-        )
+          }
+        }
       }
     }
 
@@ -651,38 +887,86 @@ fun ProjectsScreen(
       completedList.isNotEmpty()
     if (showCompleted) {
       item {
-        Text(
-          text = strings.projectsCompletedSectionTitle,
-          style = MaterialTheme.typography.titleLarge,
-          fontWeight = FontWeight.Normal,
-          color = tokens.ink,
-          modifier = Modifier.testTag("completed_projects_header"),
-        )
+        AdaptiveContentBox(maxWidth = containerMaxWidth) {
+          Text(
+            text = strings.projectsCompletedSectionTitle,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Normal,
+            color = tokens.ink,
+            modifier = Modifier.testTag("completed_projects_header"),
+          )
+        }
       }
 
-      items(
-        items = completedList,
-        key = { "completed_${it.id}" },
-      ) { proj ->
-        CompletedProjectCard(
-          project = proj,
-          isAr = isAr,
-          currency = cur,
-          digitsAr = dig,
-          onReopen = {
-            onUpdateProject(
-              proj.copy(
-                status = ProjectStatus.IN_PROGRESS.code,
-                progressPercent = 80L,
-              ),
-              proj,
+      if (adaptive.isExpanded) {
+        items(
+          items = completedList.chunked(2),
+          key = { row -> "completed_row_${row.joinToString("_") { it.id }}" },
+        ) { rowCompleted ->
+          AdaptiveContentBox(maxWidth = containerMaxWidth) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .then(if (rowCompleted.size > 1) Modifier.height(IntrinsicSize.Max) else Modifier),
+              horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+              rowCompleted.forEach { proj ->
+                CompletedProjectCard(
+                  project = proj,
+                  isAr = isAr,
+                  currency = cur,
+                  digitsAr = dig,
+                  onReopen = {
+                    onUpdateProject(
+                      proj.copy(
+                        status = ProjectStatus.IN_PROGRESS.code,
+                        progressPercent = 80L,
+                      ),
+                      proj,
+                    )
+                  },
+                  onEdit = {
+                    editingProject = proj
+                    showEditorDialog = true
+                  },
+                  modifier = Modifier
+                    .weight(1f)
+                    .then(if (rowCompleted.size > 1) Modifier.fillMaxHeight() else Modifier),
+                )
+              }
+              if (rowCompleted.size < 2) {
+                Spacer(modifier = Modifier.weight(1f))
+              }
+            }
+          }
+        }
+      } else {
+        items(
+          items = completedList,
+          key = { "completed_${it.id}" },
+        ) { proj ->
+          AdaptiveContentBox(maxWidth = containerMaxWidth) {
+            CompletedProjectCard(
+              project = proj,
+              isAr = isAr,
+              currency = cur,
+              digitsAr = dig,
+              onReopen = {
+                onUpdateProject(
+                  proj.copy(
+                    status = ProjectStatus.IN_PROGRESS.code,
+                    progressPercent = 80L,
+                  ),
+                  proj,
+                )
+              },
+              onEdit = {
+                editingProject = proj
+                showEditorDialog = true
+              },
             )
-          },
-          onEdit = {
-            editingProject = proj
-            showEditorDialog = true
-          },
-        )
+          }
+        }
       }
     }
     } // end if (subTab == ProjectsSubTab.WORKS)
@@ -690,48 +974,50 @@ fun ProjectsScreen(
     // 7. SECTION 4 : Appels de fonds exceptionnels (Travaux / Projets)
     if (subTab == ProjectsSubTab.CALLS) {
       item {
-        AirtableSoftCard(
-          modifier = Modifier
-            .fillMaxWidth()
-            .testTag("special_calls_section"),
-          padding = 18.dp,
-        ) {
-          Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-              Icon(
-                imageVector = Icons.Default.Campaign,
-                contentDescription = null,
-                tint = tokens.infoColor,
-                modifier = Modifier.size(22.dp),
-              )
-              Column(modifier = Modifier.weight(1f)) {
-                Text(
-                  text = strings.specialCallsSectionTitle,
-                  style = MaterialTheme.typography.titleMedium,
-                  fontWeight = FontWeight.SemiBold,
-                  color = tokens.inkDeep,
+        AdaptiveContentBox(maxWidth = containerMaxWidth) {
+          AirtableSoftCard(
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("special_calls_section"),
+            padding = adaptive.cardPadding,
+          ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+              ) {
+                Icon(
+                  imageVector = Icons.Default.Campaign,
+                  contentDescription = null,
+                  tint = tokens.infoColor,
+                  modifier = Modifier.size(22.dp),
                 )
-                Text(
-                  text = strings.specialCallsSectionSub,
-                  style = MaterialTheme.typography.bodySmall,
-                  color = tokens.body,
+                Column(modifier = Modifier.weight(1f)) {
+                  Text(
+                    text = strings.specialCallsSectionTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = tokens.inkDeep,
+                  )
+                  Text(
+                    text = strings.specialCallsSectionSub,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tokens.body,
+                  )
+                }
+              }
+
+              if (!isReadOnlyMode) {
+                LimePrimaryButton(
+                  text = strings.specialCallsNewBtn,
+                  icon = Icons.Default.Add,
+                  onClick = { showNewSpecialCallDialog = true },
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("add_special_call_btn"),
                 )
               }
-            }
-
-            if (!isReadOnlyMode) {
-              LimePrimaryButton(
-                text = strings.specialCallsNewBtn,
-                icon = Icons.Default.Add,
-                onClick = { showNewSpecialCallDialog = true },
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .testTag("add_special_call_btn"),
-              )
             }
           }
         }
@@ -739,33 +1025,53 @@ fun ProjectsScreen(
 
       if (specialCalls.isEmpty()) {
         item {
-          SyndicatEmptyStateCard(
-            icon = Icons.Default.Campaign,
-            title = strings.specialCallsSectionTitle,
-            subtitle = strings.specialCallsEmptyText,
-            actionLabel = if (isReadOnlyMode) null else strings.specialCallsNewBtn,
-            actionIcon = Icons.Default.Add,
-            actionTag = "special_calls_empty_add_btn",
-            onAction = { if (!isReadOnlyMode) showNewSpecialCallDialog = true },
-          )
+          AdaptiveContentBox(maxWidth = containerMaxWidth) {
+            SyndicatEmptyStateCard(
+              icon = Icons.Default.Campaign,
+              title = strings.specialCallsSectionTitle,
+              subtitle = strings.specialCallsEmptyText,
+              actionLabel = if (isReadOnlyMode) null else strings.specialCallsNewBtn,
+              actionIcon = Icons.Default.Add,
+              actionTag = "special_calls_empty_add_btn",
+              onAction = { if (!isReadOnlyMode) showNewSpecialCallDialog = true },
+            )
+          }
         }
       }
 
+      val callCols = if (adaptive.isExpanded) 2 else 1
       items(
-        items = specialCalls,
-        key = { "special_call_${it.id}" },
-      ) { call ->
-        val linkedProject = data.projects.firstOrNull { it.id == call.projectId }
-        SpecialCallCard(
-          call = call,
-          linkedProjectTitle = linkedProject?.displayTitle(isAr),
-          apartments = data.apartments,
-          currency = cur,
-          digitsAr = dig,
-          isAr = isAr,
-          onTrackApartments = { trackingSpecialCallId = call.id },
-          onDelete = { if (!isReadOnlyMode) onDeleteSpecialCall(call.id) },
-        )
+        items = specialCalls.chunked(callCols),
+        key = { row -> "special_call_row_${row.joinToString("_") { it.id }}" },
+      ) { rowCalls ->
+        AdaptiveContentBox(maxWidth = containerMaxWidth) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .then(if (rowCalls.size > 1) Modifier.height(IntrinsicSize.Max) else Modifier),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+          ) {
+            rowCalls.forEach { call ->
+              val linkedProject = data.projects.firstOrNull { it.id == call.projectId }
+              SpecialCallCard(
+                call = call,
+                linkedProjectTitle = linkedProject?.displayTitle(isAr),
+                apartments = data.apartments,
+                currency = cur,
+                digitsAr = dig,
+                isAr = isAr,
+                onTrackApartments = { trackingSpecialCallId = call.id },
+                onDelete = { if (!isReadOnlyMode) onDeleteSpecialCall(call.id) },
+                modifier = Modifier
+                  .weight(1f)
+                  .then(if (rowCalls.size > 1) Modifier.fillMaxHeight() else Modifier),
+              )
+            }
+            if (rowCalls.size < callCols) {
+              Spacer(modifier = Modifier.weight(1f))
+            }
+          }
+        }
       }
     }
 
@@ -773,38 +1079,63 @@ fun ProjectsScreen(
     if (subTab == ProjectsSubTab.INCIDENTS) {
       if (!isReadOnlyMode) {
         item(key = "incidents_header_action") {
-          LimePrimaryButton(
-            text = strings.incidentAddBtn,
-            icon = Icons.Default.ReportProblem,
-            onClick = { showIncidentDialog = true },
-            modifier = Modifier
-              .fillMaxWidth()
-              .testTag("add_incident_btn"),
-          )
+          AdaptiveContentBox(maxWidth = containerMaxWidth) {
+            LimePrimaryButton(
+              text = strings.incidentAddBtn,
+              icon = Icons.Default.ReportProblem,
+              onClick = { showIncidentDialog = true },
+              modifier = Modifier
+                .fillMaxWidth()
+                .testTag("add_incident_btn"),
+            )
+          }
         }
       }
 
       if (incidents.isEmpty()) {
         item(key = "incidents_empty") {
-          SyndicatEmptyStateCard(
-            icon = Icons.Default.ReportProblem,
-            title = strings.incidentEmptyTitle,
-            subtitle = strings.incidentEmptySub,
-            actionLabel = if (isReadOnlyMode) null else strings.incidentAddBtn,
-            actionIcon = Icons.Default.Add,
-            actionTag = "incidents_empty_add_btn",
-            onAction = { if (!isReadOnlyMode) showIncidentDialog = true },
-          )
+          AdaptiveContentBox(maxWidth = containerMaxWidth) {
+            SyndicatEmptyStateCard(
+              icon = Icons.Default.ReportProblem,
+              title = strings.incidentEmptyTitle,
+              subtitle = strings.incidentEmptySub,
+              actionLabel = if (isReadOnlyMode) null else strings.incidentAddBtn,
+              actionIcon = Icons.Default.Add,
+              actionTag = "incidents_empty_add_btn",
+              onAction = { if (!isReadOnlyMode) showIncidentDialog = true },
+            )
+          }
         }
       } else {
-        items(incidents, key = { "inc_${it.id}" }) { inc ->
-          IncidentItemCard(
-            incident = inc,
-            isReadOnlyMode = isReadOnlyMode,
-            onCycleStatus = { onCycleIncidentStatus(inc.id) },
-            onConvertToExpense = { onConvertIncidentToExpense(inc) },
-            onDelete = { onDeleteIncident(inc.id) },
-          )
+        val incCols = if (adaptive.isExpanded) 2 else 1
+        items(
+          items = incidents.chunked(incCols),
+          key = { row -> "inc_row_${row.joinToString("_") { it.id }}" },
+        ) { rowIncidents ->
+          AdaptiveContentBox(maxWidth = containerMaxWidth) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .then(if (rowIncidents.size > 1) Modifier.height(IntrinsicSize.Max) else Modifier),
+              horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+              rowIncidents.forEach { inc ->
+                IncidentItemCard(
+                  incident = inc,
+                  isReadOnlyMode = isReadOnlyMode,
+                  onCycleStatus = { onCycleIncidentStatus(inc.id) },
+                  onConvertToExpense = { onConvertIncidentToExpense(inc) },
+                  onDelete = { onDeleteIncident(inc.id) },
+                  modifier = Modifier
+                    .weight(1f)
+                    .then(if (rowIncidents.size > 1) Modifier.fillMaxHeight() else Modifier),
+                )
+              }
+              if (rowIncidents.size < incCols) {
+                Spacer(modifier = Modifier.weight(1f))
+              }
+            }
+          }
         }
       }
     }
@@ -821,17 +1152,19 @@ private fun OngoingProjectCard(
   onIncrementProgress: () -> Unit,
   onMarkCompleted: () -> Unit,
   onEdit: () -> Unit,
+  modifier: Modifier = Modifier,
 ) {
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
   val numericFont = tokens.numericFontFamily ?: tokens.monoFontFamily
   val pct = project.clampedProgressPercent
 
   FintechWhiteCard(
-    modifier = Modifier
+    modifier = modifier
       .fillMaxWidth()
       .testTag("ongoing_project_card_${project.id}"),
-    padding = 18.dp,
+    padding = adaptive.cardPadding,
   ) {
     // Badges : Priorité + En cours + Catégorie
     FlowRow(
@@ -997,17 +1330,19 @@ private fun FutureProjectCard(
   digitsAr: Boolean,
   onStartProject: () -> Unit,
   onEdit: () -> Unit,
+  modifier: Modifier = Modifier,
 ) {
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
   val numericFont = tokens.numericFontFamily ?: tokens.monoFontFamily
   val project = readiness.project
 
   FintechWhiteCard(
-    modifier = Modifier
+    modifier = modifier
       .fillMaxWidth()
       .testTag("planned_project_card_${project.id}"),
-    padding = 18.dp,
+    padding = adaptive.cardPadding,
   ) {
     FlowRow(
       modifier = Modifier.fillMaxWidth(),
@@ -1214,15 +1549,17 @@ private fun CompletedProjectCard(
   digitsAr: Boolean,
   onReopen: () -> Unit,
   onEdit: () -> Unit,
+  modifier: Modifier = Modifier,
 ) {
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
 
   FintechWhiteCard(
-    modifier = Modifier
+    modifier = modifier
       .fillMaxWidth()
       .testTag("completed_project_card_${project.id}"),
-    padding = 16.dp,
+    padding = adaptive.cardPadding,
   ) {
     FlowRow(
       modifier = Modifier.fillMaxWidth(),
@@ -1783,9 +2120,11 @@ private fun SpecialCallCard(
   isAr: Boolean,
   onTrackApartments: () -> Unit,
   onDelete: () -> Unit,
+  modifier: Modifier = Modifier,
 ) {
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
   var confirmDelete by remember(call.id) { mutableStateOf(false) }
 
   val eligibleCount = call.eligibleApartments(apartments).size
@@ -1795,10 +2134,10 @@ private fun SpecialCallCard(
   val ratio = if (expected > 0L) (collected.toFloat() / expected.toFloat()).coerceIn(0f, 1f) else 0f
 
   FintechWhiteCard(
-    modifier = Modifier
+    modifier = modifier
       .fillMaxWidth()
       .testTag("special_call_card_${call.id}"),
-    padding = 16.dp,
+    padding = adaptive.cardPadding,
   ) {
     FlowRow(
       modifier = Modifier.fillMaxWidth(),

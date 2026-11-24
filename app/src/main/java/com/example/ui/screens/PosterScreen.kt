@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -71,8 +73,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.ui.components.AdaptiveContentBox
 import com.example.ui.components.AirtableSoftCard
 import com.example.ui.components.FintechWhiteCard
+import com.example.ui.components.LocalSyndicatAdaptiveSpec
 import com.example.ui.components.MetaCobaltBuyButton
 import com.example.ui.components.MetaSegmentedPillRow
 import com.example.ui.components.SageSecondaryButton
@@ -124,6 +128,9 @@ fun PosterScreen(
   val context = LocalContext.current
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
+  val containerMaxWidth = if (adaptive.isExpanded) adaptive.wideContainerMaxWidth else adaptive.readableMaxWidth
+  val cardPad = if (adaptive.isNarrowPhone) 16.dp else 22.dp
   val cfg = data.config
   val cur = cfg.currency
   val dig = cfg.digitsAr
@@ -201,175 +208,187 @@ fun PosterScreen(
 
   val a4PortraitBadgeLabel = if (isAr) "A4 عمودي" else "A4 Portrait"
 
-  LazyColumn(
-    modifier = modifier
-      .fillMaxSize()
-      .background(tokens.screenBg)
-      .testTag("poster_screen"),
-    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 32.dp),
-    verticalArrangement = Arrangement.spacedBy(20.dp),
-  ) {
-    // Page Header + Sélecteur global Couleur / Noir & Blanc
-    item {
-      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-          text = strings.posterPageTitle,
-          style = MaterialTheme.typography.headlineLarge,
-          fontWeight = FontWeight.Medium,
-          color = tokens.inkDeep,
-        )
-        Text(
-          text = strings.posterPageSub,
-          style = MaterialTheme.typography.headlineMedium,
-          fontWeight = FontWeight.Light,
-          color = tokens.body,
-        )
-        AirtableSoftCard(
-          modifier = Modifier.fillMaxWidth().testTag("global_export_mode_card"),
-          padding = 14.dp,
-        ) {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+  @Composable
+  fun CotisationExportCard(cardModifier: Modifier = Modifier) {
+    val previewCols = if (cotUntilCutoffOnly) {
+      cfg.cutoffMonthColumns.ifEmpty { cfg.activeMonthColumns }
+    } else {
+      cfg.activeMonthColumns
+    }
+    val maxVisibleCols = when {
+      adaptive.isNarrowPhone && cotShowNames -> 2
+      cotShowNames -> 3
+      else -> 4
+    }
+    val visibleMonths = previewCols.take(maxVisibleCols)
+
+    val paperBg = AirtableCanvas
+    val paperInk = AirtableInk
+    val paperMute = AirtableMuted
+    val paperHeaderBg = AirtableSurfaceSoft
+    val paperHairline = AirtableHairline
+
+    FintechWhiteCard(
+      modifier = cardModifier
+        .fillMaxWidth()
+        .testTag("export_card_cotisation"),
+      padding = cardPad,
+      elevatedCheckout = true,
+    ) {
+      ExportCardHeader(
+        icon = Icons.Default.TableChart,
+        title = strings.exportCard1Title,
+        subtitle = strings.exportCard1Sub,
+        formatBadge = a4PortraitBadgeLabel,
+      )
+
+      Spacer(modifier = Modifier.height(14.dp))
+
+      // Aperçu feuille A4 Portrait — adapté sans débordement horizontal sur téléphone
+      Surface(
+        shape = RoundedCornerShape(tokens.fieldRadiusDp.dp),
+        color = paperBg,
+        border = BorderStroke(1.dp, paperHairline),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Column(modifier = Modifier.padding(if (adaptive.isNarrowPhone) 10.dp else 12.dp)) {
+          Text(
+            text = cfg.buildingTitle,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Normal,
+            color = paperInk,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+          Spacer(modifier = Modifier.height(4.dp))
+          FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
           ) {
             Text(
-              text = strings.exportGlobalModeLabel,
-              style = MaterialTheme.typography.labelLarge,
-              fontWeight = FontWeight.Medium,
-              color = tokens.inkDeep,
-              modifier = Modifier.weight(1f).padding(end = 8.dp),
+              text = "✓ ${strings.posterLegendStandard} (${formatNumber(cfg.defaultMonthlyFee, dig)})",
+              style = MaterialTheme.typography.labelSmall,
+              color = AirtableSuccess,
             )
-            MetaSegmentedPillRow(
-              firstLabel = strings.exportModeColor,
-              secondLabel = strings.exportModeMonochrome,
-              isFirstSelected = !globalMonochrome,
-              onSelectFirst = {
-                globalMonochrome = false
-                cotMonochrome = false
-                relMonochrome = false
-                caisseMonochrome = false
-                projMonochrome = false
-                agMonochrome = false
-              },
-              onSelectSecond = {
-                globalMonochrome = true
-                cotMonochrome = true
-                relMonochrome = true
-                caisseMonochrome = true
-                projMonochrome = true
-                agMonochrome = true
-              },
-              firstTag = "global_export_mode_color",
-              secondTag = "global_export_mode_mono",
+            Text(
+              text = "◐ ${strings.posterLegendSpecial}",
+              style = MaterialTheme.typography.labelSmall,
+              color = AirtableInk,
             )
           }
-        }
-      }
-    }
+          Spacer(modifier = Modifier.height(8.dp))
 
-    // =========================================================================
-    // CARD 1 (FintechWhiteCard elevatedCheckout) — 8.1 AFFICHE DE COTISATION (FORMAT PORTRAIT A4)
-    // Porte le bouton Cobalt Meta `button-buy-cta` : « تصدير PDF »
-    // =========================================================================
-    item {
-      val previewCols = if (cotUntilCutoffOnly) {
-        cfg.cutoffMonthColumns.ifEmpty { cfg.activeMonthColumns }
-      } else {
-        cfg.activeMonthColumns
-      }
-      val visibleMonths = previewCols.take(if (cotShowNames) 3 else 4)
-
-      val paperBg = AirtableCanvas
-      val paperInk = AirtableInk
-      val paperMute = AirtableMuted
-      val paperHeaderBg = AirtableSurfaceSoft
-      val paperHairline = AirtableHairline
-
-      FintechWhiteCard(
-        modifier = Modifier.fillMaxWidth().testTag("export_card_cotisation"),
-        padding = 24.dp,
-        elevatedCheckout = true,
-      ) {
-        ExportCardHeader(
-          icon = Icons.Default.TableChart,
-          title = strings.exportCard1Title,
-          subtitle = strings.exportCard1Sub,
-          formatBadge = a4PortraitBadgeLabel,
-        )
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // Aperçu feuille A4 Portrait — adapté sans débordement horizontal sur téléphone
-        Surface(
-          shape = RoundedCornerShape(tokens.fieldRadiusDp.dp),
-          color = paperBg,
-          border = BorderStroke(1.dp, paperHairline),
-          tonalElevation = 0.dp,
-          shadowElevation = 0.dp,
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Column(modifier = Modifier.padding(12.dp)) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .background(paperHeaderBg, RoundedCornerShape(6.dp))
+              .padding(horizontal = 6.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+          ) {
             Text(
-              text = cfg.buildingTitle,
-              style = MaterialTheme.typography.titleSmall,
-              fontWeight = FontWeight.Normal,
-              color = paperInk,
+              text = strings.colAppt,
+              style = MaterialTheme.typography.labelSmall,
+              fontWeight = FontWeight.Medium,
+              color = paperMute,
               maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
+              modifier = Modifier.width(32.dp),
             )
-            Spacer(modifier = Modifier.height(4.dp))
-            FlowRow(
-              horizontalArrangement = Arrangement.spacedBy(12.dp),
-              verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
+            if (cotShowNames) {
               Text(
-                text = "✓ ${strings.posterLegendStandard} (${formatNumber(cfg.defaultMonthlyFee, dig)})",
-                style = MaterialTheme.typography.labelSmall,
-                color = AirtableSuccess,
-              )
-              Text(
-                text = "◐ ${strings.posterLegendSpecial}",
-                style = MaterialTheme.typography.labelSmall,
-                color = AirtableInk,
-              )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // En-tête du tableau Portrait
-            Row(
-              modifier = Modifier
-                .fillMaxWidth()
-                .background(paperHeaderBg, RoundedCornerShape(6.dp))
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-              Text(
-                text = strings.colAppt,
+                text = strings.colOwner,
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Medium,
                 color = paperMute,
                 maxLines = 1,
-                modifier = Modifier.width(34.dp),
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1.25f),
               )
+            }
+            visibleMonths.forEach { col ->
+              Text(
+                text = strings.monthShort(col),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
+                color = paperMute,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+              )
+            }
+            Text(
+              text = strings.colTotal,
+              style = MaterialTheme.typography.labelSmall,
+              fontWeight = FontWeight.Medium,
+              color = paperMute,
+              textAlign = TextAlign.End,
+              maxLines = 1,
+              modifier = Modifier.width(42.dp),
+            )
+          }
+
+          var prevFloor = ""
+          data.apartments.take(6).forEach { apt ->
+            if (prevFloor.isNotEmpty() && prevFloor != apt.floor) {
+              HorizontalDivider(thickness = 1.dp, color = paperInk.copy(alpha = 0.6f))
+            }
+            prevFloor = apt.floor
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 6.dp, vertical = 5.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+              Column(modifier = Modifier.width(32.dp)) {
+                Text(
+                  text = localizeDigits(apt.displayNumber, dig),
+                  style = MaterialTheme.typography.labelSmall,
+                  fontFamily = numericFont ?: MaterialTheme.typography.labelSmall.fontFamily,
+                  fontWeight = FontWeight.Medium,
+                  color = paperInk,
+                  maxLines = 1,
+                )
+                Text(
+                  text = strings.floorDisplay(apt.floor),
+                  style = MaterialTheme.typography.labelSmall,
+                  color = paperMute,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis,
+                )
+              }
               if (cotShowNames) {
                 Text(
-                  text = strings.colOwner,
+                  text = apt.displayOwner(isAr).ifBlank { "—" },
                   style = MaterialTheme.typography.labelSmall,
-                  fontWeight = FontWeight.Medium,
-                  color = paperMute,
+                  color = paperInk,
                   maxLines = 1,
                   overflow = TextOverflow.Ellipsis,
                   modifier = Modifier.weight(1.25f),
                 )
               }
               visibleMonths.forEach { col ->
+                val v = apt.amountFor(col)
+                val exp = apt.expectedFeeForMonth(col, cfg)
+                val isPart = v > 0L && exp > 0L && v < exp
+                val cellTxt = if (v > 0L) {
+                  "${if (isPart) "◐" else "✓"}${formatNumber(v, dig)}"
+                } else {
+                  "!"
+                }
+                val cellCol = when {
+                  v > 0L -> if (isPart) AirtableInk else AirtableSuccess
+                  else -> AirtableSignatureCoral
+                }
                 Text(
-                  text = strings.monthShort(col),
+                  text = cellTxt,
                   style = MaterialTheme.typography.labelSmall,
-                  fontWeight = FontWeight.Medium,
-                  color = paperMute,
+                  fontFamily = numericFont ?: MaterialTheme.typography.labelSmall.fontFamily,
+                  fontWeight = if (v > 0L) FontWeight.Medium else FontWeight.Normal,
+                  color = cellCol,
                   textAlign = TextAlign.Center,
                   maxLines = 1,
                   overflow = TextOverflow.Ellipsis,
@@ -377,258 +396,392 @@ fun PosterScreen(
                 )
               }
               Text(
-                text = strings.colTotal,
+                text = formatNumber(apt.totalForConfig(cfg), dig),
                 style = MaterialTheme.typography.labelSmall,
+                fontFamily = numericFont ?: MaterialTheme.typography.labelSmall.fontFamily,
                 fontWeight = FontWeight.Medium,
-                color = paperMute,
+                color = paperInk,
                 textAlign = TextAlign.End,
                 maxLines = 1,
-                modifier = Modifier.width(44.dp),
+                modifier = Modifier.width(42.dp),
               )
             }
+          }
 
-            var prevFloor = ""
-            data.apartments.take(6).forEach { apt ->
-              if (prevFloor.isNotEmpty() && prevFloor != apt.floor) {
-                HorizontalDivider(thickness = 1.dp, color = paperInk.copy(alpha = 0.6f))
-              }
-              prevFloor = apt.floor
-              Row(
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .padding(horizontal = 8.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-              ) {
-                Column(modifier = Modifier.width(34.dp)) {
-                  Text(
-                    text = localizeDigits(apt.displayNumber, dig),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontFamily = numericFont ?: MaterialTheme.typography.labelSmall.fontFamily,
-                    fontWeight = FontWeight.Medium,
-                    color = paperInk,
-                    maxLines = 1,
-                  )
-                  Text(
-                    text = strings.floorDisplay(apt.floor),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = paperMute,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                  )
-                }
-                if (cotShowNames) {
-                  Text(
-                    text = apt.displayOwner(isAr).ifBlank { "—" },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = paperInk,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1.25f),
-                  )
-                }
-                visibleMonths.forEach { col ->
-                  val v = apt.amountFor(col)
-                  val exp = apt.expectedFeeForMonth(col, cfg)
-                  val isPart = v > 0L && exp > 0L && v < exp
-                  val cellTxt = if (v > 0L) {
-                    "${if (isPart) "◐" else "✓"}${formatNumber(v, dig)}"
-                  } else {
-                    "!"
-                  }
-                  val cellCol = when {
-                    v > 0L -> if (isPart) AirtableInk else AirtableSuccess
-                    else -> AirtableSignatureCoral
-                  }
-                  Text(
-                    text = cellTxt,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontFamily = numericFont ?: MaterialTheme.typography.labelSmall.fontFamily,
-                    fontWeight = if (v > 0L) FontWeight.Medium else FontWeight.Normal,
-                    color = cellCol,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    modifier = Modifier.weight(1f),
-                  )
-                }
+          Spacer(modifier = Modifier.height(6.dp))
+          val caisseBandBg = if (cotInkSaver) AirtableSurfaceStrong else AirtableSurfaceDark
+          val caisseBandFg = if (cotInkSaver) AirtableInk else Color.White
+          Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = caisseBandBg,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Text(
+                text = strings.rowCaisse,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                color = caisseBandFg,
+              )
+              Text(
+                text = formatDh(data.totalCaisseDh, cur, dig),
+                style = MaterialTheme.typography.titleSmall,
+                fontFamily = numericFont ?: MaterialTheme.typography.titleSmall.fontFamily,
+                fontWeight = FontWeight.Medium,
+                color = caisseBandFg,
+              )
+            }
+          }
+        }
+      }
+
+      Spacer(modifier = Modifier.height(12.dp))
+
+      PosterOptionCheckbox(
+        checked = cotShowNames,
+        label = strings.exportOptShowNames,
+        onCheckedChange = { cotShowNames = it },
+      )
+      PosterOptionCheckbox(
+        checked = cotUntilCutoffOnly,
+        label = strings.exportOptUntilCutoffOnly,
+        onCheckedChange = { cotUntilCutoffOnly = it },
+      )
+      PosterOptionCheckbox(
+        checked = cotInkSaver,
+        label = strings.exportOptInkSaver,
+        onCheckedChange = { cotInkSaver = it },
+      )
+      PosterOptionCheckbox(
+        checked = cotMonochrome,
+        label = strings.exportOptMonochromeMode,
+        onCheckedChange = { cotMonochrome = it },
+        testTag = "cotisation_monochrome_checkbox",
+      )
+
+      Spacer(modifier = Modifier.height(12.dp))
+
+      val cotOpts = CotisationExportOptions(
+        showNames = cotShowNames,
+        untilCutoffOnly = cotUntilCutoffOnly,
+        inkSaver = cotInkSaver,
+        monochromeMode = cotMonochrome,
+        variant = activeVariant,
+      )
+      SageSecondaryButton(
+        text = strings.posterPreviewBtn,
+        icon = Icons.Default.Visibility,
+        compact = true,
+        onClick = { previewTarget = PosterPreviewTarget.Cotisation(cotOpts) },
+        modifier = Modifier.fillMaxWidth().testTag("preview_poster_1"),
+      )
+      Spacer(modifier = Modifier.height(8.dp))
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        MetaCobaltBuyButton(
+          text = strings.exportPdfPrimaryBtn,
+          icon = Icons.Default.PictureAsPdf,
+          compact = adaptive.isNarrowPhone,
+          onClick = {
+            PdfPosterExporter.shareOfficialPosterPdf(context, data, cotOpts, onExportError)
+          },
+          modifier = Modifier.weight(1f).testTag("export_official_poster_pdf"),
+        )
+        SageSecondaryButton(
+          text = strings.exportPngSecondaryBtn,
+          icon = Icons.Default.Image,
+          compact = adaptive.isNarrowPhone,
+          onClick = {
+            PdfPosterExporter.shareOfficialPosterImage(context, data, cotOpts, onExportError)
+          },
+          modifier = Modifier.weight(1f).testTag("export_official_poster_png"),
+        )
+      }
+    }
+  }
+
+  @Composable
+  fun RelanceExportCard(cardModifier: Modifier = Modifier) {
+    AirtableSoftCard(
+      modifier = cardModifier
+        .fillMaxWidth()
+        .testTag("export_card_relance"),
+      padding = cardPad,
+    ) {
+      ExportCardHeader(
+        icon = Icons.Default.NotificationsActive,
+        title = strings.exportCard2Title,
+        subtitle = strings.exportCard2Sub,
+        formatBadge = a4PortraitBadgeLabel,
+      )
+
+      Spacer(modifier = Modifier.height(14.dp))
+
+      Surface(
+        shape = RoundedCornerShape(tokens.fieldRadiusDp.dp),
+        color = AirtableCanvas,
+        border = BorderStroke(1.dp, AirtableHairline),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text(
+            text = cfg.relanceHeaderNote,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = AirtableInk,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+          )
+          Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = AirtableSurfaceSoft,
+            border = BorderStroke(1.dp, AirtableHairline),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Text(
+              text = "! ${strings.relanceBannerSummary(
+                data.lateApartments.size,
+                formatDh(data.totalRemainingToCollectDh, cur, dig),
+              )}",
+              style = MaterialTheme.typography.labelMedium,
+              fontWeight = FontWeight.Medium,
+              color = AirtableSignatureCoral,
+              modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+          }
+
+          data.lateApartments.take(4).forEachIndexed { idx, apt ->
+            if (idx > 0) {
+              HorizontalDivider(thickness = 1.dp, color = AirtableHairline)
+            }
+            val mainLabel = if (relAnonymousMode) {
+              "${strings.colAppt} ${localizeDigits(apt.displayNumber, dig)} · ${strings.floorDisplay(apt.floor)}"
+            } else {
+              "${strings.colAppt} ${localizeDigits(apt.displayNumber, dig)} · ${apt.displayOwner(isAr).ifBlank { "—" }}"
+            }
+            val missingMonthsStr = apt.missingMonths(cfg).joinToString(" · ") { strings.monthShort(it) }
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                 Text(
-                  text = formatNumber(apt.totalForConfig(cfg), dig),
+                  text = mainLabel,
                   style = MaterialTheme.typography.labelSmall,
-                  fontFamily = numericFont ?: MaterialTheme.typography.labelSmall.fontFamily,
                   fontWeight = FontWeight.Medium,
-                  color = paperInk,
-                  textAlign = TextAlign.End,
+                  color = AirtableInk,
                   maxLines = 1,
-                  modifier = Modifier.width(44.dp),
+                  overflow = TextOverflow.Ellipsis,
+                )
+                if (missingMonthsStr.isNotEmpty()) {
+                  Text(
+                    text = missingMonthsStr,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AirtableMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                  )
+                }
+              }
+              Text(
+                text = "! ${formatDh(apt.remainingDh(cfg), cur, dig)}",
+                style = MaterialTheme.typography.labelSmall,
+                fontFamily = numericFont ?: MaterialTheme.typography.labelSmall.fontFamily,
+                fontWeight = FontWeight.Medium,
+                color = AirtableSignatureCoral,
+              )
+            }
+          }
+        }
+      }
+
+      Spacer(modifier = Modifier.height(10.dp))
+
+      PosterOptionCheckbox(
+        checked = relAnonymousMode,
+        label = strings.exportOptAnonymousMode,
+        onCheckedChange = { relAnonymousMode = it },
+        testTag = "relance_anonymous_checkbox",
+      )
+      PosterOptionCheckbox(
+        checked = relInkSaver,
+        label = strings.exportOptInkSaver,
+        onCheckedChange = { relInkSaver = it },
+      )
+      PosterOptionCheckbox(
+        checked = relMonochrome,
+        label = strings.exportOptMonochromeMode,
+        onCheckedChange = { relMonochrome = it },
+        testTag = "relance_monochrome_checkbox",
+      )
+
+      Spacer(modifier = Modifier.height(12.dp))
+
+      val relOpts = RelanceExportOptions(
+        anonymousMode = relAnonymousMode,
+        inkSaver = relInkSaver,
+        monochromeMode = relMonochrome,
+        variant = activeVariant,
+      )
+      SageSecondaryButton(
+        text = strings.posterPreviewBtn,
+        icon = Icons.Default.Visibility,
+        compact = true,
+        onClick = { previewTarget = PosterPreviewTarget.Relance(relOpts) },
+        modifier = Modifier.fillMaxWidth().testTag("preview_poster_2"),
+      )
+      Spacer(modifier = Modifier.height(8.dp))
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        SageSecondaryButton(
+          text = strings.exportPdfPrimaryBtn,
+          icon = Icons.Default.PictureAsPdf,
+          compact = adaptive.isNarrowPhone,
+          onClick = {
+            PdfPosterExporter.shareRelanceListPdf(context, data, relOpts, onExportError)
+          },
+          modifier = Modifier.weight(1f).testTag("export_relance_pdf"),
+        )
+        SageSecondaryButton(
+          text = strings.exportPngSecondaryBtn,
+          icon = Icons.Default.Image,
+          compact = adaptive.isNarrowPhone,
+          onClick = {
+            PdfPosterExporter.shareRelanceListImage(context, data, relOpts, onExportError)
+          },
+          modifier = Modifier.weight(1f).testTag("export_relance_png"),
+        )
+      }
+    }
+  }
+
+  @Composable
+  fun CaisseExportCard(cardModifier: Modifier = Modifier) {
+    FintechWhiteCard(
+      modifier = cardModifier
+        .fillMaxWidth()
+        .testTag("export_card_caisse"),
+      padding = cardPad,
+    ) {
+      ExportCardHeader(
+        icon = Icons.Default.AccountBalanceWallet,
+        title = strings.exportCard3Title,
+        subtitle = strings.exportCard3Sub,
+        formatBadge = a4PortraitBadgeLabel,
+      )
+
+      Spacer(modifier = Modifier.height(14.dp))
+
+      Surface(
+        shape = RoundedCornerShape(tokens.fieldRadiusDp.dp),
+        color = AirtableCanvas,
+        border = BorderStroke(1.dp, AirtableHairline),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = if (caisseInkSaver || caisseMonochrome) AirtableCanvas else AirtableSignatureForest,
+            border = if (caisseInkSaver || caisseMonochrome) BorderStroke(1.dp, AirtableInk) else null,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Text(
+                text = strings.caisseAvailableTitle,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (caisseInkSaver || caisseMonochrome) AirtableInk else Color.White,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+              )
+              Spacer(modifier = Modifier.width(8.dp))
+              val cashVal = formatDh(data.cashNowDh, cur, dig)
+              Text(
+                text = cashVal,
+                style = MaterialTheme.typography.titleSmall,
+                fontFamily = numericFont ?: MaterialTheme.typography.titleSmall.fontFamily,
+                fontWeight = FontWeight.Medium,
+                color = if (caisseInkSaver || caisseMonochrome) AirtableInk else Color.White,
+              )
+            }
+          }
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            Surface(
+              shape = RoundedCornerShape(8.dp),
+              color = if (caisseInkSaver || caisseMonochrome) AirtableCanvas else MetaSuccessTintLight,
+              border = if (caisseInkSaver || caisseMonochrome) BorderStroke(1.dp, AirtableHairline) else null,
+              tonalElevation = 0.dp,
+              shadowElevation = 0.dp,
+              modifier = Modifier.weight(1f),
+            ) {
+              Column(modifier = Modifier.padding(10.dp)) {
+                Text(strings.dashCollectedLabel, style = MaterialTheme.typography.labelSmall, color = MetaInkDeep, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                  text = formatDh(data.totalCaisseDh, cur, dig),
+                  style = MaterialTheme.typography.labelMedium,
+                  fontFamily = numericFont ?: MaterialTheme.typography.labelMedium.fontFamily,
+                  fontWeight = FontWeight.Medium,
+                  color = MetaInkDeep,
                 )
               }
             }
-
-            Spacer(modifier = Modifier.height(6.dp))
-            val caisseBandBg = if (cotInkSaver) AirtableSurfaceStrong else AirtableSurfaceDark
-            val caisseBandFg = if (cotInkSaver) AirtableInk else Color.White
             Surface(
-              shape = RoundedCornerShape(6.dp),
-              color = caisseBandBg,
+              shape = RoundedCornerShape(8.dp),
+              color = if (caisseInkSaver || caisseMonochrome) AirtableCanvas else MetaCobaltTintLight,
+              border = if (caisseInkSaver || caisseMonochrome) BorderStroke(1.dp, AirtableHairline) else null,
               tonalElevation = 0.dp,
               shadowElevation = 0.dp,
-              modifier = Modifier.fillMaxWidth(),
+              modifier = Modifier.weight(1f),
             ) {
-              Row(
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-              ) {
+              Column(modifier = Modifier.padding(10.dp)) {
+                Text(strings.dashExpensesLabel, style = MaterialTheme.typography.labelSmall, color = MetaInkDeep, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                  text = strings.rowCaisse,
+                  text = formatDh(data.totalExpensesDh, cur, dig),
                   style = MaterialTheme.typography.labelMedium,
+                  fontFamily = numericFont ?: MaterialTheme.typography.labelMedium.fontFamily,
                   fontWeight = FontWeight.Medium,
-                  color = caisseBandFg,
-                )
-                Text(
-                  text = formatDh(data.totalCaisseDh, cur, dig),
-                  style = MaterialTheme.typography.titleSmall,
-                  fontFamily = numericFont ?: MaterialTheme.typography.titleSmall.fontFamily,
-                  fontWeight = FontWeight.Medium,
-                  color = caisseBandFg,
+                  color = MetaInkDeep,
                 )
               }
             }
           }
-        }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        PosterOptionCheckbox(
-          checked = cotShowNames,
-          label = strings.exportOptShowNames,
-          onCheckedChange = { cotShowNames = it },
-        )
-        PosterOptionCheckbox(
-          checked = cotUntilCutoffOnly,
-          label = strings.exportOptUntilCutoffOnly,
-          onCheckedChange = { cotUntilCutoffOnly = it },
-        )
-        PosterOptionCheckbox(
-          checked = cotInkSaver,
-          label = strings.exportOptInkSaver,
-          onCheckedChange = { cotInkSaver = it },
-        )
-        PosterOptionCheckbox(
-          checked = cotMonochrome,
-          label = strings.exportOptMonochromeMode,
-          onCheckedChange = { cotMonochrome = it },
-          testTag = "cotisation_monochrome_checkbox",
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        val cotOpts = CotisationExportOptions(
-          showNames = cotShowNames,
-          untilCutoffOnly = cotUntilCutoffOnly,
-          inkSaver = cotInkSaver,
-          monochromeMode = cotMonochrome,
-          variant = activeVariant,
-        )
-        SageSecondaryButton(
-          text = strings.posterPreviewBtn,
-          icon = Icons.Default.Visibility,
-          compact = true,
-          onClick = { previewTarget = PosterPreviewTarget.Cotisation(cotOpts) },
-          modifier = Modifier.fillMaxWidth().testTag("preview_poster_1"),
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-          MetaCobaltBuyButton(
-            text = strings.exportPdfPrimaryBtn,
-            icon = Icons.Default.PictureAsPdf,
-            onClick = {
-              PdfPosterExporter.shareOfficialPosterPdf(context, data, cotOpts, onExportError)
-            },
-            modifier = Modifier.weight(1f).testTag("export_official_poster_pdf"),
-          )
-          SageSecondaryButton(
-            text = strings.exportPngSecondaryBtn,
-            icon = Icons.Default.Image,
-            onClick = {
-              PdfPosterExporter.shareOfficialPosterImage(context, data, cotOpts, onExportError)
-            },
-            modifier = Modifier.weight(1f).testTag("export_official_poster_png"),
-          )
-        }
-      }
-    }
-
-    // =========================================================================
-    // CARD 2 (AirtableSoftCard #F8FAFC — alternance après FintechWhiteCard) — 8.2 AFFICHE DE RELANCE
-    // Boutons secondaires blancs pour que Card 1 reste le seul bouton primaire noir
-    // =========================================================================
-    item {
-      AirtableSoftCard(
-        modifier = Modifier.fillMaxWidth().testTag("export_card_relance"),
-        padding = 24.dp,
-      ) {
-        ExportCardHeader(
-          icon = Icons.Default.NotificationsActive,
-          title = strings.exportCard2Title,
-          subtitle = strings.exportCard2Sub,
-          formatBadge = a4PortraitBadgeLabel,
-        )
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        Surface(
-          shape = RoundedCornerShape(tokens.fieldRadiusDp.dp),
-          color = AirtableCanvas,
-          border = BorderStroke(1.dp, AirtableHairline),
-          tonalElevation = 0.dp,
-          shadowElevation = 0.dp,
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-              text = cfg.relanceHeaderNote,
-              style = MaterialTheme.typography.bodySmall,
-              fontWeight = FontWeight.Medium,
-              color = AirtableInk,
-              maxLines = 2,
-              overflow = TextOverflow.Ellipsis,
-            )
-            Surface(
-              shape = RoundedCornerShape(6.dp),
-              color = AirtableSurfaceSoft,
-              border = BorderStroke(1.dp, AirtableHairline),
-              tonalElevation = 0.dp,
-              shadowElevation = 0.dp,
-              modifier = Modifier.fillMaxWidth(),
-            ) {
-              Text(
-                text = "! ${strings.relanceBannerSummary(
-                  data.lateApartments.size,
-                  formatDh(data.totalRemainingToCollectDh, cur, dig),
-                )}",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Medium,
-                color = AirtableSignatureCoral,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-              )
-            }
-
-            data.lateApartments.take(4).forEachIndexed { idx, apt ->
-              if (idx > 0) {
-                HorizontalDivider(thickness = 1.dp, color = AirtableHairline)
-              }
-              val mainLabel = if (relAnonymousMode) {
-                "${strings.colAppt} ${localizeDigits(apt.displayNumber, dig)} · ${strings.floorDisplay(apt.floor)}"
-              } else {
-                "${strings.colAppt} ${localizeDigits(apt.displayNumber, dig)} · ${apt.displayOwner(isAr).ifBlank { "—" }}"
-              }
-              val missingMonthsStr = apt.missingMonths(cfg).joinToString(" · ") { strings.monthShort(it) }
+          if (data.expenses.isNotEmpty()) {
+            HorizontalDivider(thickness = 1.dp, color = AirtableHairline)
+            data.expenses.take(3).forEach { exp ->
               Row(
                 modifier = Modifier
                   .fillMaxWidth()
@@ -638,525 +791,321 @@ fun PosterScreen(
               ) {
                 Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                   Text(
-                    text = mainLabel,
+                    text = exp.title,
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Medium,
                     color = AirtableInk,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                   )
-                  if (missingMonthsStr.isNotEmpty()) {
-                    Text(
-                      text = missingMonthsStr,
-                      style = MaterialTheme.typography.labelSmall,
-                      color = AirtableMuted,
-                      maxLines = 1,
-                      overflow = TextOverflow.Ellipsis,
-                    )
-                  }
+                  val meta = buildList {
+                    add(strings.categoryLabel(exp.category))
+                    if (exp.supplier.isNotBlank()) add(exp.supplier)
+                    if (exp.dateLabel.isNotBlank()) add(bidiLtr(localizeDigits(exp.dateLabel, dig)))
+                  }.joinToString(" · ")
+                  Text(
+                    text = meta,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AirtableMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                  )
                 }
                 Text(
-                  text = "! ${formatDh(apt.remainingDh(cfg), cur, dig)}",
+                  text = formatDh(exp.amountDh, cur, dig),
                   style = MaterialTheme.typography.labelSmall,
                   fontFamily = numericFont ?: MaterialTheme.typography.labelSmall.fontFamily,
                   fontWeight = FontWeight.Medium,
-                  color = AirtableSignatureCoral,
+                  color = AirtableInk,
                 )
               }
             }
           }
         }
+      }
 
-        Spacer(modifier = Modifier.height(10.dp))
+      Spacer(modifier = Modifier.height(10.dp))
 
-        PosterOptionCheckbox(
-          checked = relAnonymousMode,
-          label = strings.exportOptAnonymousMode,
-          onCheckedChange = { relAnonymousMode = it },
-          testTag = "relance_anonymous_checkbox",
-        )
-        PosterOptionCheckbox(
-          checked = relInkSaver,
-          label = strings.exportOptInkSaver,
-          onCheckedChange = { relInkSaver = it },
-        )
-        PosterOptionCheckbox(
-          checked = relMonochrome,
-          label = strings.exportOptMonochromeMode,
-          onCheckedChange = { relMonochrome = it },
-          testTag = "relance_monochrome_checkbox",
-        )
+      PosterOptionCheckbox(
+        checked = caisseInkSaver,
+        label = strings.exportOptInkSaver,
+        onCheckedChange = { caisseInkSaver = it },
+      )
+      PosterOptionCheckbox(
+        checked = caisseMonochrome,
+        label = strings.exportOptMonochromeMode,
+        onCheckedChange = { caisseMonochrome = it },
+        testTag = "caisse_monochrome_checkbox",
+      )
 
-        Spacer(modifier = Modifier.height(12.dp))
+      Spacer(modifier = Modifier.height(12.dp))
 
-        val relOpts = RelanceExportOptions(
-          anonymousMode = relAnonymousMode,
-          inkSaver = relInkSaver,
-          monochromeMode = relMonochrome,
-          variant = activeVariant,
+      SageSecondaryButton(
+        text = strings.posterPreviewBtn,
+        icon = Icons.Default.Visibility,
+        compact = true,
+        onClick = { previewTarget = PosterPreviewTarget.Caisse(caisseInkSaver, caisseMonochrome) },
+        modifier = Modifier.fillMaxWidth().testTag("preview_poster_3"),
+      )
+      Spacer(modifier = Modifier.height(8.dp))
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        SageSecondaryButton(
+          text = strings.exportPdfPrimaryBtn,
+          icon = Icons.Default.PictureAsPdf,
+          compact = adaptive.isNarrowPhone,
+          onClick = {
+            PdfPosterExporter.shareCaisseReportPdf(context, data, caisseInkSaver, onExportError, activeVariant, caisseMonochrome)
+          },
+          modifier = Modifier.weight(1f).testTag("export_caisse_pdf"),
         )
         SageSecondaryButton(
-          text = strings.posterPreviewBtn,
-          icon = Icons.Default.Visibility,
-          compact = true,
-          onClick = { previewTarget = PosterPreviewTarget.Relance(relOpts) },
-          modifier = Modifier.fillMaxWidth().testTag("preview_poster_2"),
+          text = strings.exportPngSecondaryBtn,
+          icon = Icons.Default.Image,
+          compact = adaptive.isNarrowPhone,
+          onClick = {
+            PdfPosterExporter.shareCaisseReportImage(context, data, caisseInkSaver, onExportError, activeVariant, caisseMonochrome)
+          },
+          modifier = Modifier.weight(1f).testTag("export_caisse_png"),
         )
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-          SageSecondaryButton(
-            text = strings.exportPdfPrimaryBtn,
-            icon = Icons.Default.PictureAsPdf,
-            onClick = {
-              PdfPosterExporter.shareRelanceListPdf(context, data, relOpts, onExportError)
-            },
-            modifier = Modifier.weight(1f).testTag("export_relance_pdf"),
-          )
-          SageSecondaryButton(
-            text = strings.exportPngSecondaryBtn,
-            icon = Icons.Default.Image,
-            onClick = {
-              PdfPosterExporter.shareRelanceListImage(context, data, relOpts, onExportError)
-            },
-            modifier = Modifier.weight(1f).testTag("export_relance_png"),
-          )
-        }
       }
     }
+  }
 
-    // =========================================================================
-    // CARD 3 (FintechWhiteCard — alternance après AirtableSoftCard) — 8.3 SITUATION & ÉTAT DE CAISSE
-    // Miniature Portrait A4 : Carte Forêt #0A2E0E + cartes Menthe/Pêche + liste verticale des dépenses
-    // =========================================================================
-    item {
-      FintechWhiteCard(
-        modifier = Modifier.fillMaxWidth().testTag("export_card_caisse"),
-        padding = 24.dp,
+  @Composable
+  fun ProjectsExportCard(cardModifier: Modifier = Modifier) {
+    AirtableSoftCard(
+      modifier = cardModifier
+        .fillMaxWidth()
+        .testTag("export_card_projects"),
+      padding = cardPad,
+    ) {
+      ExportCardHeader(
+        icon = Icons.Default.TableChart,
+        title = strings.exportCardProjectsTitle,
+        subtitle = strings.exportCardProjectsSub,
+        formatBadge = a4PortraitBadgeLabel,
+      )
+
+      Spacer(modifier = Modifier.height(14.dp))
+
+      Surface(
+        shape = RoundedCornerShape(tokens.fieldRadiusDp.dp),
+        color = AirtableCanvas,
+        border = BorderStroke(1.dp, AirtableHairline),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        modifier = Modifier.fillMaxWidth(),
       ) {
-        ExportCardHeader(
-          icon = Icons.Default.AccountBalanceWallet,
-          title = strings.exportCard3Title,
-          subtitle = strings.exportCard3Sub,
-          formatBadge = a4PortraitBadgeLabel,
-        )
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        Surface(
-          shape = RoundedCornerShape(tokens.fieldRadiusDp.dp),
-          color = AirtableCanvas,
-          border = BorderStroke(1.dp, AirtableHairline),
-          tonalElevation = 0.dp,
-          shadowElevation = 0.dp,
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Carte Forêt en haut (ou blanche à contour en mode économie d'encre / N&B)
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          val totalProjBudget = data.projects.sumOf { it.targetBudgetDh }
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
             Surface(
               shape = RoundedCornerShape(8.dp),
-              color = if (caisseInkSaver || caisseMonochrome) AirtableCanvas else AirtableSignatureForest,
-              border = if (caisseInkSaver || caisseMonochrome) BorderStroke(1.dp, AirtableInk) else null,
+              color = if (projInkSaver || projMonochrome) AirtableCanvas else MetaCobaltTintLight,
+              border = if (projInkSaver || projMonochrome) BorderStroke(1.dp, AirtableHairline) else null,
               tonalElevation = 0.dp,
               shadowElevation = 0.dp,
-              modifier = Modifier.fillMaxWidth(),
+              modifier = Modifier.weight(1f),
             ) {
+              Column(modifier = Modifier.padding(10.dp)) {
+                Text(strings.projectsKpiOngoingLabel, style = MaterialTheme.typography.labelSmall, color = MetaInkDeep, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                  text = "${data.inProgressProjects.size}",
+                  style = MaterialTheme.typography.titleMedium,
+                  fontFamily = numericFont ?: MaterialTheme.typography.titleMedium.fontFamily,
+                  fontWeight = FontWeight.Bold,
+                  color = MetaInkDeep,
+                )
+              }
+            }
+            Surface(
+              shape = RoundedCornerShape(8.dp),
+              color = if (projInkSaver || projMonochrome) AirtableCanvas else MetaSuccessTintLight,
+              border = if (projInkSaver || projMonochrome) BorderStroke(1.dp, AirtableHairline) else null,
+              tonalElevation = 0.dp,
+              shadowElevation = 0.dp,
+              modifier = Modifier.weight(1f),
+            ) {
+              Column(modifier = Modifier.padding(10.dp)) {
+                Text(strings.projectTotalBudgetLabel, style = MaterialTheme.typography.labelSmall, color = MetaInkDeep, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                  text = formatDh(totalProjBudget, cur, dig),
+                  style = MaterialTheme.typography.titleMedium,
+                  fontFamily = numericFont ?: MaterialTheme.typography.titleMedium.fontFamily,
+                  fontWeight = FontWeight.Bold,
+                  color = MetaInkDeep,
+                )
+              }
+            }
+          }
+
+          if (data.projects.isNotEmpty()) {
+            HorizontalDivider(thickness = 1.dp, color = AirtableHairline)
+            data.projects.take(3).forEach { proj ->
               Row(
                 modifier = Modifier
                   .fillMaxWidth()
-                  .padding(horizontal = 12.dp, vertical = 10.dp),
+                  .padding(vertical = 2.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
               ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                  Text(
+                    text = proj.displayTitle(isAr),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = AirtableInk,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                  )
+                  Text(
+                    text = "${strings.categoryLabel(proj.category)} · ${proj.clampedProgressPercent}%",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AirtableMuted,
+                    maxLines = 1,
+                  )
+                }
                 Text(
-                  text = strings.caisseAvailableTitle,
-                  style = MaterialTheme.typography.labelMedium,
-                  color = if (caisseInkSaver || caisseMonochrome) AirtableInk else Color.White,
-                  modifier = Modifier.weight(1f),
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                val cashVal = formatDh(data.cashNowDh, cur, dig)
-                Text(
-                  text = cashVal,
-                  style = MaterialTheme.typography.titleSmall,
-                  fontFamily = numericFont ?: MaterialTheme.typography.titleSmall.fontFamily,
+                  text = formatDh(proj.targetBudgetDh, cur, dig),
+                  style = MaterialTheme.typography.labelSmall,
+                  fontFamily = numericFont ?: MaterialTheme.typography.labelSmall.fontFamily,
                   fontWeight = FontWeight.Medium,
-                  color = if (caisseInkSaver || caisseMonochrome) AirtableInk else Color.White,
+                  color = AirtableInk,
                 )
               }
             }
-
-            // Cartes sémantiques côte à côte (papier A4 clair)
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-              Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = if (caisseInkSaver || caisseMonochrome) AirtableCanvas else MetaSuccessTintLight,
-                border = if (caisseInkSaver || caisseMonochrome) BorderStroke(1.dp, AirtableHairline) else null,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                modifier = Modifier.weight(1f),
-              ) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                  Text(strings.dashCollectedLabel, style = MaterialTheme.typography.labelSmall, color = MetaInkDeep, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                  Text(
-                    text = formatDh(data.totalCaisseDh, cur, dig),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontFamily = numericFont ?: MaterialTheme.typography.labelMedium.fontFamily,
-                    fontWeight = FontWeight.Medium,
-                    color = MetaInkDeep,
-                  )
-                }
-              }
-              Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = if (caisseInkSaver || caisseMonochrome) AirtableCanvas else MetaCobaltTintLight,
-                border = if (caisseInkSaver || caisseMonochrome) BorderStroke(1.dp, AirtableHairline) else null,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                modifier = Modifier.weight(1f),
-              ) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                  Text(strings.dashExpensesLabel, style = MaterialTheme.typography.labelSmall, color = MetaInkDeep, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                  Text(
-                    text = formatDh(data.totalExpensesDh, cur, dig),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontFamily = numericFont ?: MaterialTheme.typography.labelMedium.fontFamily,
-                    fontWeight = FontWeight.Medium,
-                    color = MetaInkDeep,
-                  )
-                }
-              }
-            }
-
-            // Aperçu de la liste verticale des dépenses
-            if (data.expenses.isNotEmpty()) {
-              HorizontalDivider(thickness = 1.dp, color = AirtableHairline)
-              data.expenses.take(3).forEach { exp ->
-                Row(
-                  modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 2.dp),
-                  horizontalArrangement = Arrangement.SpaceBetween,
-                  verticalAlignment = Alignment.CenterVertically,
-                ) {
-                  Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                    Text(
-                      text = exp.title,
-                      style = MaterialTheme.typography.labelSmall,
-                      fontWeight = FontWeight.Medium,
-                      color = AirtableInk,
-                      maxLines = 1,
-                      overflow = TextOverflow.Ellipsis,
-                    )
-                    val meta = buildList {
-                      add(strings.categoryLabel(exp.category))
-                      if (exp.supplier.isNotBlank()) add(exp.supplier)
-                      if (exp.dateLabel.isNotBlank()) add(bidiLtr(localizeDigits(exp.dateLabel, dig)))
-                    }.joinToString(" · ")
-                    Text(
-                      text = meta,
-                      style = MaterialTheme.typography.labelSmall,
-                      color = AirtableMuted,
-                      maxLines = 1,
-                      overflow = TextOverflow.Ellipsis,
-                    )
-                  }
-                  Text(
-                    text = formatDh(exp.amountDh, cur, dig),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontFamily = numericFont ?: MaterialTheme.typography.labelSmall.fontFamily,
-                    fontWeight = FontWeight.Medium,
-                    color = AirtableInk,
-                  )
-                }
-              }
-            }
           }
         }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        PosterOptionCheckbox(
-          checked = caisseInkSaver,
-          label = strings.exportOptInkSaver,
-          onCheckedChange = { caisseInkSaver = it },
-        )
-        PosterOptionCheckbox(
-          checked = caisseMonochrome,
-          label = strings.exportOptMonochromeMode,
-          onCheckedChange = { caisseMonochrome = it },
-          testTag = "caisse_monochrome_checkbox",
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        SageSecondaryButton(
-          text = strings.posterPreviewBtn,
-          icon = Icons.Default.Visibility,
-          compact = true,
-          onClick = { previewTarget = PosterPreviewTarget.Caisse(caisseInkSaver, caisseMonochrome) },
-          modifier = Modifier.fillMaxWidth().testTag("preview_poster_3"),
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-          SageSecondaryButton(
-            text = strings.exportPdfPrimaryBtn,
-            icon = Icons.Default.PictureAsPdf,
-            onClick = {
-              PdfPosterExporter.shareCaisseReportPdf(context, data, caisseInkSaver, onExportError, activeVariant, caisseMonochrome)
-            },
-            modifier = Modifier.weight(1f).testTag("export_caisse_pdf"),
-          )
-          SageSecondaryButton(
-            text = strings.exportPngSecondaryBtn,
-            icon = Icons.Default.Image,
-            onClick = {
-              PdfPosterExporter.shareCaisseReportImage(context, data, caisseInkSaver, onExportError, activeVariant, caisseMonochrome)
-            },
-            modifier = Modifier.weight(1f).testTag("export_caisse_png"),
-          )
-        }
       }
-    }
 
-    // =========================================================================
-    // CARD 4 (AirtableSoftCard) — 8.4 ÉTAT D'AVANCEMENT DES PROJETS
-    // =========================================================================
-    item {
-      AirtableSoftCard(
-        modifier = Modifier.fillMaxWidth().testTag("export_card_projects"),
-        padding = 24.dp,
+      Spacer(modifier = Modifier.height(10.dp))
+
+      PosterOptionCheckbox(
+        checked = projInkSaver,
+        label = strings.exportOptInkSaver,
+        onCheckedChange = { projInkSaver = it },
+      )
+      PosterOptionCheckbox(
+        checked = projMonochrome,
+        label = strings.exportOptMonochromeMode,
+        onCheckedChange = { projMonochrome = it },
+        testTag = "projects_monochrome_checkbox",
+      )
+
+      Spacer(modifier = Modifier.height(12.dp))
+
+      val projOpts = ProjectsExportOptions(
+        inkSaver = projInkSaver,
+        monochromeMode = projMonochrome,
+        variant = activeVariant,
+      )
+      SageSecondaryButton(
+        text = strings.posterPreviewBtn,
+        icon = Icons.Default.Visibility,
+        compact = true,
+        onClick = { previewTarget = PosterPreviewTarget.Projects(projOpts) },
+        modifier = Modifier.fillMaxWidth().testTag("preview_poster_4"),
+      )
+      Spacer(modifier = Modifier.height(8.dp))
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
       ) {
-        ExportCardHeader(
-          icon = Icons.Default.TableChart,
-          title = strings.exportCardProjectsTitle,
-          subtitle = strings.exportCardProjectsSub,
-          formatBadge = a4PortraitBadgeLabel,
-        )
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        Surface(
-          shape = RoundedCornerShape(tokens.fieldRadiusDp.dp),
-          color = AirtableCanvas,
-          border = BorderStroke(1.dp, AirtableHairline),
-          tonalElevation = 0.dp,
-          shadowElevation = 0.dp,
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Bandeau de synthèse projets
-            val totalProjBudget = data.projects.sumOf { it.targetBudgetDh }
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-              Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = if (projInkSaver || projMonochrome) AirtableCanvas else MetaCobaltTintLight,
-                border = if (projInkSaver || projMonochrome) BorderStroke(1.dp, AirtableHairline) else null,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                modifier = Modifier.weight(1f),
-              ) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                  Text(strings.projectsKpiOngoingLabel, style = MaterialTheme.typography.labelSmall, color = MetaInkDeep, maxLines = 1)
-                  Text(
-                    text = "${data.inProgressProjects.size}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontFamily = numericFont ?: MaterialTheme.typography.titleMedium.fontFamily,
-                    fontWeight = FontWeight.Bold,
-                    color = MetaInkDeep,
-                  )
-                }
-              }
-              Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = if (projInkSaver || projMonochrome) AirtableCanvas else MetaSuccessTintLight,
-                border = if (projInkSaver || projMonochrome) BorderStroke(1.dp, AirtableHairline) else null,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                modifier = Modifier.weight(1f),
-              ) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                  Text(strings.projectTotalBudgetLabel, style = MaterialTheme.typography.labelSmall, color = MetaInkDeep, maxLines = 1)
-                  Text(
-                    text = formatDh(totalProjBudget, cur, dig),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontFamily = numericFont ?: MaterialTheme.typography.titleMedium.fontFamily,
-                    fontWeight = FontWeight.Bold,
-                    color = MetaInkDeep,
-                  )
-                }
-              }
-            }
-
-            // Aperçu des projets
-            if (data.projects.isNotEmpty()) {
-              HorizontalDivider(thickness = 1.dp, color = AirtableHairline)
-              data.projects.take(3).forEach { proj ->
-                Row(
-                  modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 2.dp),
-                  horizontalArrangement = Arrangement.SpaceBetween,
-                  verticalAlignment = Alignment.CenterVertically,
-                ) {
-                  Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                    Text(
-                      text = proj.displayTitle(isAr),
-                      style = MaterialTheme.typography.labelSmall,
-                      fontWeight = FontWeight.Medium,
-                      color = AirtableInk,
-                      maxLines = 1,
-                      overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                      text = "${strings.categoryLabel(proj.category)} · ${proj.clampedProgressPercent}%",
-                      style = MaterialTheme.typography.labelSmall,
-                      color = AirtableMuted,
-                      maxLines = 1,
-                    )
-                  }
-                  Text(
-                    text = formatDh(proj.targetBudgetDh, cur, dig),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontFamily = numericFont ?: MaterialTheme.typography.labelSmall.fontFamily,
-                    fontWeight = FontWeight.Medium,
-                    color = AirtableInk,
-                  )
-                }
-              }
-            }
-          }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        PosterOptionCheckbox(
-          checked = projInkSaver,
-          label = strings.exportOptInkSaver,
-          onCheckedChange = { projInkSaver = it },
-        )
-        PosterOptionCheckbox(
-          checked = projMonochrome,
-          label = strings.exportOptMonochromeMode,
-          onCheckedChange = { projMonochrome = it },
-          testTag = "projects_monochrome_checkbox",
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        val projOpts = ProjectsExportOptions(
-          inkSaver = projInkSaver,
-          monochromeMode = projMonochrome,
-          variant = activeVariant,
-        )
         SageSecondaryButton(
-          text = strings.posterPreviewBtn,
-          icon = Icons.Default.Visibility,
-          compact = true,
-          onClick = { previewTarget = PosterPreviewTarget.Projects(projOpts) },
-          modifier = Modifier.fillMaxWidth().testTag("preview_poster_4"),
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-          SageSecondaryButton(
-            text = strings.exportPdfPrimaryBtn,
-            icon = Icons.Default.PictureAsPdf,
-            onClick = {
-              PdfPosterExporter.shareProjectsReportPdf(context, data, projOpts, onExportError)
-            },
-            modifier = Modifier.weight(1f).testTag("export_projects_pdf"),
-          )
-          SageSecondaryButton(
-            text = strings.exportPngSecondaryBtn,
-            icon = Icons.Default.Image,
-            onClick = {
-              PdfPosterExporter.shareProjectsReportImage(context, data, projOpts, onExportError)
-            },
-            modifier = Modifier.weight(1f).testTag("export_projects_png"),
-          )
-        }
-      }
-    }
-
-    // =========================================================================
-    // CARD 5 (FintechWhiteCard) — 8.5 PACK BILAN ASSEMBLÉE GÉNÉRALE (AG) EN 1 PDF
-    // =========================================================================
-    item {
-      FintechWhiteCard(
-        modifier = Modifier.fillMaxWidth().testTag("export_card_ag_pack"),
-        padding = 24.dp,
-      ) {
-        ExportCardHeader(
-          icon = Icons.Default.LibraryBooks,
-          title = strings.exportCardAgPackTitle,
-          subtitle = strings.exportCardAgPackSub,
-          formatBadge = a4PortraitBadgeLabel,
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        PosterOptionCheckbox(
-          checked = agInkSaver,
-          label = strings.exportOptInkSaver,
-          onCheckedChange = { agInkSaver = it },
-        )
-        PosterOptionCheckbox(
-          checked = agMonochrome,
-          label = strings.exportOptMonochromeMode,
-          onCheckedChange = { agMonochrome = it },
-          testTag = "ag_pack_monochrome_checkbox",
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        SageSecondaryButton(
-          text = strings.posterPreviewBtn,
-          icon = Icons.Default.Visibility,
-          compact = true,
-          onClick = { previewTarget = PosterPreviewTarget.AgPack(agInkSaver, agMonochrome) },
-          modifier = Modifier.fillMaxWidth().testTag("preview_poster_5"),
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        MetaCobaltBuyButton(
-          text = strings.exportAgPackBtn,
+          text = strings.exportPdfPrimaryBtn,
           icon = Icons.Default.PictureAsPdf,
+          compact = adaptive.isNarrowPhone,
           onClick = {
-            PdfPosterExporter.shareAnnualAgPackPdf(
-              context = context,
-              data = data,
-              monochromeMode = agMonochrome,
-              inkSaver = agInkSaver,
-              onError = onExportError,
-            )
+            PdfPosterExporter.shareProjectsReportPdf(context, data, projOpts, onExportError)
           },
-          modifier = Modifier.fillMaxWidth().testTag("export_ag_pack_pdf"),
+          modifier = Modifier.weight(1f).testTag("export_projects_pdf"),
+        )
+        SageSecondaryButton(
+          text = strings.exportPngSecondaryBtn,
+          icon = Icons.Default.Image,
+          compact = adaptive.isNarrowPhone,
+          onClick = {
+            PdfPosterExporter.shareProjectsReportImage(context, data, projOpts, onExportError)
+          },
+          modifier = Modifier.weight(1f).testTag("export_projects_png"),
         )
       }
     }
+  }
 
-    // Exports Excel / Comptables (.csv)
-    item {
+  @Composable
+  fun AgPackExportCard(cardModifier: Modifier = Modifier) {
+    FintechWhiteCard(
+      modifier = cardModifier
+        .fillMaxWidth()
+        .testTag("export_card_ag_pack"),
+      padding = cardPad,
+    ) {
+      ExportCardHeader(
+        icon = Icons.Default.LibraryBooks,
+        title = strings.exportCardAgPackTitle,
+        subtitle = strings.exportCardAgPackSub,
+        formatBadge = a4PortraitBadgeLabel,
+      )
+
+      Spacer(modifier = Modifier.height(10.dp))
+
+      PosterOptionCheckbox(
+        checked = agInkSaver,
+        label = strings.exportOptInkSaver,
+        onCheckedChange = { agInkSaver = it },
+      )
+      PosterOptionCheckbox(
+        checked = agMonochrome,
+        label = strings.exportOptMonochromeMode,
+        onCheckedChange = { agMonochrome = it },
+        testTag = "ag_pack_monochrome_checkbox",
+      )
+
+      Spacer(modifier = Modifier.height(12.dp))
+
+      SageSecondaryButton(
+        text = strings.posterPreviewBtn,
+        icon = Icons.Default.Visibility,
+        compact = true,
+        onClick = { previewTarget = PosterPreviewTarget.AgPack(agInkSaver, agMonochrome) },
+        modifier = Modifier.fillMaxWidth().testTag("preview_poster_5"),
+      )
+      Spacer(modifier = Modifier.height(8.dp))
+
+      MetaCobaltBuyButton(
+        text = strings.exportAgPackBtn,
+        icon = Icons.Default.PictureAsPdf,
+        onClick = {
+          PdfPosterExporter.shareAnnualAgPackPdf(
+            context = context,
+            data = data,
+            monochromeMode = agMonochrome,
+            inkSaver = agInkSaver,
+            onError = onExportError,
+          )
+        },
+        modifier = Modifier.fillMaxWidth().testTag("export_ag_pack_pdf"),
+      )
+    }
+  }
+
+  @Composable
+  fun CsvAndWhatsappCardBlock(cardModifier: Modifier = Modifier) {
+    Column(
+      modifier = cardModifier.fillMaxWidth(),
+      verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
       AirtableSoftCard(
         modifier = Modifier.fillMaxWidth().testTag("export_csv_card"),
-        padding = 20.dp,
+        padding = cardPad,
       ) {
         Text(
           text = strings.exportCsvSectionTitle,
@@ -1167,7 +1116,7 @@ fun PosterScreen(
         Spacer(modifier = Modifier.height(10.dp))
         Row(
           modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(10.dp),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
           SageSecondaryButton(
             text = strings.exportPaymentsCsvBtn,
@@ -1191,10 +1140,7 @@ fun PosterScreen(
           )
         }
       }
-    }
 
-    // Text Summary Share via WhatsApp
-    item {
       SageSecondaryButton(
         text = strings.posterShareWhatsappText,
         icon = Icons.AutoMirrored.Filled.Send,
@@ -1203,8 +1149,134 @@ fun PosterScreen(
       )
     }
   }
+
+  LazyColumn(
+    modifier = modifier
+      .fillMaxSize()
+      .background(tokens.screenBg)
+      .testTag("poster_screen"),
+    contentPadding = PaddingValues(
+      start = adaptive.horizontalPadding,
+      end = adaptive.horizontalPadding,
+      top = 16.dp,
+      bottom = adaptive.listBottomPadding,
+    ),
+    verticalArrangement = Arrangement.spacedBy(adaptive.sectionSpacing),
+  ) {
+    // Page Header + Sélecteur global Couleur / Noir & Blanc
+    item {
+      AdaptiveContentBox(maxWidth = containerMaxWidth) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          Text(
+            text = strings.posterPageTitle,
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Medium,
+            color = tokens.inkDeep,
+          )
+          Text(
+            text = strings.posterPageSub,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Light,
+            color = tokens.body,
+          )
+          AirtableSoftCard(
+            modifier = Modifier.fillMaxWidth().testTag("global_export_mode_card"),
+            padding = 14.dp,
+          ) {
+            FlowRow(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              Text(
+                text = strings.exportGlobalModeLabel,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Medium,
+                color = tokens.inkDeep,
+                modifier = Modifier
+                  .align(Alignment.CenterVertically)
+                  .padding(end = 8.dp),
+              )
+              MetaSegmentedPillRow(
+                firstLabel = strings.exportModeColor,
+                secondLabel = strings.exportModeMonochrome,
+                isFirstSelected = !globalMonochrome,
+                onSelectFirst = {
+                  globalMonochrome = false
+                  cotMonochrome = false
+                  relMonochrome = false
+                  caisseMonochrome = false
+                  projMonochrome = false
+                  agMonochrome = false
+                },
+                onSelectSecond = {
+                  globalMonochrome = true
+                  cotMonochrome = true
+                  relMonochrome = true
+                  caisseMonochrome = true
+                  projMonochrome = true
+                  agMonochrome = true
+                },
+                firstTag = "global_export_mode_color",
+                secondTag = "global_export_mode_mono",
+              )
+            }
+          }
+        }
+      }
+    }
+
+    if (adaptive.isExpanded) {
+      item {
+        AdaptiveContentBox(maxWidth = containerMaxWidth) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(IntrinsicSize.Max),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+          ) {
+            CotisationExportCard(Modifier.weight(1f).fillMaxHeight())
+            RelanceExportCard(Modifier.weight(1f).fillMaxHeight())
+          }
+        }
+      }
+      item {
+        AdaptiveContentBox(maxWidth = containerMaxWidth) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(IntrinsicSize.Max),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+          ) {
+            CaisseExportCard(Modifier.weight(1f).fillMaxHeight())
+            ProjectsExportCard(Modifier.weight(1f).fillMaxHeight())
+          }
+        }
+      }
+      item {
+        AdaptiveContentBox(maxWidth = containerMaxWidth) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.Top,
+          ) {
+            AgPackExportCard(Modifier.weight(1f))
+            CsvAndWhatsappCardBlock(Modifier.weight(1f))
+          }
+        }
+      }
+    } else {
+      item { AdaptiveContentBox(maxWidth = containerMaxWidth) { CotisationExportCard() } }
+      item { AdaptiveContentBox(maxWidth = containerMaxWidth) { RelanceExportCard() } }
+      item { AdaptiveContentBox(maxWidth = containerMaxWidth) { CaisseExportCard() } }
+      item { AdaptiveContentBox(maxWidth = containerMaxWidth) { ProjectsExportCard() } }
+      item { AdaptiveContentBox(maxWidth = containerMaxWidth) { AgPackExportCard() } }
+      item { AdaptiveContentBox(maxWidth = containerMaxWidth) { CsvAndWhatsappCardBlock() } }
+    }
+  }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ExportCardHeader(
   icon: ImageVector,
@@ -1213,9 +1285,10 @@ private fun ExportCardHeader(
   formatBadge: String,
 ) {
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
   Row(
     verticalAlignment = Alignment.Top,
-    horizontalArrangement = Arrangement.spacedBy(12.dp),
+    horizontalArrangement = Arrangement.spacedBy(if (adaptive.isNarrowPhone) 10.dp else 12.dp),
   ) {
     Surface(
       shape = CircleShape,
@@ -1223,31 +1296,30 @@ private fun ExportCardHeader(
       border = BorderStroke(1.dp, tokens.divider),
       tonalElevation = 0.dp,
       shadowElevation = 0.dp,
-      modifier = Modifier.size(40.dp),
+      modifier = Modifier.size(if (adaptive.isNarrowPhone) 36.dp else 40.dp),
     ) {
       Box(contentAlignment = Alignment.Center) {
         Icon(
           imageVector = icon,
           contentDescription = null,
           tint = tokens.ink,
-          modifier = Modifier.size(19.dp),
+          modifier = Modifier.size(18.dp),
         )
       }
     }
     Column(modifier = Modifier.weight(1f)) {
-      Row(
+      FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
       ) {
         Text(
           text = title,
-          style = MaterialTheme.typography.titleLarge,
+          style = if (adaptive.isNarrowPhone) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
           fontWeight = FontWeight.Medium,
           color = tokens.inkDeep,
-          modifier = Modifier.weight(1f),
+          modifier = Modifier.padding(end = 6.dp),
         )
-        Spacer(modifier = Modifier.width(8.dp))
         Surface(
           shape = RoundedCornerShape(tokens.badgeRadiusDp.dp),
           color = tokens.surfaceSoft,
@@ -1264,7 +1336,7 @@ private fun ExportCardHeader(
           )
         }
       }
-      Spacer(modifier = Modifier.height(2.dp))
+      Spacer(modifier = Modifier.height(4.dp))
       Text(
         text = subtitle,
         style = MaterialTheme.typography.bodySmall,

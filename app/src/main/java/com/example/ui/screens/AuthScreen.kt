@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
 import com.example.auth.attemptAutoSignIn
 import com.example.auth.onGoogleSignInClicked
+import com.example.ui.components.LocalSyndicatAdaptiveSpec
 import com.example.ui.components.MetaSegmentedPillRow
 import com.example.ui.components.SageSecondaryButton
 import com.example.ui.components.SyndicatBrandIconBadge
@@ -90,6 +91,7 @@ fun AuthScreen(
 ) {
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
   val credentialManager = remember(context) { CredentialManager.create(context) }
@@ -129,7 +131,10 @@ fun AuthScreen(
         .fillMaxSize()
         .windowInsetsPadding(WindowInsets.safeDrawing)
         .verticalScroll(rememberScrollState())
-        .padding(horizontal = 24.dp, vertical = 24.dp),
+        .padding(
+          horizontal = adaptive.horizontalPadding,
+          vertical = if (adaptive.isCompactHeight) 12.dp else 24.dp,
+        ),
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.Center,
     ) {
@@ -142,7 +147,9 @@ fun AuthScreen(
         onSelectSecond = { onSelectLanguage(AppLanguage.FR) },
         firstTag = "auth_lang_${AppLanguage.AR.code}",
         secondTag = "auth_lang_${AppLanguage.FR.code}",
-        modifier = Modifier.padding(bottom = 24.dp),
+        modifier = Modifier.padding(
+          bottom = if (adaptive.isCompactHeight || adaptive.isNarrowPhone) 14.dp else 24.dp,
+        ),
       )
 
       Surface(
@@ -153,22 +160,29 @@ fun AuthScreen(
         shadowElevation = 0.dp,
         modifier = Modifier
           .fillMaxWidth()
-          .widthIn(max = 400.dp),
+          .widthIn(max = if (adaptive.isExpanded) 460.dp else 400.dp),
       ) {
         Column(
           modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 28.dp, vertical = 32.dp),
+            .padding(
+              horizontal = if (adaptive.isNarrowPhone) 18.dp else 28.dp,
+              vertical = when {
+                adaptive.isCompactHeight -> 20.dp
+                adaptive.isNarrowPhone -> 24.dp
+                else -> 32.dp
+              },
+            ),
           horizontalAlignment = Alignment.CenterHorizontally,
         ) {
           // Icône officielle SYNDICAT (Éditeur DYNIC)
           SyndicatBrandIconBadge(
-            size = 68.dp,
-            cornerRadius = 18.dp,
+            size = if (adaptive.isCompactHeight || adaptive.isNarrowPhone) 56.dp else 68.dp,
+            cornerRadius = if (adaptive.isCompactHeight || adaptive.isNarrowPhone) 15.dp else 18.dp,
             modifier = Modifier.testTag("auth_app_icon"),
           )
 
-          Spacer(modifier = Modifier.height(16.dp))
+          Spacer(modifier = Modifier.height(if (adaptive.isCompactHeight) 12.dp else 16.dp))
 
           Text(
             text = strings.authBadge,

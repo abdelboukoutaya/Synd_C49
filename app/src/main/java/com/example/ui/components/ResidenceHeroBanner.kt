@@ -185,6 +185,7 @@ fun ResidenceHeroBanner(
   val context = LocalContext.current
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
   val scope = rememberCoroutineScope()
 
   LaunchedEffect(context) {
@@ -209,7 +210,14 @@ fun ResidenceHeroBanner(
     }
   }
 
-  val bannerHeight = if (compact) 156.dp else 208.dp
+  val isNarrow = adaptive.isNarrowPhone || compact
+  val bannerHeight = when {
+    adaptive.isCompactHeight -> 142.dp
+    compact -> 156.dp
+    adaptive.isNarrowPhone -> 178.dp
+    adaptive.isExpanded -> 212.dp
+    else -> 204.dp
+  }
   val shape = RoundedCornerShape(tokens.featureCardRadiusDp.dp)
 
   Surface(
@@ -257,7 +265,7 @@ fun ResidenceHeroBanner(
       Column(
         modifier = Modifier
           .fillMaxSize()
-          .padding(horizontal = 18.dp, vertical = 14.dp),
+          .padding(horizontal = if (adaptive.isNarrowPhone) 14.dp else 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.SpaceBetween,
       ) {
         // Barre supérieure : Badge résidence + actions (Personnaliser photo + actions écran)
@@ -273,6 +281,7 @@ fun ResidenceHeroBanner(
               border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
               tonalElevation = 0.dp,
               shadowElevation = 0.dp,
+              modifier = Modifier.weight(1f, fill = false),
             ) {
               Text(
                 text = badgeText,
@@ -281,16 +290,18 @@ fun ResidenceHeroBanner(
                 color = Color.White,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier.padding(horizontal = if (isNarrow) 10.dp else 12.dp, vertical = 6.dp),
               )
             }
           } else {
             Spacer(modifier = Modifier.width(1.dp))
           }
 
+          Spacer(modifier = Modifier.width(6.dp))
+
           Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (isNarrow) 4.dp else 6.dp),
           ) {
             if (bmp != null) {
               HeroOverlayCircleButton(
@@ -334,7 +345,7 @@ fun ResidenceHeroBanner(
                   tint = Color.White,
                   modifier = Modifier.size(16.dp),
                 )
-                if (!compact) {
+                if (!isNarrow) {
                   Text(
                     text = strings.residenceCustomizePhotoShort,
                     style = MaterialTheme.typography.labelMedium,

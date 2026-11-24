@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.components.FintechWhiteCard
+import com.example.ui.components.LocalSyndicatAdaptiveSpec
 import com.example.ui.components.MetaCobaltBuyButton
 import com.example.ui.components.MetaSegmentedThreePillRow
 import com.example.ui.components.SyndicatFilterChip
@@ -62,6 +63,7 @@ fun SettingsWidgetStudioCard(
   val context = LocalContext.current
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
   val isAr = strings.language == AppLanguage.AR
 
   var prefs by remember { mutableStateOf(SyndicatWidgetSnapshot.loadPrefs(context)) }
@@ -103,7 +105,7 @@ fun SettingsWidgetStudioCard(
     modifier = modifier
       .fillMaxWidth()
       .testTag("widget_studio_card"),
-    padding = 24.dp,
+    padding = if (adaptive.isNarrowPhone) 16.dp else 22.dp,
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
       Text(
@@ -406,15 +408,18 @@ fun SettingsWidgetStudioCard(
                 }
               }
 
-              Row(
+              FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
               ) {
                 Text(
                   text = if (isAr) "المحصل: $collectedDisplay" else "Encaissé : $collectedDisplay",
                   fontSize = 11.sp,
                   color = palette.secondaryText,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis,
+                  modifier = Modifier.align(Alignment.CenterVertically),
                 )
                 Surface(
                   shape = RoundedCornerShape(10.dp),

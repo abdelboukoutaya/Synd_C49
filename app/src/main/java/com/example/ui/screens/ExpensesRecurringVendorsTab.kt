@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -53,10 +55,12 @@ import com.example.data.local.RecurringExpenseTemplate
 import com.example.data.local.VendorRecord
 import com.example.data.model.EXPENSE_CATEGORIES
 import com.example.data.model.ExpenseRecord
+import com.example.ui.components.AdaptiveContentBox
 import com.example.ui.components.AirtableSoftCard
 import com.example.ui.components.FintechTextField
 import com.example.ui.components.FintechWhiteCard
 import com.example.ui.components.LocalPrivacyMode
+import com.example.ui.components.LocalSyndicatAdaptiveSpec
 import com.example.ui.components.MetaCobaltBuyButton
 import com.example.ui.components.SageSecondaryButton
 import com.example.ui.components.SyndicatDialog
@@ -92,6 +96,8 @@ fun RecurringAndVendorsTabContent(
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
   val isPrivacy = LocalPrivacyMode.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
+  val containerMaxWidth = if (adaptive.isExpanded) adaptive.wideContainerMaxWidth else adaptive.readableMaxWidth
   val currentMonthKey = remember { SimpleDateFormat("yyyy-MM", Locale.US).format(Date()) }
 
   var showTemplateModal by remember { mutableStateOf(false) }
@@ -103,116 +109,339 @@ fun RecurringAndVendorsTabContent(
     modifier = Modifier
       .fillMaxSize()
       .testTag("abos_vendors_list"),
-    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 96.dp),
-    verticalArrangement = Arrangement.spacedBy(16.dp),
+    contentPadding = PaddingValues(
+      start = adaptive.horizontalPadding,
+      end = adaptive.horizontalPadding,
+      top = 6.dp,
+      bottom = adaptive.listBottomPadding,
+    ),
+    verticalArrangement = Arrangement.spacedBy(adaptive.sectionSpacing),
   ) {
     // 1. Dépenses récurrentes en 1 clic
     item(key = "recurring_header_card") {
-      FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = 18.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-          ) {
-            Icon(
-              imageVector = Icons.Default.EventRepeat,
-              contentDescription = null,
-              tint = tokens.linkColor,
-            )
-            Text(
-              text = strings.recurringSectionTitle,
-              style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.Bold,
-              color = tokens.inkDeep,
-              modifier = Modifier.weight(1f),
-            )
-          }
-
-          if (!isReadOnlyMode) {
-            FlowRow(
+      AdaptiveContentBox(maxWidth = containerMaxWidth) {
+        FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = adaptive.cardPadding) {
+          Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              verticalAlignment = Alignment.CenterVertically,
               horizontalArrangement = Arrangement.spacedBy(8.dp),
-              verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-              if (templates.isNotEmpty()) {
-                MetaCobaltBuyButton(
-                  text = strings.recurringGenerateMonthBtn,
-                  icon = Icons.Default.AutoAwesome,
-                  compact = true,
-                  onClick = onGenerateCurrentMonth,
-                  modifier = Modifier.testTag("generate_recurring_month_btn"),
-                )
-              }
-              SageSecondaryButton(
-                text = strings.recurringAddBtn,
-                icon = Icons.Default.Add,
-                compact = true,
-                onClick = {
-                  editingTemplate = null
-                  showTemplateModal = true
-                },
-                modifier = Modifier.testTag("add_recurring_btn"),
+              Icon(
+                imageVector = Icons.Default.EventRepeat,
+                contentDescription = null,
+                tint = tokens.linkColor,
               )
-              if (templates.isEmpty()) {
+              Text(
+                text = strings.recurringSectionTitle,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = tokens.inkDeep,
+                modifier = Modifier.weight(1f),
+              )
+            }
+
+            if (!isReadOnlyMode) {
+              FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+              ) {
+                if (templates.isNotEmpty()) {
+                  MetaCobaltBuyButton(
+                    text = strings.recurringGenerateMonthBtn,
+                    icon = Icons.Default.AutoAwesome,
+                    compact = true,
+                    onClick = onGenerateCurrentMonth,
+                    modifier = Modifier.testTag("generate_recurring_month_btn"),
+                  )
+                }
                 SageSecondaryButton(
-                  text = strings.recurringPresetsBtn,
-                  icon = Icons.Default.AutoAwesome,
+                  text = strings.recurringAddBtn,
+                  icon = Icons.Default.Add,
                   compact = true,
-                  onClick = onSeedPresets,
-                  modifier = Modifier.testTag("seed_recurring_presets_btn"),
+                  onClick = {
+                    editingTemplate = null
+                    showTemplateModal = true
+                  },
+                  modifier = Modifier.testTag("add_recurring_btn"),
                 )
+                if (templates.isEmpty()) {
+                  SageSecondaryButton(
+                    text = strings.recurringPresetsBtn,
+                    icon = Icons.Default.AutoAwesome,
+                    compact = true,
+                    onClick = onSeedPresets,
+                    modifier = Modifier.testTag("seed_recurring_presets_btn"),
+                  )
+                }
+              }
+            }
+
+            if (templates.isEmpty()) {
+              Text(
+                text = strings.recurringEmptyHint,
+                style = MaterialTheme.typography.bodySmall,
+                color = tokens.body,
+              )
+            } else {
+              val templateCols = if (adaptive.isExpanded) 2 else 1
+              templates.chunked(templateCols).forEach { rowTemplates ->
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                  rowTemplates.forEach { tpl ->
+                    val alreadyDone = tpl.lastAppliedMonthKey == currentMonthKey
+                    Surface(
+                      shape = RoundedCornerShape(12.dp),
+                      color = tokens.surfaceSoft,
+                      border = BorderStroke(1.dp, tokens.divider),
+                      modifier = Modifier
+                        .weight(1f)
+                        .testTag("recurring_card_${tpl.id}"),
+                    ) {
+                      Row(
+                        modifier = Modifier
+                          .fillMaxWidth()
+                          .padding(
+                            horizontal = if (adaptive.isNarrowPhone) 10.dp else 12.dp,
+                            vertical = 10.dp,
+                          ),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                      ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                          Text(
+                            text = tpl.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = tokens.inkDeep,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                          )
+                          Text(
+                            text = "${strings.categoryLabel(tpl.category)} · ${maskSensitiveDh(formatDh(tpl.amountDh, currency, digitsAr), isPrivacy)}${if (alreadyDone) " · ✓" else ""}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (alreadyDone) tokens.positiveDeep else tokens.body,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                          )
+                        }
+                        if (!isReadOnlyMode) {
+                          Switch(
+                            checked = tpl.active,
+                            onCheckedChange = { onUpsertTemplate(tpl.copy(active = it)) },
+                          )
+                          IconButton(
+                            onClick = {
+                              editingTemplate = tpl
+                              showTemplateModal = true
+                            },
+                            modifier = Modifier.size(48.dp),
+                          ) {
+                            Icon(
+                              imageVector = Icons.Default.Edit,
+                              contentDescription = strings.expDialogEdit,
+                              tint = tokens.ink,
+                            )
+                          }
+                          IconButton(
+                            onClick = { onDeleteTemplate(tpl.id) },
+                            modifier = Modifier.size(48.dp),
+                          ) {
+                            Icon(
+                              imageVector = Icons.Default.DeleteOutline,
+                              contentDescription = strings.expDelete,
+                              tint = tokens.negativeDeep,
+                            )
+                          }
+                        }
+                      }
+                    }
+                  }
+                  if (rowTemplates.size < templateCols) {
+                    Spacer(modifier = Modifier.weight(1f))
+                  }
+                }
               }
             }
           }
+        }
+      }
+    }
 
-          if (templates.isEmpty()) {
-            Text(
-              text = strings.recurringEmptyHint,
-              style = MaterialTheme.typography.bodySmall,
-              color = tokens.body,
-            )
-          } else {
-            templates.forEach { tpl ->
-              val alreadyDone = tpl.lastAppliedMonthKey == currentMonthKey
-              Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = tokens.surfaceSoft,
-                border = BorderStroke(1.dp, tokens.divider),
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .testTag("recurring_card_${tpl.id}"),
+    // 2. Carnet des Prestataires & Contrats
+    item(key = "vendors_header_card") {
+      AdaptiveContentBox(maxWidth = containerMaxWidth) {
+        AirtableSoftCard(modifier = Modifier.fillMaxWidth(), padding = adaptive.cardPadding) {
+          Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            FlowRow(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.align(Alignment.CenterVertically),
               ) {
+                Icon(
+                  imageVector = Icons.Default.Storefront,
+                  contentDescription = null,
+                  tint = tokens.inkDeep,
+                )
+                Text(
+                  text = strings.vendorsSectionTitle,
+                  style = MaterialTheme.typography.titleMedium,
+                  fontWeight = FontWeight.Bold,
+                  color = tokens.inkDeep,
+                )
+              }
+              if (!isReadOnlyMode) {
+                SageSecondaryButton(
+                  text = strings.vendorAddBtn,
+                  icon = Icons.Default.Add,
+                  compact = true,
+                  onClick = {
+                    editingVendor = null
+                    showVendorModal = true
+                  },
+                  modifier = Modifier.testTag("add_vendor_btn"),
+                )
+              }
+            }
+
+            if (vendors.isEmpty()) {
+              Text(
+                text = strings.vendorEmptyHint,
+                style = MaterialTheme.typography.bodySmall,
+                color = tokens.body,
+              )
+            }
+          }
+        }
+      }
+    }
+
+    val vendorCols = if (adaptive.isExpanded) 2 else 1
+    items(
+      items = vendors.chunked(vendorCols),
+      key = { row -> row.joinToString("_") { it.id } },
+    ) { rowVendors ->
+      AdaptiveContentBox(maxWidth = containerMaxWidth) {
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .then(if (rowVendors.size > 1) Modifier.height(IntrinsicSize.Max) else Modifier),
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          rowVendors.forEach { vendor ->
+            val ytdPaid = remember(expenses, vendor.name) {
+              expenses
+                .filter { it.supplier.equals(vendor.name, ignoreCase = true) }
+                .sumOf { it.effectivePaidDh }
+            }
+            FintechWhiteCard(
+              modifier = Modifier
+                .weight(1f)
+                .then(if (rowVendors.size > 1) Modifier.fillMaxHeight() else Modifier)
+                .testTag("vendor_card_${vendor.id}"),
+              padding = adaptive.cardPadding,
+            ) {
+              Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
-                  modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                  verticalAlignment = Alignment.CenterVertically,
-                  horizontalArrangement = Arrangement.spacedBy(8.dp),
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.Top,
                 ) {
-                  Column(modifier = Modifier.weight(1f)) {
+                  Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                     Text(
-                      text = tpl.title,
-                      style = MaterialTheme.typography.titleSmall,
-                      fontWeight = FontWeight.SemiBold,
+                      text = vendor.name,
+                      style = MaterialTheme.typography.titleMedium,
+                      fontWeight = FontWeight.Bold,
                       color = tokens.inkDeep,
-                      maxLines = 1,
-                      overflow = TextOverflow.Ellipsis,
                     )
+                    if (vendor.specialty.isNotBlank()) {
+                      Text(
+                        text = vendor.specialty,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = tokens.linkColor,
+                      )
+                    }
+                  }
+                  if (vendor.monthlyFeeDh > 0L) {
                     Text(
-                      text = "${strings.categoryLabel(tpl.category)} · ${maskSensitiveDh(formatDh(tpl.amountDh, currency, digitsAr), isPrivacy)}${if (alreadyDone) " · ✓" else ""}",
-                      style = MaterialTheme.typography.bodySmall,
-                      color = if (alreadyDone) tokens.positiveDeep else tokens.body,
+                      text = "${maskSensitiveDh(formatDh(vendor.monthlyFeeDh, currency, digitsAr), isPrivacy)}/m",
+                      style = MaterialTheme.typography.titleSmall,
+                      fontWeight = FontWeight.Bold,
+                      color = tokens.inkDeep,
                     )
                   }
-                  if (!isReadOnlyMode) {
-                    Switch(
-                      checked = tpl.active,
-                      onCheckedChange = { onUpsertTemplate(tpl.copy(active = it)) },
+                }
+
+                if (vendor.contractEndDate.isNotBlank()) {
+                  Text(
+                    text = "${strings.vendorContractEndLabel} : ${vendor.contractEndDate}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tokens.body,
+                  )
+                }
+
+                Text(
+                  text = strings.vendorPaidYtdLabel(maskSensitiveDh(formatDh(ytdPaid, currency, digitsAr), isPrivacy)),
+                  style = MaterialTheme.typography.labelLarge,
+                  fontWeight = FontWeight.SemiBold,
+                  color = tokens.positiveDeep,
+                )
+
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.spacedBy(8.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+                ) {
+                  if (vendor.phone.isNotBlank()) {
+                    SageSecondaryButton(
+                      text = vendor.phone,
+                      icon = Icons.Default.Call,
+                      compact = true,
+                      onClick = {
+                        runCatching {
+                          val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${vendor.phone}")).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                          }
+                          context.startActivity(dialIntent)
+                        }.onFailure {
+                          onInfoMessage(it.localizedMessage ?: "Appel indisponible")
+                        }
+                      },
+                      modifier = Modifier.weight(1f),
                     )
                     IconButton(
                       onClick = {
-                        editingTemplate = tpl
-                        showTemplateModal = true
+                        WhatsAppHelper.openRawWhatsAppMessage(
+                          context = context,
+                          rawPhone = vendor.phone,
+                          message = "Bonjour ${vendor.name},",
+                          onError = onInfoMessage,
+                        )
+                      },
+                      modifier = Modifier.size(48.dp),
+                    ) {
+                      Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "WhatsApp ${vendor.name}",
+                        tint = tokens.positiveDeep,
+                      )
+                    }
+                  } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                  }
+
+                  if (!isReadOnlyMode) {
+                    IconButton(
+                      onClick = {
+                        editingVendor = vendor
+                        showVendorModal = true
                       },
                       modifier = Modifier.size(48.dp),
                     ) {
@@ -223,7 +452,7 @@ fun RecurringAndVendorsTabContent(
                       )
                     }
                     IconButton(
-                      onClick = { onDeleteTemplate(tpl.id) },
+                      onClick = { onDeleteVendor(vendor.id) },
                       modifier = Modifier.size(48.dp),
                     ) {
                       Icon(
@@ -237,187 +466,8 @@ fun RecurringAndVendorsTabContent(
               }
             }
           }
-        }
-      }
-    }
-
-    // 2. Carnet des Prestataires & Contrats
-    item(key = "vendors_header_card") {
-      AirtableSoftCard(modifier = Modifier.fillMaxWidth(), padding = 18.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-          ) {
-            Row(
-              modifier = Modifier.weight(1f),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-              Icon(
-                imageVector = Icons.Default.Storefront,
-                contentDescription = null,
-                tint = tokens.inkDeep,
-              )
-              Text(
-                text = strings.vendorsSectionTitle,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = tokens.inkDeep,
-              )
-            }
-            if (!isReadOnlyMode) {
-              SageSecondaryButton(
-                text = strings.vendorAddBtn,
-                icon = Icons.Default.Add,
-                compact = true,
-                onClick = {
-                  editingVendor = null
-                  showVendorModal = true
-                },
-                modifier = Modifier.testTag("add_vendor_btn"),
-              )
-            }
-          }
-
-          if (vendors.isEmpty()) {
-            Text(
-              text = strings.vendorEmptyHint,
-              style = MaterialTheme.typography.bodySmall,
-              color = tokens.body,
-            )
-          }
-        }
-      }
-    }
-
-    items(vendors, key = { it.id }) { vendor ->
-      val ytdPaid = remember(expenses, vendor.name) {
-        expenses
-          .filter { it.supplier.equals(vendor.name, ignoreCase = true) }
-          .sumOf { it.effectivePaidDh }
-      }
-      FintechWhiteCard(
-        modifier = Modifier
-          .fillMaxWidth()
-          .testTag("vendor_card_${vendor.id}"),
-        padding = 16.dp,
-      ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top,
-          ) {
-            Column(modifier = Modifier.weight(1f)) {
-              Text(
-                text = vendor.name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = tokens.inkDeep,
-              )
-              if (vendor.specialty.isNotBlank()) {
-                Text(
-                  text = vendor.specialty,
-                  style = MaterialTheme.typography.labelLarge,
-                  color = tokens.linkColor,
-                )
-              }
-            }
-            if (vendor.monthlyFeeDh > 0L) {
-              Text(
-                text = "${maskSensitiveDh(formatDh(vendor.monthlyFeeDh, currency, digitsAr), isPrivacy)}/m",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = tokens.inkDeep,
-              )
-            }
-          }
-
-          if (vendor.contractEndDate.isNotBlank()) {
-            Text(
-              text = "${strings.vendorContractEndLabel} : ${vendor.contractEndDate}",
-              style = MaterialTheme.typography.bodySmall,
-              color = tokens.body,
-            )
-          }
-
-          Text(
-            text = strings.vendorPaidYtdLabel(maskSensitiveDh(formatDh(ytdPaid, currency, digitsAr), isPrivacy)),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = tokens.positiveDeep,
-          )
-
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            if (vendor.phone.isNotBlank()) {
-              SageSecondaryButton(
-                text = vendor.phone,
-                icon = Icons.Default.Call,
-                compact = true,
-                onClick = {
-                  runCatching {
-                    val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${vendor.phone}")).apply {
-                      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    context.startActivity(dialIntent)
-                  }.onFailure {
-                    onInfoMessage(it.localizedMessage ?: "Appel indisponible")
-                  }
-                },
-                modifier = Modifier.weight(1f),
-              )
-              IconButton(
-                onClick = {
-                  WhatsAppHelper.openRawWhatsAppMessage(
-                    context = context,
-                    rawPhone = vendor.phone,
-                    message = "Bonjour ${vendor.name},",
-                    onError = onInfoMessage,
-                  )
-                },
-                modifier = Modifier.size(48.dp),
-              ) {
-                Icon(
-                  imageVector = Icons.AutoMirrored.Filled.Send,
-                  contentDescription = "WhatsApp ${vendor.name}",
-                  tint = tokens.positiveDeep,
-                )
-              }
-            } else {
-              Spacer(modifier = Modifier.weight(1f))
-            }
-
-            if (!isReadOnlyMode) {
-              IconButton(
-                onClick = {
-                  editingVendor = vendor
-                  showVendorModal = true
-                },
-                modifier = Modifier.size(48.dp),
-              ) {
-                Icon(
-                  imageVector = Icons.Default.Edit,
-                  contentDescription = strings.expDialogEdit,
-                  tint = tokens.ink,
-                )
-              }
-              IconButton(
-                onClick = { onDeleteVendor(vendor.id) },
-                modifier = Modifier.size(48.dp),
-              ) {
-                Icon(
-                  imageVector = Icons.Default.DeleteOutline,
-                  contentDescription = strings.expDelete,
-                  tint = tokens.negativeDeep,
-                )
-              }
-            }
+          if (rowVendors.size < vendorCols) {
+            Spacer(modifier = Modifier.weight(1f))
           }
         }
       }

@@ -117,10 +117,26 @@ fun FintechWhiteCard(
   content: @Composable ColumnScope.() -> Unit,
 ) {
   val tokens = LocalSyndicatTokens.current
-  val resolvedPadding = if (padding == Dp.Unspecified) tokens.defaultCardPaddingDp.dp else padding
+  val adaptive = LocalSyndicatAdaptiveSpec.current
+  val resolvedPadding = when {
+    padding != Dp.Unspecified -> padding
+    adaptive.isNarrowPhone -> 14.dp
+    else -> tokens.defaultCardPaddingDp.dp
+  }
   val shape = RoundedCornerShape(tokens.contentCardRadiusDp.dp)
+  val (hoverInteraction, hoverBorder) = rememberSyndicatHoverBorder(
+    baseBorder = BorderStroke(tokens.borderStrokeDp.dp, tokens.cardBorder),
+    enabled = onClick != null,
+  )
   val baseMod = if (onClick != null) {
-    modifier.clip(shape).clickable(onClick = onClick)
+    modifier
+      .clip(shape)
+      .syndicatPointerHover(hoverInteraction)
+      .clickable(
+        interactionSource = hoverInteraction,
+        indication = androidx.compose.material3.ripple(),
+        onClick = onClick,
+      )
   } else {
     modifier
   }
@@ -128,7 +144,7 @@ fun FintechWhiteCard(
     modifier = baseMod,
     shape = shape,
     color = tokens.cardBg,
-    border = BorderStroke(tokens.borderStrokeDp.dp, tokens.cardBorder),
+    border = hoverBorder,
     tonalElevation = 0.dp,
     shadowElevation = if (elevatedCheckout) 2.dp else 0.dp,
   ) {
@@ -432,9 +448,16 @@ fun LimePrimaryButton(
   compact: Boolean = false,
 ) {
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
   val interactionSource = remember { MutableInteractionSource() }
   val isPressed by interactionSource.collectIsPressedAsState()
   val activeContainer = if (isPressed) tokens.primaryActive else tokens.primary
+  val hPad = when {
+    compact && adaptive.isNarrowPhone -> 14.dp
+    compact -> 22.dp
+    adaptive.isNarrowPhone -> 18.dp
+    else -> 30.dp
+  }
 
   Button(
     onClick = onClick,
@@ -448,11 +471,7 @@ fun LimePrimaryButton(
       disabledContentColor = MetaCanvas,
     ),
     elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp),
-    contentPadding = if (compact) {
-      PaddingValues(horizontal = 22.dp, vertical = 12.dp)
-    } else {
-      PaddingValues(horizontal = 30.dp, vertical = 14.dp)
-    },
+    contentPadding = PaddingValues(horizontal = hPad, vertical = if (compact) 12.dp else 14.dp),
     modifier = modifier
       .minimumInteractiveComponentSize()
       .heightIn(min = 48.dp),
@@ -463,7 +482,7 @@ fun LimePrimaryButton(
         contentDescription = null,
         modifier = Modifier.size(18.dp),
       )
-      Spacer(modifier = Modifier.width(8.dp))
+      Spacer(modifier = Modifier.width(if (adaptive.isNarrowPhone) 6.dp else 8.dp))
     }
     Text(
       text = text,
@@ -490,9 +509,16 @@ fun MetaCobaltBuyButton(
   compact: Boolean = false,
 ) {
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
   val interactionSource = remember { MutableInteractionSource() }
   val isPressed by interactionSource.collectIsPressedAsState()
   val activeContainer = if (isPressed) tokens.buyCtaPressed else tokens.buyCta
+  val hPad = when {
+    compact && adaptive.isNarrowPhone -> 14.dp
+    compact -> 22.dp
+    adaptive.isNarrowPhone -> 18.dp
+    else -> 30.dp
+  }
 
   Button(
     onClick = onClick,
@@ -506,11 +532,7 @@ fun MetaCobaltBuyButton(
       disabledContentColor = MetaCanvas,
     ),
     elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp, 0.dp, 0.dp),
-    contentPadding = if (compact) {
-      PaddingValues(horizontal = 22.dp, vertical = 12.dp)
-    } else {
-      PaddingValues(horizontal = 30.dp, vertical = 14.dp)
-    },
+    contentPadding = PaddingValues(horizontal = hPad, vertical = if (compact) 12.dp else 14.dp),
     modifier = modifier
       .minimumInteractiveComponentSize()
       .heightIn(min = 48.dp),
@@ -521,7 +543,7 @@ fun MetaCobaltBuyButton(
         contentDescription = null,
         modifier = Modifier.size(18.dp),
       )
-      Spacer(modifier = Modifier.width(8.dp))
+      Spacer(modifier = Modifier.width(if (adaptive.isNarrowPhone) 6.dp else 8.dp))
     }
     Text(
       text = text,
@@ -549,6 +571,7 @@ fun SageSecondaryButton(
   onSignatureCard: Boolean = false,
 ) {
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
   val bg = when {
     onSignatureCard -> Color.White.copy(alpha = 0.14f)
     compact -> tokens.surfaceStrong
@@ -559,6 +582,12 @@ fun SageSecondaryButton(
     BorderStroke(1.dp, Color.White.copy(alpha = 0.45f))
   } else {
     BorderStroke(1.dp, tokens.divider)
+  }
+  val hPad = when {
+    compact && adaptive.isNarrowPhone -> 12.dp
+    compact -> 20.dp
+    adaptive.isNarrowPhone -> 18.dp
+    else -> 28.dp
   }
   OutlinedButton(
     onClick = onClick,
@@ -571,11 +600,7 @@ fun SageSecondaryButton(
       disabledContainerColor = tokens.surfaceSoft,
       disabledContentColor = fg.copy(alpha = 0.45f),
     ),
-    contentPadding = if (compact) {
-      PaddingValues(horizontal = 20.dp, vertical = 10.dp)
-    } else {
-      PaddingValues(horizontal = 28.dp, vertical = 12.dp)
-    },
+    contentPadding = PaddingValues(horizontal = hPad, vertical = if (compact) 10.dp else 12.dp),
     modifier = modifier
       .minimumInteractiveComponentSize()
       .heightIn(min = 48.dp),
@@ -586,7 +611,7 @@ fun SageSecondaryButton(
         contentDescription = null,
         modifier = Modifier.size(18.dp),
       )
-      Spacer(modifier = Modifier.width(8.dp))
+      Spacer(modifier = Modifier.width(if (adaptive.isNarrowPhone) 6.dp else 8.dp))
     }
     Text(
       text = text,
@@ -674,6 +699,7 @@ fun SyndicatFilterChip(
   leadingIcon: (@Composable (() -> Unit))? = null,
 ) {
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
   val pillShape = RoundedCornerShape(100.dp)
   val bg = when {
     !enabled -> tokens.surfaceSoft
@@ -690,23 +716,36 @@ fun SyndicatFilterChip(
   } else {
     BorderStroke(tokens.borderStrokeDp.dp, if (enabled) tokens.hairline else tokens.divider)
   }
+  val (hoverInteraction, hoverBorder) = rememberSyndicatHoverBorder(
+    baseBorder = border,
+    enabled = enabled && !selected,
+  )
 
   Surface(
     shape = pillShape,
     color = bg,
-    border = border,
+    border = hoverBorder,
     tonalElevation = 0.dp,
     shadowElevation = 0.dp,
     modifier = modifier
       .minimumInteractiveComponentSize()
       .heightIn(min = 48.dp)
       .clip(pillShape)
-      .clickable(enabled = enabled, onClick = onClick),
+      .syndicatPointerHover(hoverInteraction, enabled = enabled)
+      .clickable(
+        interactionSource = hoverInteraction,
+        indication = androidx.compose.material3.ripple(),
+        enabled = enabled,
+        onClick = onClick,
+      ),
   ) {
     Row(
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.Center,
-      modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+      modifier = Modifier.padding(
+        horizontal = if (adaptive.isNarrowPhone) 12.dp else 16.dp,
+        vertical = 10.dp,
+      ),
     ) {
       if (leadingIcon != null) {
         CompositionLocalProvider(LocalContentColor provides fg) {
@@ -716,7 +755,7 @@ fun SyndicatFilterChip(
       }
       Text(
         text = label,
-        style = MaterialTheme.typography.titleSmall,
+        style = if (adaptive.isNarrowPhone) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.Bold,
         color = fg,
         maxLines = 1,
@@ -743,6 +782,8 @@ fun MetaSegmentedPillRow(
   secondIcon: ImageVector? = null,
 ) {
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
+  val isNarrow = adaptive.isNarrowPhone
   val outerShape = RoundedCornerShape(100.dp)
   val innerShape = RoundedCornerShape(100.dp)
 
@@ -755,8 +796,8 @@ fun MetaSegmentedPillRow(
     modifier = modifier,
   ) {
     Row(
-      modifier = Modifier.padding(4.dp),
-      horizontalArrangement = Arrangement.spacedBy(4.dp),
+      modifier = Modifier.padding(if (isNarrow) 3.dp else 4.dp),
+      horizontalArrangement = Arrangement.spacedBy(if (isNarrow) 2.dp else 4.dp),
     ) {
       listOf(
         Triple(firstLabel, isFirstSelected, onSelectFirst) to Pair(firstTag, firstIcon),
@@ -766,6 +807,7 @@ fun MetaSegmentedPillRow(
         val (tag, ic) = metaPair
         val activeBg = tokens.inkDeep
         val activeFg = if (tokens.isDark) MetaInkDeep else MetaCanvas
+        val (hoverInteraction, _) = rememberSyndicatHoverBorder(baseBorder = null, enabled = !active)
         Surface(
           shape = innerShape,
           color = if (active) activeBg else Color.Transparent,
@@ -775,27 +817,37 @@ fun MetaSegmentedPillRow(
             .minimumInteractiveComponentSize()
             .heightIn(min = 44.dp)
             .clip(innerShape)
-            .clickable(onClick = onTap)
+            .syndicatPointerHover(hoverInteraction)
+            .clickable(
+              interactionSource = hoverInteraction,
+              indication = androidx.compose.material3.ripple(),
+              onClick = onTap,
+            )
             .testTag(tag),
         ) {
           Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+            modifier = Modifier.padding(
+              horizontal = if (isNarrow) 10.dp else 16.dp,
+              vertical = 9.dp,
+            ),
           ) {
             if (ic != null) {
               Icon(
                 imageVector = ic,
                 contentDescription = null,
                 tint = if (active) activeFg else tokens.mute,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(if (isNarrow) 15.dp else 16.dp),
               )
-              Spacer(modifier = Modifier.width(6.dp))
+              Spacer(modifier = Modifier.width(if (isNarrow) 4.dp else 6.dp))
             }
             Text(
               text = lbl,
-              style = MaterialTheme.typography.titleSmall,
+              style = if (isNarrow) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleSmall,
               fontWeight = FontWeight.Bold,
               color = if (active) activeFg else tokens.ink,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
             )
           }
         }
@@ -816,6 +868,8 @@ fun MetaSegmentedThreePillRow(
   modifier: Modifier = Modifier,
 ) {
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
+  val isNarrow = adaptive.isNarrowPhone
   val outerShape = RoundedCornerShape(100.dp)
   val innerShape = RoundedCornerShape(100.dp)
   val itemsList = listOf(
@@ -833,13 +887,14 @@ fun MetaSegmentedThreePillRow(
     modifier = modifier,
   ) {
     Row(
-      modifier = Modifier.padding(4.dp),
-      horizontalArrangement = Arrangement.spacedBy(4.dp),
+      modifier = Modifier.padding(if (isNarrow) 3.dp else 4.dp),
+      horizontalArrangement = Arrangement.spacedBy(if (isNarrow) 2.dp else 4.dp),
     ) {
       itemsList.forEachIndexed { idx, (lbl, tag) ->
         val active = selectedIndex == idx
         val activeBg = tokens.inkDeep
         val activeFg = if (tokens.isDark) MetaInkDeep else MetaCanvas
+        val (hoverInteraction, _) = rememberSyndicatHoverBorder(baseBorder = null, enabled = !active)
         Surface(
           shape = innerShape,
           color = if (active) activeBg else Color.Transparent,
@@ -850,16 +905,24 @@ fun MetaSegmentedThreePillRow(
             .minimumInteractiveComponentSize()
             .heightIn(min = 44.dp)
             .clip(innerShape)
-            .clickable { onSelectIndex(idx) }
+            .syndicatPointerHover(hoverInteraction)
+            .clickable(
+              interactionSource = hoverInteraction,
+              indication = androidx.compose.material3.ripple(),
+              onClick = { onSelectIndex(idx) },
+            )
             .testTag(tag),
         ) {
           Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 9.dp),
+            modifier = Modifier.padding(
+              horizontal = if (isNarrow) 4.dp else 8.dp,
+              vertical = 9.dp,
+            ),
           ) {
             Text(
               text = lbl,
-              style = MaterialTheme.typography.labelLarge,
+              style = if (isNarrow) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge,
               fontWeight = FontWeight.Bold,
               color = if (active) activeFg else tokens.ink,
               maxLines = 1,

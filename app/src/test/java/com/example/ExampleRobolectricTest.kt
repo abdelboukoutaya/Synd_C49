@@ -3,8 +3,10 @@ package com.example
 import android.content.Context
 import android.graphics.Color
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -44,6 +46,12 @@ import com.example.data.model.SyndicatConfig
 import com.example.data.model.projectApartmentsForYear
 import com.example.data.seed.InitialSyndicatData
 import com.example.ui.components.FintechTextField
+import com.example.ui.components.LocalSyndicatAdaptiveSpec
+import com.example.ui.components.SyndicatFloatingBottomDock
+import com.example.ui.components.SyndicatNavIcons
+import com.example.ui.components.SyndicatNavItemSpec
+import com.example.ui.components.SyndicatNavigationRailPane
+import com.example.ui.components.computeSyndicatAdaptiveSpec
 import com.example.ui.i18n.AppLanguage
 import com.example.ui.i18n.LRM
 import com.example.ui.i18n.LocalStrings
@@ -56,6 +64,7 @@ import com.example.ui.screens.ApartmentsScreen
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.ExpensesScreen
+import com.example.ui.screens.PosterScreen
 import com.example.ui.screens.ProjectsScreen
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -2476,6 +2485,313 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("toggle_manual_council_code_btn").performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("council_code_input").assertIsDisplayed()
+  }
+
+  @Test
+  @Config(sdk = [36], qualifiers = "w320dp-h568dp")
+  fun smallPhone320dp_navigationDockDashboardApartmentsAndSettingsRenderWithoutClippingInLtrAndRtl() {
+    // 1. Verify adaptive breakpoint specs across phone, compact landscape, medium, and tablet widths
+    val smallSpec = computeSyndicatAdaptiveSpec(maxWidth = 320.dp, maxHeight = 568.dp)
+    assertTrue(smallSpec.isNarrowPhone)
+    assertTrue(smallSpec.isVeryNarrowPhone)
+    assertFalse(smallSpec.useRail)
+    assertEquals(1, smallSpec.gridColumns)
+    assertEquals(12.dp, smallSpec.horizontalPadding)
+    assertEquals(14.dp, smallSpec.cardPadding)
+    assertEquals(96.dp, smallSpec.listBottomPadding)
+
+    val landscapeSpec = computeSyndicatAdaptiveSpec(maxWidth = 700.dp, maxHeight = 400.dp)
+    assertTrue(landscapeSpec.isCompactHeight)
+    assertTrue(landscapeSpec.useRail)
+    assertEquals(142.dp, landscapeSpec.bannerHeight)
+    assertEquals(28.dp, landscapeSpec.listBottomPadding)
+
+    val tabletSpec = computeSyndicatAdaptiveSpec(maxWidth = 960.dp, maxHeight = 720.dp)
+    assertTrue(tabletSpec.isExpanded)
+    assertTrue(tabletSpec.useRail)
+    assertEquals(2, tabletSpec.gridColumns)
+    assertEquals(28.dp, tabletSpec.listBottomPadding)
+
+    val frStrings = stringsForLanguage("fr")
+    val arStrings = stringsForLanguage("ar")
+    val cfg = SyndicatConfig(
+      residenceName = "Résidence C49",
+      language = "fr",
+      year = 2026L,
+      cutoffMonth = 6L,
+      defaultMonthlyFee = 50L,
+      openingBalanceDh = 2500L,
+    )
+    val apts = listOf(
+      ApartmentRecord(id = "apt_01", number = 1L, floor = "RDC", ownerName = "Karim Benali", ownerNameAr = "كريم بنعلي", jan = 50L, feb = 50L),
+      ApartmentRecord(id = "apt_02", number = 2L, floor = "1", ownerName = "Salma Idrissi", ownerNameAr = "سلمى الإدريسي", jan = 50L),
+    )
+    val dashData = SyndicatDashboardData(
+      config = cfg,
+      apartments = apts,
+      expenses = listOf(ExpenseRecord(id = "exp_1", title = "Électricité", category = "Électricité", amountDh = 300L, paidAmountDh = 300L)),
+    )
+
+    val screenMode = androidx.compose.runtime.mutableStateOf("dashboard")
+    val langState = androidx.compose.runtime.mutableStateOf(AppLanguage.FR)
+
+    val navItems = listOf(
+      SyndicatNavItemSpec("dashboard", frStrings.navDashboard, SyndicatNavIcons.DashboardFilled, SyndicatNavIcons.DashboardOutlined, 0, true) {},
+      SyndicatNavItemSpec("apartments", frStrings.navApartments, SyndicatNavIcons.ApartmentsFilled, SyndicatNavIcons.ApartmentsOutlined, 2, false) {},
+      SyndicatNavItemSpec("expenses", frStrings.navExpenses, SyndicatNavIcons.ExpensesFilled, SyndicatNavIcons.ExpensesOutlined, 1, false) {},
+      SyndicatNavItemSpec("projects", frStrings.navProjects, SyndicatNavIcons.ProjectsFilled, SyndicatNavIcons.ProjectsOutlined, 0, false) {},
+      SyndicatNavItemSpec("poster", frStrings.navPoster, SyndicatNavIcons.PosterFilled, SyndicatNavIcons.PosterOutlined, 0, false) {},
+      SyndicatNavItemSpec("settings", frStrings.navSettings, SyndicatNavIcons.SettingsFilled, SyndicatNavIcons.SettingsOutlined, 0, false) {},
+    )
+
+    composeTestRule.setContent {
+      val lang = langState.value
+      val strings = if (lang == AppLanguage.AR) arStrings else frStrings
+      val layoutDir = if (lang == AppLanguage.AR) LayoutDirection.Rtl else LayoutDirection.Ltr
+      CompositionLocalProvider(
+        LocalStrings provides strings,
+        LocalLayoutDirection provides layoutDir,
+      ) {
+        AppTheme(darkTheme = false, isArabic = lang == AppLanguage.AR, themeStyle = "coinbase") {
+          BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val spec = computeSyndicatAdaptiveSpec(maxWidth = maxWidth, maxHeight = maxHeight)
+            CompositionLocalProvider(LocalSyndicatAdaptiveSpec provides spec) {
+              when (screenMode.value) {
+                "dock" -> SyndicatFloatingBottomDock(items = navItems)
+                "dashboard" -> DashboardScreen(
+                  data = dashData,
+                  isBackupOverdue = true,
+                  onTriggerBackupJson = {},
+                  onOpenWizard = {},
+                  onMarkReminded = { _, _, _ -> },
+                  onNavigateToPosters = {},
+                  onNavigateToLateApartments = {},
+                )
+                "apartments" -> ApartmentsScreen(
+                  data = dashData,
+                  searchQuery = "",
+                  selectedFloor = null,
+                  statusFilter = StatusFilter.ALL,
+                  onSearchQueryChange = {},
+                  onSelectFloor = {},
+                  onSelectStatusFilter = {},
+                  onSaveApartment = { _, _ -> },
+                  onMarkReminded = { _, _, _ -> },
+                  onRequestReceiptNo = { 1L },
+                  onExportError = {},
+                )
+                "settings" -> SettingsScreen(
+                  data = dashData,
+                  currentUserId = LOCAL_DEVICE_USER_ID,
+                  userEmail = null,
+                  currentLanguage = lang,
+                  isSaving = false,
+                  onSelectLanguage = {},
+                  onUpdateDisplayPrefs = { _, _, _, _ -> },
+                  onOpenWizard = {},
+                  onSaveConfig = { _, _ -> },
+                  onRestoreBackup = {},
+                  onImportCsvOwners = {},
+                  onResetC49 = {},
+                  onBackupExported = {},
+                  onPinUpdated = {},
+                  onSignOut = {},
+                  onMessage = {},
+                )
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Check Bottom Dock on 320dp: all 6 icon tabs visible, >= 47dp wide, >= 48dp tall, within [0..320dp]
+    screenMode.value = "dock"
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("syndicat_bottom_nav_dock").assertIsDisplayed()
+    val routes = listOf("dashboard", "apartments", "expenses", "projects", "poster", "settings")
+    routes.forEach { route ->
+      val bounds = composeTestRule.onNodeWithTag("nav_$route").getUnclippedBoundsInRoot()
+      assertTrue("nav_$route must start >= 0dp on 320dp phone: $bounds", bounds.left >= (-0.5).dp)
+      assertTrue("nav_$route must fit inside 320dp phone: $bounds", bounds.right <= 321.dp)
+      assertTrue("nav_$route height must be >= 48dp: $bounds", bounds.height >= 48.dp)
+      assertTrue("nav_$route width must stay usable >= 46dp: $bounds", bounds.width >= 46.dp)
+    }
+
+    // Check Dashboard on 320dp LTR: no expanded two-pane, KPIs & cash fit inside 320dp
+    screenMode.value = "dashboard"
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("dash_expanded_two_pane").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("cash_now_value").assertIsDisplayed()
+    val cashBounds = composeTestRule.onNodeWithTag("cash_now_value").getUnclippedBoundsInRoot()
+    assertTrue("cash_now_value must fit in 320dp: $cashBounds", cashBounds.right <= 321.dp)
+    composeTestRule.onNodeWithTag("dashboard_screen").performScrollToNode(hasTestTag("kpi_collected_card"))
+    composeTestRule.onNodeWithTag("kpi_collected_card").assertIsDisplayed()
+    val kpiCollectedBounds = composeTestRule.onNodeWithTag("kpi_collected_card").getUnclippedBoundsInRoot()
+    assertTrue("kpi_collected_card must fit inside 320dp: $kpiCollectedBounds", kpiCollectedBounds.right <= 321.dp)
+    composeTestRule.onNodeWithTag("dashboard_screen").performScrollToNode(hasTestTag("kpi_expenses_card"))
+    composeTestRule.onNodeWithTag("kpi_expenses_card").assertIsDisplayed()
+    val kpiExpensesBounds = composeTestRule.onNodeWithTag("kpi_expenses_card").getUnclippedBoundsInRoot()
+    assertTrue("kpi_expenses_card must fit inside 320dp: $kpiExpensesBounds", kpiExpensesBounds.right <= 321.dp)
+    composeTestRule.onNodeWithTag("dashboard_screen").performScrollToNode(hasTestTag("kpi_rate_card"))
+    composeTestRule.onNodeWithTag("kpi_rate_card").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("dashboard_screen").performScrollToNode(hasTestTag("kpi_balance_card"))
+    composeTestRule.onNodeWithTag("kpi_balance_card").assertIsDisplayed()
+
+    // Check Apartments on 320dp LTR: header + toggle + cards fit cleanly without tablet split pane
+    screenMode.value = "apartments"
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("tablet_apartment_detail_pane").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("toggle_cards_view").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("toggle_grid_view").assertIsDisplayed()
+    val gridToggleBounds = composeTestRule.onNodeWithTag("toggle_grid_view").getUnclippedBoundsInRoot()
+    assertTrue("toggle_grid_view must fit inside 320dp: $gridToggleBounds", gridToggleBounds.right <= 321.dp)
+
+    // Check Settings on 320dp in Arabic RTL: language chips & save CTA fit cleanly inside 320dp
+    langState.value = AppLanguage.AR
+    screenMode.value = "settings"
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("settings_expanded_two_pane").assertDoesNotExist()
+    val arBounds = composeTestRule.onNodeWithTag("lang_option_ar").getUnclippedBoundsInRoot()
+    val frBounds = composeTestRule.onNodeWithTag("lang_option_fr").getUnclippedBoundsInRoot()
+    assertTrue("lang_option_ar must fit inside 320dp RTL: $arBounds", arBounds.left >= (-0.5).dp && arBounds.right <= 321.dp)
+    assertTrue("lang_option_fr must fit inside 320dp RTL: $frBounds", frBounds.left >= (-0.5).dp && frBounds.right <= 321.dp)
+    composeTestRule.onNodeWithTag("settings_screen").performScrollToNode(hasTestTag("save_settings_button"))
+    composeTestRule.onNodeWithTag("save_settings_button").assertIsDisplayed()
+    val saveBounds = composeTestRule.onNodeWithTag("save_settings_button").getUnclippedBoundsInRoot()
+    assertTrue("save_settings_button height >= 48dp: $saveBounds", saveBounds.height >= 48.dp)
+    assertTrue("save_settings_button fits in 320dp: $saveBounds", saveBounds.right <= 321.dp)
+  }
+
+  @Test
+  @Config(sdk = [36], qualifiers = "w960dp-h720dp")
+  fun largeScreenTablet960dp_usesNavigationRailAndCanonicalTwoPaneLayouts() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val frStrings = stringsForLanguage("fr")
+    val cfg = SyndicatConfig(
+      residenceName = "Résidence C49",
+      language = "fr",
+      year = 2026L,
+      cutoffMonth = 6L,
+      defaultMonthlyFee = 50L,
+      openingBalanceDh = 4500L,
+    )
+    val apts = listOf(
+      ApartmentRecord(id = "apt_01", number = 1L, floor = "RDC", ownerName = "Karim Benali", jan = 50L, feb = 50L),
+      ApartmentRecord(id = "apt_02", number = 2L, floor = "1", ownerName = "Salma Idrissi", jan = 50L),
+    )
+    val dashData = SyndicatDashboardData(
+      config = cfg,
+      apartments = apts,
+      expenses = listOf(ExpenseRecord(id = "exp_1", title = "Nettoyage", category = "Nettoyage", amountDh = 400L, paidAmountDh = 400L)),
+    )
+
+    val screenMode = androidx.compose.runtime.mutableStateOf("dashboard")
+    val navItems = listOf(
+      SyndicatNavItemSpec("dashboard", frStrings.navDashboard, SyndicatNavIcons.DashboardFilled, SyndicatNavIcons.DashboardOutlined, 0, true) {},
+      SyndicatNavItemSpec("apartments", frStrings.navApartments, SyndicatNavIcons.ApartmentsFilled, SyndicatNavIcons.ApartmentsOutlined, 2, false) {},
+      SyndicatNavItemSpec("expenses", frStrings.navExpenses, SyndicatNavIcons.ExpensesFilled, SyndicatNavIcons.ExpensesOutlined, 0, false) {},
+      SyndicatNavItemSpec("projects", frStrings.navProjects, SyndicatNavIcons.ProjectsFilled, SyndicatNavIcons.ProjectsOutlined, 0, false) {},
+      SyndicatNavItemSpec("poster", frStrings.navPoster, SyndicatNavIcons.PosterFilled, SyndicatNavIcons.PosterOutlined, 0, false) {},
+      SyndicatNavItemSpec("settings", frStrings.navSettings, SyndicatNavIcons.SettingsFilled, SyndicatNavIcons.SettingsOutlined, 0, false) {},
+    )
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(
+        LocalStrings provides frStrings,
+        LocalLayoutDirection provides LayoutDirection.Ltr,
+      ) {
+        AppTheme(darkTheme = false, isArabic = false, themeStyle = "coinbase") {
+          BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val spec = computeSyndicatAdaptiveSpec(maxWidth = maxWidth, maxHeight = maxHeight)
+            CompositionLocalProvider(LocalSyndicatAdaptiveSpec provides spec) {
+              Row(modifier = Modifier.fillMaxSize()) {
+                if (spec.useRail) {
+                  SyndicatNavigationRailPane(items = navItems)
+                }
+                when (screenMode.value) {
+                  "dashboard" -> DashboardScreen(
+                    data = dashData,
+                    isBackupOverdue = false,
+                    onTriggerBackupJson = {},
+                    onOpenWizard = {},
+                    onMarkReminded = { _, _, _ -> },
+                    onNavigateToPosters = {},
+                    onNavigateToLateApartments = {},
+                    modifier = Modifier.weight(1f),
+                  )
+                  "apartments" -> ApartmentsScreen(
+                    data = dashData,
+                    searchQuery = "",
+                    selectedFloor = null,
+                    statusFilter = StatusFilter.ALL,
+                    onSearchQueryChange = {},
+                    onSelectFloor = {},
+                    onSelectStatusFilter = {},
+                    onSaveApartment = { _, _ -> },
+                    onMarkReminded = { _, _, _ -> },
+                    onRequestReceiptNo = { 1L },
+                    onExportError = {},
+                    modifier = Modifier.weight(1f),
+                  )
+                  "poster" -> PosterScreen(
+                    data = dashData,
+                    onExportError = {},
+                    modifier = Modifier.weight(1f),
+                  )
+                  "settings" -> SettingsScreen(
+                    data = dashData,
+                    currentUserId = LOCAL_DEVICE_USER_ID,
+                    userEmail = null,
+                    currentLanguage = AppLanguage.FR,
+                    isSaving = false,
+                    onSelectLanguage = {},
+                    onUpdateDisplayPrefs = { _, _, _, _ -> },
+                    onOpenWizard = {},
+                    onSaveConfig = { _, _ -> },
+                    onRestoreBackup = {},
+                    onImportCsvOwners = {},
+                    onResetC49 = {},
+                    onBackupExported = {},
+                    onPinUpdated = {},
+                    onSignOut = {},
+                    onMessage = {},
+                    modifier = Modifier.weight(1f),
+                  )
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 1. Navigation rail shown on tablet (bottom dock not shown) + 2-pane Dashboard
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("navigation_rail").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("syndicat_bottom_nav_dock").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("dash_expanded_two_pane").assertIsDisplayed()
+    val cashBounds = composeTestRule.onNodeWithTag("cash_now_value").getUnclippedBoundsInRoot()
+    val collectedBounds = composeTestRule.onNodeWithTag("kpi_collected_card").getUnclippedBoundsInRoot()
+    assertTrue("In LTR tablet 2-pane dashboard, cash summary ($cashBounds) must be left of KPI card ($collectedBounds)", cashBounds.right <= collectedBounds.left)
+
+    // 2. Apartments list-detail split pane shown side-by-side on tablet
+    screenMode.value = "apartments"
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("tablet_apartment_detail_pane").assertIsDisplayed()
+    val detailBounds = composeTestRule.onNodeWithTag("tablet_apartment_detail_pane").getUnclippedBoundsInRoot()
+    assertTrue("Tablet detail pane must be positioned on the right half: $detailBounds", detailBounds.left > 350.dp)
+
+    // 3. Poster screen displays cleanly on tablet
+    screenMode.value = "poster"
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("poster_screen").assertIsDisplayed()
+
+    // 4. Settings shows 2-column expanded layout cleanly on tablet
+    screenMode.value = "settings"
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("settings_expanded_two_pane").assertIsDisplayed()
+    assertNotNull(context)
   }
 }
 

@@ -54,16 +54,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.model.ApartmentRecord
 import com.example.data.model.MonthColumn
 import com.example.data.model.SyndicatConfig
 import com.example.data.model.UnitStatus
 import com.example.data.model.buildFloorLabels
+import com.example.ui.components.AdaptiveContentBox
 import com.example.ui.components.FintechPalePositiveCard
 import com.example.ui.components.FintechTextField
 import com.example.ui.components.FintechWhiteCard
 import com.example.ui.components.InkTertiaryButton
+import com.example.ui.components.LocalSyndicatAdaptiveSpec
 import com.example.ui.components.MetaCobaltBuyButton
 import com.example.ui.components.RoundIconCircleButton
 import com.example.ui.components.SageSecondaryButton
@@ -88,6 +91,9 @@ fun OnboardingWizardScreen(
   val context = LocalContext.current
   val strings = LocalStrings.current
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
+  val cardPad = if (adaptive.isNarrowPhone) 16.dp else 22.dp
+  val innerCardPad = if (adaptive.isNarrowPhone) 14.dp else 16.dp
   val isAr = strings.language == AppLanguage.AR
   val numericFont = tokens.numericFontFamily ?: tokens.monoFontFamily
 
@@ -242,48 +248,56 @@ fun OnboardingWizardScreen(
       .testTag("onboarding_wizard_screen"),
   ) {
     // §6 Assistant d'installation: fine 4dp progress bar + mute eyebrow « الخطوة X من 6 »
-    Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(horizontal = 16.dp, vertical = 12.dp),
-    ) {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+    AdaptiveContentBox(maxWidth = 680.dp) {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(
+            horizontal = adaptive.horizontalPadding,
+            vertical = if (adaptive.isCompactHeight) 8.dp else 12.dp,
+          ),
       ) {
-        Text(
-          text = strings.wizardStepIndicator(currentStep, 6),
-          style = MaterialTheme.typography.labelMedium,
-          color = tokens.mute,
-        )
-        RoundIconCircleButton(
-          icon = Icons.Default.Close,
-          contentDescription = strings.apptCancel,
-          onClick = onCancel,
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            text = strings.wizardStepIndicator(currentStep, 6),
+            style = MaterialTheme.typography.labelMedium,
+            color = tokens.mute,
+          )
+          RoundIconCircleButton(
+            icon = Icons.Default.Close,
+            contentDescription = strings.apptCancel,
+            onClick = onCancel,
+          )
+        }
+        Spacer(modifier = Modifier.height(if (adaptive.isCompactHeight) 6.dp else 10.dp))
+        SyndicatProgressBar(
+          progress = currentStep / 6f,
+          modifier = Modifier.fillMaxWidth(),
         )
       }
-      Spacer(modifier = Modifier.height(10.dp))
-      SyndicatProgressBar(
-        progress = currentStep / 6f,
-        modifier = Modifier.fillMaxWidth(),
-      )
     }
 
     LazyColumn(
       modifier = Modifier
         .weight(1f)
         .fillMaxWidth(),
-      contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-      verticalArrangement = Arrangement.spacedBy(14.dp),
+      contentPadding = PaddingValues(horizontal = adaptive.horizontalPadding, vertical = 8.dp),
+      verticalArrangement = Arrangement.spacedBy(adaptive.sectionSpacing),
     ) {
       when (currentStep) {
         1 -> {
           item {
-            WizardStepHeader(strings.wizardStep1Title, strings.wizardStep1Sub)
+            AdaptiveContentBox(maxWidth = 680.dp) {
+              WizardStepHeader(strings.wizardStep1Title, strings.wizardStep1Sub)
+            }
           }
           item {
-            FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = 24.dp) {
+            AdaptiveContentBox(maxWidth = 680.dp) {
+              FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = cardPad) {
               Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 FintechTextField(
                   value = residenceName,
@@ -314,15 +328,19 @@ fun OnboardingWizardScreen(
                 )
               }
             }
+            }
           }
         }
 
         2 -> {
           item {
-            WizardStepHeader(strings.wizardStep2Title, strings.wizardStep2Sub)
+            AdaptiveContentBox(maxWidth = 680.dp) {
+              WizardStepHeader(strings.wizardStep2Title, strings.wizardStep2Sub)
+            }
           }
           item {
-            FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = 24.dp) {
+            AdaptiveContentBox(maxWidth = 680.dp) {
+              FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = cardPad) {
               Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(
                   modifier = Modifier
@@ -401,12 +419,14 @@ fun OnboardingWizardScreen(
                 }
               }
             }
+            }
           }
           items(totalApartmentsCount) { idx ->
             val aptNum = idx + 1
             val fl = floorForNumberInDraft(aptNum)
             val apt = draftApartments[idx]
-            FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = 16.dp) {
+            AdaptiveContentBox(maxWidth = 680.dp) {
+              FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = innerCardPad) {
               Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                   text = "${strings.colAppt} ${apt.displayNumber} · ${strings.floorWithPrefix(fl)}",
@@ -428,26 +448,32 @@ fun OnboardingWizardScreen(
                 }
               }
             }
+            }
           }
         }
 
         3 -> {
           item {
-            WizardStepHeader(strings.wizardStep3Title, strings.wizardStep3Sub)
+            AdaptiveContentBox(maxWidth = 680.dp) {
+              WizardStepHeader(strings.wizardStep3Title, strings.wizardStep3Sub)
+            }
           }
           item {
-            SageSecondaryButton(
-              text = strings.wizardBulkImportBtn,
-              icon = Icons.AutoMirrored.Filled.PlaylistAdd,
-              onClick = { showBulkTextDialog = true },
-              modifier = Modifier.fillMaxWidth(),
-            )
+            AdaptiveContentBox(maxWidth = 680.dp) {
+              SageSecondaryButton(
+                text = strings.wizardBulkImportBtn,
+                icon = Icons.AutoMirrored.Filled.PlaylistAdd,
+                onClick = { showBulkTextDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+              )
+            }
           }
           items(totalApartmentsCount) { idx ->
             val aptNum = idx + 1
             val fl = floorForNumberInDraft(aptNum)
             val apt = draftApartments[idx]
-            FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = 16.dp) {
+            AdaptiveContentBox(maxWidth = 680.dp) {
+              FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = innerCardPad) {
               Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 FlowRow(
                   modifier = Modifier.fillMaxWidth(),
@@ -496,15 +522,19 @@ fun OnboardingWizardScreen(
                 )
               }
             }
+            }
           }
         }
 
         4 -> {
           item {
-            WizardStepHeader(strings.wizardStep4Title, strings.wizardStep4Sub)
+            AdaptiveContentBox(maxWidth = 680.dp) {
+              WizardStepHeader(strings.wizardStep4Title, strings.wizardStep4Sub)
+            }
           }
           item {
-            FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = 24.dp) {
+            AdaptiveContentBox(maxWidth = 680.dp) {
+              FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = cardPad) {
               Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(
                   modifier = Modifier.fillMaxWidth(),
@@ -527,26 +557,50 @@ fun OnboardingWizardScreen(
                   )
                 }
 
-                Row(
-                  modifier = Modifier.fillMaxWidth(),
-                  horizontalArrangement = Arrangement.spacedBy(8.dp),
-                  verticalAlignment = Alignment.Bottom,
-                ) {
-                  FintechTextField(
-                    value = defaultFeeText,
-                    onValueChange = { defaultFeeText = it.filter { c -> c.isDigit() }.take(6) },
-                    label = strings.settingsDefaultFee(draftFeeConfig.currency),
-                    keyboardType = KeyboardType.Number,
-                    modifier = Modifier.weight(1f),
-                  )
-                  SageSecondaryButton(
-                    text = strings.settingsApplyDefaultToAll,
-                    compact = true,
-                    onClick = {
-                      val v = defaultFeeText.toLongOrNull() ?: 50L
-                      draftFeeConfig = draftFeeConfig.withAllFeesSetTo(v)
-                    },
-                  )
+                if (adaptive.isVeryNarrowPhone) {
+                  Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                  ) {
+                    FintechTextField(
+                      value = defaultFeeText,
+                      onValueChange = { defaultFeeText = it.filter { c -> c.isDigit() }.take(6) },
+                      label = strings.settingsDefaultFee(draftFeeConfig.currency),
+                      keyboardType = KeyboardType.Number,
+                      modifier = Modifier.fillMaxWidth(),
+                    )
+                    SageSecondaryButton(
+                      text = strings.settingsApplyDefaultToAll,
+                      compact = true,
+                      onClick = {
+                        val v = defaultFeeText.toLongOrNull() ?: 50L
+                        draftFeeConfig = draftFeeConfig.withAllFeesSetTo(v)
+                      },
+                      modifier = Modifier.fillMaxWidth(),
+                    )
+                  }
+                } else {
+                  Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Bottom,
+                  ) {
+                    FintechTextField(
+                      value = defaultFeeText,
+                      onValueChange = { defaultFeeText = it.filter { c -> c.isDigit() }.take(6) },
+                      label = strings.settingsDefaultFee(draftFeeConfig.currency),
+                      keyboardType = KeyboardType.Number,
+                      modifier = Modifier.weight(1f),
+                    )
+                    SageSecondaryButton(
+                      text = strings.settingsApplyDefaultToAll,
+                      compact = true,
+                      onClick = {
+                        val v = defaultFeeText.toLongOrNull() ?: 50L
+                        draftFeeConfig = draftFeeConfig.withAllFeesSetTo(v)
+                      },
+                    )
+                  }
                 }
 
                 FlowRow(
@@ -594,6 +648,8 @@ fun OnboardingWizardScreen(
                         text = strings.monthFull(month),
                         style = MaterialTheme.typography.titleSmall,
                         color = tokens.ink,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                       )
                     }
                     FintechTextField(
@@ -612,21 +668,25 @@ fun OnboardingWizardScreen(
                         )
                       },
                       keyboardType = KeyboardType.Number,
-                      modifier = Modifier.width(128.dp),
+                      modifier = Modifier.width(if (adaptive.isNarrowPhone) 108.dp else 128.dp),
                     )
                   }
                 }
               }
+            }
             }
           }
         }
 
         5 -> {
           item {
-            WizardStepHeader(strings.wizardStep5Title, strings.wizardStep5Sub)
+            AdaptiveContentBox(maxWidth = 680.dp) {
+              WizardStepHeader(strings.wizardStep5Title, strings.wizardStep5Sub)
+            }
           }
           item {
-            FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = 24.dp) {
+            AdaptiveContentBox(maxWidth = 680.dp) {
+              FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = cardPad) {
               Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 FintechTextField(
                   value = openingBalanceText,
@@ -654,6 +714,7 @@ fun OnboardingWizardScreen(
                 )
               }
             }
+            }
           }
 
           if (!startFromZeroPayments) {
@@ -661,37 +722,39 @@ fun OnboardingWizardScreen(
             items(totalApartmentsCount) { idx ->
               val apt = draftApartments[idx]
               val fl = floorForNumberInDraft(idx + 1)
-              FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = 16.dp) {
-                Row(
-                  modifier = Modifier.fillMaxWidth(),
-                  horizontalArrangement = Arrangement.SpaceBetween,
-                  verticalAlignment = Alignment.CenterVertically,
-                ) {
-                  Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                      text = "${strings.colAppt} ${apt.displayNumber} (${strings.floorDisplay(fl)}) · ${apt.displayOwner(isAr).ifBlank { "—" }}",
-                      style = MaterialTheme.typography.titleSmall,
-                      fontWeight = FontWeight.Medium,
-                      color = tokens.ink,
-                    )
-                    Text(
-                      text = "${strings.colPaid}: ${formatDh(apt.totalForConfig(previewCfg), previewCfg.currency, previewCfg.digitsAr)}",
-                      style = MaterialTheme.typography.bodySmall,
-                      fontFamily = numericFont ?: MaterialTheme.typography.bodySmall.fontFamily,
-                      color = tokens.positiveDeep,
+              AdaptiveContentBox(maxWidth = 680.dp) {
+                FintechWhiteCard(modifier = Modifier.fillMaxWidth(), padding = innerCardPad) {
+                  FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                  ) {
+                    Column(modifier = Modifier.weight(1f, fill = false)) {
+                      Text(
+                        text = "${strings.colAppt} ${apt.displayNumber} (${strings.floorDisplay(fl)}) · ${apt.displayOwner(isAr).ifBlank { "—" }}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = tokens.ink,
+                      )
+                      Text(
+                        text = "${strings.colPaid}: ${formatDh(apt.totalForConfig(previewCfg), previewCfg.currency, previewCfg.digitsAr)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = numericFont ?: MaterialTheme.typography.bodySmall.fontFamily,
+                        color = tokens.positiveDeep,
+                      )
+                    }
+                    SageSecondaryButton(
+                      text = strings.apptPayFullBtn,
+                      compact = true,
+                      onClick = {
+                        var settled = apt
+                        for (col in previewCfg.cutoffMonthColumns) {
+                          settled = settled.withMonthAmount(col, previewCfg.feeForMonth(col))
+                        }
+                        draftApartments[idx] = settled
+                      },
                     )
                   }
-                  SageSecondaryButton(
-                    text = strings.apptPayFullBtn,
-                    compact = true,
-                    onClick = {
-                      var settled = apt
-                      for (col in previewCfg.cutoffMonthColumns) {
-                        settled = settled.withMonthAmount(col, previewCfg.feeForMonth(col))
-                      }
-                      draftApartments[idx] = settled
-                    },
-                  )
                 }
               }
             }
@@ -717,10 +780,13 @@ fun OnboardingWizardScreen(
           val totalCollected = finalList.sumOf { it.totalForConfig(finalCfg) }
 
           item {
-            WizardStepHeader(strings.wizardStep6Title, strings.wizardStep6Sub)
+            AdaptiveContentBox(maxWidth = 680.dp) {
+              WizardStepHeader(strings.wizardStep6Title, strings.wizardStep6Sub)
+            }
           }
           item {
-            FintechPalePositiveCard(modifier = Modifier.fillMaxWidth(), padding = 24.dp) {
+            AdaptiveContentBox(maxWidth = 680.dp) {
+              FintechPalePositiveCard(modifier = Modifier.fillMaxWidth(), padding = cardPad) {
               Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                   text = finalCfg.residenceName,
@@ -749,6 +815,7 @@ fun OnboardingWizardScreen(
                 )
               }
             }
+            }
           }
         }
       }
@@ -763,46 +830,51 @@ fun OnboardingWizardScreen(
         shadowElevation = 0.dp,
         modifier = Modifier.fillMaxWidth(),
       ) {
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-          horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-          if (currentStep > 1) {
-            InkTertiaryButton(
-              text = strings.wizardBackBtn,
-              onClick = { currentStep-- },
-              modifier = Modifier.weight(1f),
+        AdaptiveContentBox(maxWidth = 680.dp) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(
+                horizontal = adaptive.horizontalPadding,
+                vertical = if (adaptive.isCompactHeight) 10.dp else 16.dp,
+              ),
+            horizontalArrangement = Arrangement.spacedBy(if (adaptive.isNarrowPhone) 8.dp else 12.dp),
+          ) {
+            if (currentStep > 1) {
+              InkTertiaryButton(
+                text = strings.wizardBackBtn,
+                onClick = { currentStep-- },
+                modifier = Modifier.weight(1f),
+              )
+            }
+            MetaCobaltBuyButton(
+              text = if (currentStep < 6) strings.wizardNextBtn else strings.wizardStartBtn,
+              onClick = {
+                if (currentStep < 6) {
+                  currentStep++
+                } else {
+                  val finalCfg = buildFinalConfig()
+                  val finalAppts = (0 until totalApartmentsCount).map { idx ->
+                    val base = draftApartments[idx].copy(
+                      id = "appt_%02d".format(idx + 1),
+                      number = (idx + 1).toLong(),
+                      floor = floorForNumberInDraft(idx + 1),
+                    )
+                    if (startFromZeroPayments) {
+                      base.copy(
+                        jan = 0, feb = 0, mar = 0, apr = 0, may = 0, juin = 0,
+                        juil = 0, aout = 0, sept = 0, oct = 0, nov = 0, dec = 0,
+                      )
+                    } else {
+                      base
+                    }
+                  }
+                  onComplete(finalCfg, finalAppts, startFromZeroPayments)
+                }
+              },
+              modifier = Modifier.weight(1.5f).testTag("wizard_next_or_start_btn"),
             )
           }
-          MetaCobaltBuyButton(
-            text = if (currentStep < 6) strings.wizardNextBtn else strings.wizardStartBtn,
-            onClick = {
-              if (currentStep < 6) {
-                currentStep++
-              } else {
-                val finalCfg = buildFinalConfig()
-                val finalAppts = (0 until totalApartmentsCount).map { idx ->
-                  val base = draftApartments[idx].copy(
-                    id = "appt_%02d".format(idx + 1),
-                    number = (idx + 1).toLong(),
-                    floor = floorForNumberInDraft(idx + 1),
-                  )
-                  if (startFromZeroPayments) {
-                    base.copy(
-                      jan = 0, feb = 0, mar = 0, apr = 0, may = 0, juin = 0,
-                      juil = 0, aout = 0, sept = 0, oct = 0, nov = 0, dec = 0,
-                    )
-                  } else {
-                    base
-                  }
-                }
-                onComplete(finalCfg, finalAppts, startFromZeroPayments)
-              }
-            },
-            modifier = Modifier.weight(1.5f).testTag("wizard_next_or_start_btn"),
-          )
         }
       }
     }

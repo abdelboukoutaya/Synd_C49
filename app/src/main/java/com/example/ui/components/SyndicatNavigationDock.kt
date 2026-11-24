@@ -10,8 +10,12 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +31,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -40,6 +45,7 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,7 +76,7 @@ data class SyndicatNavItemSpec(
 
 /**
  * Barre de navigation flottante purement iconique (sans texte), avec icônes minimalistes explicatives,
- * capsule active sobre unie et respect strict des WindowInsets.navigationBars.
+ * capsule active sobre unie et adaptation stricte des petits écrans (320dp+) jusqu'aux tablettes.
  */
 @Composable
 fun SyndicatFloatingBottomDock(
@@ -82,7 +88,7 @@ fun SyndicatFloatingBottomDock(
   val dockBg = if (tokens.isDark) tokens.cardBg else tokens.navBg
   val borderTint = tokens.cardBorder
 
-  Box(
+  BoxWithConstraints(
     modifier = modifier
       .fillMaxWidth()
       .background(
@@ -94,28 +100,38 @@ fun SyndicatFloatingBottomDock(
         ),
       )
       .windowInsetsPadding(WindowInsets.navigationBars)
-      .padding(horizontal = 16.dp, vertical = 10.dp)
       .testTag("syndicat_bottom_nav_dock"),
+    contentAlignment = Alignment.Center,
   ) {
+    val isNarrow = maxWidth < 360.dp
+    val outerHorizontalPadding = if (isNarrow) 6.dp else 16.dp
+    val outerVerticalPadding = if (isNarrow) 8.dp else 10.dp
+    val innerHorizontalPadding = if (isNarrow) 4.dp else 8.dp
+    val itemSpacing = if (isNarrow) 2.dp else 4.dp
+
     Surface(
-      shape = RoundedCornerShape(24.dp),
+      shape = RoundedCornerShape(if (isNarrow) 20.dp else 24.dp),
       color = dockBg,
       border = BorderStroke(tokens.borderStrokeDp.dp, borderTint),
       tonalElevation = 0.dp,
       shadowElevation = if (tokens.isDark) 2.dp else 3.dp,
-      modifier = Modifier.fillMaxWidth(),
+      modifier = Modifier
+        .padding(horizontal = outerHorizontalPadding, vertical = outerVerticalPadding)
+        .fillMaxWidth()
+        .widthIn(max = 560.dp),
     ) {
       Row(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(horizontal = 8.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+          .padding(horizontal = innerHorizontalPadding, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(itemSpacing),
         verticalAlignment = Alignment.CenterVertically,
       ) {
         items.forEach { item ->
           DockIconTabItem(
             item = item,
             dockBg = dockBg,
+            compactWidth = isNarrow,
             onTap = {
               haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
               item.onClick()
@@ -132,14 +148,18 @@ fun SyndicatFloatingBottomDock(
 private fun DockIconTabItem(
   item: SyndicatNavItemSpec,
   dockBg: Color,
+  compactWidth: Boolean = false,
+  compactHeight: Boolean = false,
   onTap: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val tokens = LocalSyndicatTokens.current
   val selectedState = item.isSelected
+  val interactionSource = remember { MutableInteractionSource() }
+  val isHovered by interactionSource.collectIsHoveredAsState()
 
   val iconScale by animateFloatAsState(
-    targetValue = if (selectedState) 1.0f else 0.96f,
+    targetValue = if (selectedState) 1.0f else if (isHovered) 0.99f else 0.96f,
     animationSpec = spring(
       dampingRatio = Spring.DampingRatioNoBouncy,
       stiffness = Spring.StiffnessMedium,
@@ -147,29 +167,40 @@ private fun DockIconTabItem(
     label = "nav_icon_scale_${item.route}",
   )
   val pillColor by animateColorAsState(
-    targetValue = if (selectedState) tokens.primary else Color.Transparent,
+    targetValue = when {
+      selectedState -> tokens.primary
+      isHovered -> tokens.surfaceStrong
+      else -> Color.Transparent
+    },
     animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
     label = "nav_pill_bg_${item.route}",
   )
   val iconTint by animateColorAsState(
-    targetValue = if (selectedState) tokens.onPrimary else tokens.body,
+    targetValue = if (selectedState) tokens.onPrimary else if (isHovered) tokens.inkDeep else tokens.body,
     animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
     label = "nav_icon_tint_${item.route}",
   )
 
+  val pillWidth = if (compactWidth) 42.dp else 48.dp
+  val pillHeight = if (compactHeight) 36.dp else 38.dp
+  val iconSize = if (compactWidth) 20.dp else 22.dp
+
   Box(
     modifier = modifier
       .minimumInteractiveComponentSize()
-      .heightIn(min = 50.dp)
+      .heightIn(min = if (compactHeight) 48.dp else 50.dp)
       .clip(RoundedCornerShape(16.dp))
+      .hoverable(interactionSource = interactionSource)
       .clickable(
+        interactionSource = interactionSource,
+        indication = androidx.compose.material3.ripple(),
         role = Role.Tab,
         onClick = onTap,
       )
       .semantics {
         selected = selectedState
       }
-      .padding(vertical = 2.dp)
+      .padding(vertical = if (compactHeight) 1.dp else 2.dp)
       .testTag("nav_${item.route}"),
     contentAlignment = Alignment.Center,
   ) {
@@ -183,8 +214,8 @@ private fun DockIconTabItem(
     ) {
       Box(
         modifier = Modifier
-          .width(48.dp)
-          .height(38.dp)
+          .width(pillWidth)
+          .height(pillHeight)
           .clip(RoundedCornerShape(14.dp))
           .background(pillColor),
         contentAlignment = Alignment.Center,
@@ -193,7 +224,7 @@ private fun DockIconTabItem(
           imageVector = if (selectedState) item.filledIcon else item.outlinedIcon,
           contentDescription = item.label,
           tint = iconTint,
-          modifier = Modifier.size(22.dp),
+          modifier = Modifier.size(iconSize),
         )
       }
 
@@ -204,7 +235,7 @@ private fun DockIconTabItem(
           route = item.route,
           modifier = Modifier
             .align(Alignment.TopEnd)
-            .offset(x = 2.dp, y = (-2).dp),
+            .offset(x = if (compactWidth) 1.dp else 2.dp, y = (-2).dp),
         )
       }
     }
@@ -212,7 +243,7 @@ private fun DockIconTabItem(
 }
 
 /**
- * Rail latéral tablette & écran large assorti au dock iconique sans texte surchargé.
+ * Rail latéral tablette & écran large (ou paysage) assorti au dock iconique sans texte surchargé.
  */
 @Composable
 fun SyndicatNavigationRailPane(
@@ -220,8 +251,10 @@ fun SyndicatNavigationRailPane(
   modifier: Modifier = Modifier,
 ) {
   val tokens = LocalSyndicatTokens.current
+  val adaptive = LocalSyndicatAdaptiveSpec.current
   val haptic = LocalHapticFeedback.current
   val railBg = if (tokens.isDark) tokens.cardBg else tokens.navBg
+  val compactHeight = adaptive.isCompactHeight
 
   Row(
     modifier = modifier
@@ -231,13 +264,16 @@ fun SyndicatNavigationRailPane(
   ) {
     Column(
       modifier = Modifier
-        .width(76.dp)
+        .width(if (compactHeight) 72.dp else 76.dp)
         .fillMaxHeight()
         .windowInsetsPadding(WindowInsets.safeDrawing)
         .verticalScroll(rememberScrollState())
-        .padding(horizontal = 10.dp, vertical = 14.dp),
+        .padding(
+          horizontal = 10.dp,
+          vertical = if (compactHeight) 8.dp else 14.dp,
+        ),
       horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(10.dp),
+      verticalArrangement = Arrangement.spacedBy(if (compactHeight) 4.dp else 10.dp),
     ) {
       Surface(
         shape = RoundedCornerShape(12.dp),
@@ -245,7 +281,7 @@ fun SyndicatNavigationRailPane(
         border = BorderStroke(1.dp, tokens.primaryActive.copy(alpha = 0.25f)),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        modifier = Modifier.size(40.dp),
+        modifier = Modifier.size(if (compactHeight) 36.dp else 40.dp),
       ) {
         Box(contentAlignment = Alignment.Center) {
           Text(
@@ -257,12 +293,15 @@ fun SyndicatNavigationRailPane(
         }
       }
 
-      Spacer(modifier = Modifier.height(6.dp))
+      if (!compactHeight) {
+        Spacer(modifier = Modifier.height(4.dp))
+      }
 
       items.forEach { item ->
         DockIconTabItem(
           item = item,
           dockBg = railBg,
+          compactHeight = compactHeight,
           onTap = {
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             item.onClick()
